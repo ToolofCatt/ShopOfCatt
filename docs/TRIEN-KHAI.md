@@ -47,7 +47,7 @@ Mở `.env` và **bắt buộc** đặt các giá trị sau — thiếu là stac
 (đã cố tình làm vậy để không ai chạy nhầm cấu hình mặc định):
 
 ```env
-POSTGRES_PASSWORD=<mật khẩu mạnh, tự sinh>
+POSTGRES_PASSWORD=<chỉ chữ và số — xem ghi chú bên dưới>
 JWT_SECRET=<chuỗi ngẫu nhiên ít nhất 32 ký tự>
 ADMIN_EMAIL=ban@vidu.com
 ADMIN_PASSWORD=<mật khẩu chủ shop>
@@ -63,11 +63,22 @@ PAYMENT_MOCK=false
 SEED_DEMO=false
 ```
 
-Sinh chuỗi bí mật:
+Sinh cả ba bí mật một lượt:
 
 ```bash
-openssl rand -base64 48
+echo "JWT_SECRET=$(openssl rand -base64 48 | tr -d '\n')"
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+echo "ADMIN_PASSWORD=$(openssl rand -base64 18 | tr -d '\n')"
 ```
+
+> **`POSTGRES_PASSWORD` chỉ được dùng chữ và số.** Mật khẩu này nằm giữa chuỗi
+> kết nối `postgresql://postgres:MẬT_KHẨU@postgres:5432/webcatt`, nên các ký tự
+> `@ : / ? # %` sẽ cắt đứt chuỗi và API không nối được vào CSDL. `openssl rand
+> -hex 24` ở trên luôn an toàn.
+
+> API và seed sẽ **từ chối khởi động** nếu ba giá trị này còn để trống hoặc còn
+> là giá trị mẫu — vì giá trị mẫu nằm công khai trong mã nguồn, ai đọc được
+> repo cũng đăng nhập được vào cửa hàng của bạn.
 
 > `NEXT_PUBLIC_*` được **nhúng vào bundle lúc build**. Đổi tên miền về sau thì
 > phải chạy lại `docker compose up -d --build`, không phải chỉ khởi động lại.
@@ -158,8 +169,12 @@ Chạy hết danh sách này. Mỗi dòng đều đã từng là một lỗi th�
 
 - [ ] `PAYMENT_MOCK=false` trong `.env`, và **Thanh toán giả lập** đã TẮT trong
       trang Cấu hình. Bật nhầm = ai cũng lấy hàng miễn phí
-- [ ] `JWT_SECRET` là chuỗi ngẫu nhiên riêng của bạn (≥32 ký tự)
-- [ ] `POSTGRES_PASSWORD` không phải `postgres`
+- [ ] `JWT_SECRET` là chuỗi ngẫu nhiên riêng của bạn (≥32 ký tự). API tự dừng
+      nếu bạn để nguyên giá trị mẫu — nhưng đừng dựa vào đó, hãy tự sinh
+- [ ] `POSTGRES_PASSWORD` do bạn tự sinh, **chỉ gồm chữ và số**
+- [ ] Mở `/admin` — **dải cảnh báo đỏ ở đầu trang tổng quan phải trống**. Còn
+      cảnh báo nghĩa là khách vẫn chưa đặt hàng được (chưa có phương thức thanh
+      toán, chưa có sản phẩm, hoặc hết kho)
 - [ ] Đổi mật khẩu chủ shop sau lần đăng nhập đầu (**Tài khoản → Đổi mật khẩu**)
 - [ ] Khoá Binance hiện **Rút tiền: Không** trong bảng quyền
 - [ ] `https://` hoạt động, và `http://` tự chuyển sang `https://`
@@ -192,11 +207,15 @@ thêm kho — bộ quét chạy mỗi 2 phút.
 
 ```bash
 cd /opt/catt-store
-./docker/backup.sh   # hoặc chờ bản sao lưu tự động gần nhất
+docker compose restart backup   # ép sao lưu ngay (dịch vụ dump luôn khi khởi động)
+ls -lt backups | head -3        # xác nhận có bản mới trước khi đụng vào gì
 git pull
 docker compose up -d --build
-docker compose logs -f api    # migration chạy tự động lúc khởi động
+docker compose logs -f api      # migration chạy tự động lúc khởi động
 ```
+
+> `docker/backup.sh` là tiến trình chạy nền **bên trong container** (vòng lặp vô
+> hạn) — đừng gọi thẳng trên máy chủ.
 
 ---
 
@@ -206,6 +225,16 @@ docker compose logs -f api    # migration chạy tự động lúc khởi độn
 `docker compose logs api`. Thường là thiếu biến bắt buộc trong `.env`
 (`JWT_SECRET`, `POSTGRES_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`) — thông báo
 lỗi nói rõ thiếu cái nào.
+
+**Khách bấm đặt hàng thì báo lỗi, hoặc không ai đặt được đơn nào**
+Mở `/admin` và đọc dải cảnh báo đỏ ở đầu trang tổng quan — nó nói thẳng đang
+thiếu gì (chưa bật phương thức thanh toán, chưa có sản phẩm, hết kho). Cửa hàng
+mới cài **không bật sẵn phương thức nào**, đó là chủ ý.
+
+**Từ ngoài Internet không vào được, nhưng `curl localhost:3000` trên máy chủ thì được**
+Đúng thiết kế: web và api chỉ nghe trên `127.0.0.1`, mọi truy cập đi qua
+`proxy`. Kiểm `docker compose ps proxy` và `docker compose logs proxy`. Chỉ đổi
+`APP_BIND` khi bạn thật sự chấp nhận chạy HTTP không mã hoá.
 
 **Không xin được chứng chỉ HTTPS**
 Tên miền chưa trỏ đúng IP, hoặc cổng 80 bị chặn. `dig +short ten-mien` và
