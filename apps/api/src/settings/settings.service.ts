@@ -97,6 +97,17 @@ export class SettingsService {
     if (setting.cryptoEnabled && trc20 !== '') {
       methods.push({ method: 'crypto_trc20', address: trc20 });
     }
+    // Chuyển khoản chỉ bật được khi có ĐỦ tài khoản nhận và tỉ giá — thiếu tỉ
+    // giá thì không sinh nổi số tiền VND để in lên QR.
+    if (
+      setting.bankTransferEnabled &&
+      setting.bankBin.trim() !== '' &&
+      setting.bankAccountNumber.trim() !== '' &&
+      setting.bankAccountName.trim() !== '' &&
+      Number(setting.usdtVndRate) > 0
+    ) {
+      methods.push({ method: 'bank_transfer' });
+    }
 
     const mockAllowed =
       setting.mockEnabled &&
@@ -163,13 +174,44 @@ export class SettingsService {
       throw new BadRequestException(K.adminSupportTooMany);
     }
 
+    // Chuyển khoản ngân hàng: bật thì phải đủ tài khoản nhận VÀ tỉ giá, nếu
+    // không trang thanh toán sẽ hiện QR trống hoặc số tiền bằng 0.
     const before = await this.getSetting();
+    const bankBin = dto.bankBin?.trim() ?? before.bankBin;
+    const bankAccountNumber =
+      dto.bankAccountNumber?.trim() ?? before.bankAccountNumber;
+    const bankAccountName =
+      dto.bankAccountName?.trim() ?? before.bankAccountName;
+    const usdtVndRate = dto.usdtVndRate ?? Number(before.usdtVndRate);
+    const bankTransferEnabled =
+      dto.bankTransferEnabled ?? before.bankTransferEnabled;
+
+    if (bankBin !== '' && !/^\d{6}$/.test(bankBin)) {
+      throw new BadRequestException(K.adminBankBinInvalid);
+    }
+    if (bankAccountNumber !== '' && !/^\d{6,20}$/.test(bankAccountNumber)) {
+      throw new BadRequestException(K.adminBankAccountInvalid);
+    }
+    if (bankTransferEnabled) {
+      if (bankBin === '' || bankAccountNumber === '' || bankAccountName === '') {
+        throw new BadRequestException(K.adminBankInfoRequired);
+      }
+      if (!(usdtVndRate > 0)) {
+        throw new BadRequestException(K.adminBankRateRequired);
+      }
+    }
+
     const data = {
       mockEnabled: dto.mockEnabled,
       binancePayEnabled: dto.binancePayEnabled,
       cryptoEnabled: dto.cryptoEnabled,
       bep20Address,
       trc20Address,
+      bankTransferEnabled,
+      bankBin,
+      bankAccountNumber,
+      bankAccountName,
+      usdtVndRate: new Prisma.Decimal(usdtVndRate),
       // Bỏ trống (không gửi lên) = giữ nguyên giá trị cũ.
       supportChannels:
         dto.supportChannels === undefined
@@ -201,6 +243,11 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     cryptoEnabled: setting.cryptoEnabled,
     bep20Address: setting.bep20Address,
     trc20Address: setting.trc20Address,
+    bankTransferEnabled: setting.bankTransferEnabled,
+    bankBin: setting.bankBin,
+    bankAccountNumber: setting.bankAccountNumber,
+    bankAccountName: setting.bankAccountName,
+    usdtVndRate: Number(setting.usdtVndRate),
     supportChannels: parseSupportChannels(setting.supportChannels),
     supportNote: setting.supportNote,
   };

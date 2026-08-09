@@ -5,5 +5,14 @@
     "incremental": false
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "prisma", "scripts"]
+  // Không biên dịch test vào dist/: bản chạy thật không cần chúng, và bản CJS
+  // trong dist/ còn làm vitest báo lỗi giả khi quét cả thư mục build.
+  "exclude": [
+    "node_modules",
+    "dist",
+    "prisma",
+    "scripts",
+    "src/**/*.spec.ts",
+    "vitest.config.ts"
+  ]
 }

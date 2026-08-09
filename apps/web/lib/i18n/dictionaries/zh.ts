@@ -105,7 +105,21 @@ export const zh: Dictionary = {
       binance_pay: 'Binance Pay',
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
+      bank_transfer: '银行转账',
     },
+
+    /* ===== v8 — 越南银行转账（VietQR） ===== */
+    bankTitle: '银行转账',
+    bankQrAlt: '银行转账二维码',
+    bankScanHint: '打开银行 App 扫码，金额和备注会自动填好。',
+    bankAmountLabel: '金额',
+    bankAccountLabel: '账号',
+    bankNameLabel: '银行',
+    bankContentLabel: '转账备注',
+    bankContentWarning: '请务必填写完全一致的转账备注 — 店铺凭它找到您的订单。',
+    bankClaimAction: '我已完成转账',
+    bankClaimed: '已记录 — 店铺正在核对，稍后发货。',
+
     cryptoTitle: 'USDT 链上转账',
     cryptoAmountLabel: '应转金额',
     cryptoExactWarning: '请转账与此完全一致的金额 —— 系统通过金额识别您的订单。',
@@ -280,6 +294,7 @@ export const zh: Dictionary = {
 
   paymentMode: {
     MOCK: '测试模式（Mock）',
+    BANK: '银行转账',
     BINANCE: 'Binance Pay',
     CRYPTO: 'USDT 链上转账',
   },
@@ -648,6 +663,16 @@ export const zh: Dictionary = {
     binanceWithdrawWarning: '该 API 密钥拥有提币权限 —— 请改用只读密钥。',
     binanceReadOnlyOk: 'API 密钥无提币权限 ✓',
 
+    infoBankAccount: '收款账户',
+
+    infoBankAmount: '金额（VND）',
+
+    infoBankContent: '转账备注',
+
+    infoBankClaimed: '客户已报付款',
+
+    infoBankNotClaimed: '尚未报告',
+
     infoCryptoNetwork: '网络',
     infoCryptoAddress: '收款地址',
     infoCryptoAmount: '链上金额',
@@ -699,6 +724,15 @@ export const zh: Dictionary = {
     resetPasswordDone: '密码已重置，请把新密码发给客户：',
     resetPasswordWarning: '此密码仅显示一次 — 请立即复制。',
 
+    settingBankTransfer: '银行转账（VietQR）',
+    settingBankTransferHint: '客户扫码转账，您核对银行流水后点击「标记为已付款」。',
+    settingBankLabel: '银行',
+    settingBankPick: '— 选择银行 —',
+    settingBankAccountLabel: '账号',
+    settingBankHolderLabel: '开户名',
+    settingBankHolderHint: '请使用不带声调的大写字母，与银行流水完全一致。',
+    settingRateLabel: '汇率：1 USDT = ? VND',
+    settingRateHint: '用于把 USDT 价格换算成二维码上的越南盾金额。汇率变动时请及时更新。',
     settingSupportTitle: '客户支持',
     settingSupportHint: '显示在登录页「忘记密码」处，方便客户联系您重置密码。',
     settingSupportNoteLabel: '提示语',

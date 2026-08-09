@@ -164,6 +164,11 @@ export const K = {
   adminTrc20AddressInvalid: 'admin.trc20_address_invalid',
   adminCannotMarkPaid: 'admin.cannot_mark_paid',
   adminMarkPaidNoteInvalid: 'admin.mark_paid_note_invalid',
+  adminBankBinInvalid: 'admin.bank_bin_invalid',
+  adminBankAccountInvalid: 'admin.bank_account_invalid',
+  adminBankInfoRequired: 'admin.bank_info_required',
+  adminBankRateRequired: 'admin.bank_rate_required',
+  paymentAlreadyClaimed: 'payment.already_claimed',
   adminSupportContactInvalid: 'admin.support_contact_invalid',
   adminSupportUrlInvalid: 'admin.support_url_invalid',
   adminSupportNoteInvalid: 'admin.support_note_invalid',
@@ -718,6 +723,31 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Ghi chú xác nhận thanh toán không hợp lệ (tối đa 300 ký tự)',
     en: 'Invalid payment confirmation note (max 300 characters)',
     zh: '付款确认备注无效（最多 300 个字符）',
+  },
+  [K.adminBankBinInvalid]: {
+    vi: 'Mã ngân hàng không hợp lệ (BIN gồm đúng 6 chữ số)',
+    en: 'Invalid bank code (the VietQR BIN is exactly 6 digits)',
+    zh: '银行代码无效（VietQR BIN 为 6 位数字）',
+  },
+  [K.adminBankAccountInvalid]: {
+    vi: 'Số tài khoản hoặc tên chủ tài khoản không hợp lệ',
+    en: 'Invalid account number or account holder name',
+    zh: '账号或开户名无效',
+  },
+  [K.adminBankInfoRequired]: {
+    vi: 'Bật chuyển khoản cần đủ ngân hàng, số tài khoản và tên chủ tài khoản',
+    en: 'Enabling bank transfer requires the bank, account number and account holder name',
+    zh: '启用银行转账需要填写银行、账号和开户名',
+  },
+  [K.adminBankRateRequired]: {
+    vi: 'Cần nhập tỉ giá USDT → VND lớn hơn 0 để sinh số tiền chuyển khoản',
+    en: 'A USDT → VND rate greater than 0 is required to compute the transfer amount',
+    zh: '需要填写大于 0 的 USDT → VND 汇率才能计算转账金额',
+  },
+  [K.paymentAlreadyClaimed]: {
+    vi: 'Bạn đã báo chuyển khoản rồi — cửa hàng đang đối soát',
+    en: 'You have already reported the transfer — the store is reconciling it',
+    zh: '您已提交转账信息 — 店铺正在核对',
   },
   [K.adminSupportContactInvalid]: {
     vi: 'Kênh liên hệ hỗ trợ không hợp lệ',

@@ -16,7 +16,8 @@
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
-    "docker:reset": "docker compose down -v"
+    "docker:reset": "docker compose down -v",
+    "test": "turbo test"
   },
   "devDependencies": {
     "turbo": "^2.5.0"

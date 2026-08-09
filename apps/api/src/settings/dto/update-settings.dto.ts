@@ -4,9 +4,11 @@ import {
   IsArray,
   IsBoolean,
   IsNotEmpty,
+  IsNumber,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import {
@@ -48,6 +50,31 @@ export class UpdateSettingsDto {
 
   @IsString({ message: K.adminSettingsAddressInvalid })
   trc20Address: string;
+
+  /** --- Chuyển khoản ngân hàng Việt Nam (VietQR) --- */
+  @IsOptional()
+  @IsBoolean({ message: K.adminSettingsFlagInvalid })
+  bankTransferEnabled?: boolean;
+
+  @IsOptional()
+  @IsString({ message: K.adminBankBinInvalid })
+  @MaxLength(10, { message: K.adminBankBinInvalid })
+  bankBin?: string;
+
+  @IsOptional()
+  @IsString({ message: K.adminBankAccountInvalid })
+  @MaxLength(30, { message: K.adminBankAccountInvalid })
+  bankAccountNumber?: string;
+
+  @IsOptional()
+  @IsString({ message: K.adminBankAccountInvalid })
+  @MaxLength(120, { message: K.adminBankAccountInvalid })
+  bankAccountName?: string;
+
+  @IsOptional()
+  @IsNumber({}, { message: K.adminBankRateRequired })
+  @Min(0, { message: K.adminBankRateRequired })
+  usdtVndRate?: number;
 
   /** Các kênh liên hệ hỗ trợ hiện ở khối "Quên mật khẩu". */
   @IsOptional()

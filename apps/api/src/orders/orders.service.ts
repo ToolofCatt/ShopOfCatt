@@ -36,7 +36,13 @@ import {
   binanceNetworkToLabel,
   type BinanceDeposit,
 } from '../binance-exchange/deposit-matcher';
+import { toDataURL } from 'qrcode';
 import { generateMerchantTradeNo, generateOrderCode } from '../common/codes';
+import {
+  buildVietQrPayload,
+  transferContentForOrder,
+  usdtToVnd,
+} from '../payments/vietqr';
 import { CouponsService } from '../coupons/coupons.service';
 import {
   BinanceService,
@@ -67,6 +73,16 @@ const CLEAR_PAY_SESSION = {
   qrcodeLink: null,
   deeplink: null,
   universalUrl: null,
+} as const;
+
+/** Xóa các trường chuyển khoản ngân hàng khi đổi sang phương thức khác. */
+const CLEAR_BANK = {
+  bankBin: null,
+  bankAccountNumber: null,
+  bankAccountName: null,
+  bankAmountVnd: null,
+  bankTransferContent: null,
+  customerClaimedAt: null,
 } as const;
 
 /** Xóa các trường crypto khi chuyển sang phương thức khác. */
@@ -468,6 +484,43 @@ export class OrdersService {
   }
 
   /**
+   * Khách báo đã chuyển khoản. Chỉ ghi mốc thời gian để đơn nổi lên hàng chờ
+   * đối soát của admin — KHÔNG tự chuyển trạng thái, vì tiền vào tài khoản hay
+   * chưa thì chỉ sao kê ngân hàng mới biết.
+   */
+  async claimBankTransfer(
+    userId: string,
+    code: string,
+  ): Promise<OrderDetailDto> {
+    const order = await this.prisma.order.findFirst({
+      where: { code, userId },
+      include: { payment: true },
+    });
+    if (!order) {
+      throw new NotFoundException(K.orderNotFound);
+    }
+    if (order.status !== 'PENDING') {
+      throw new BadRequestException(K.orderCannotCancel);
+    }
+    const payment = order.payment;
+    if (!payment || payment.mode !== 'BANK') {
+      throw new BadRequestException(K.paymentMethodUnavailable);
+    }
+    if (payment.customerClaimedAt) {
+      throw new BadRequestException(K.paymentAlreadyClaimed);
+    }
+
+    await this.prisma.payment.update({
+      where: { id: payment.id },
+      data: { customerClaimedAt: new Date() },
+    });
+    this.logger.log(
+      `Khách báo đã chuyển khoản cho đơn ${code} — chờ đối soát sao kê`,
+    );
+    return this.loadOwnDetail(userId, code);
+  }
+
+  /**
    * Cấu hình lại Payment của một đơn theo phương thức đã chọn — dùng chung
    * cho tạo đơn và đổi phương thức trên trang thanh toán.
    */
@@ -487,7 +540,64 @@ export class OrdersService {
     if (method === 'mock') {
       await this.prisma.payment.update({
         where: { id: payment.id },
-        data: { mode: 'MOCK', ...CLEAR_PAY_SESSION, ...CLEAR_CRYPTO },
+        data: {
+          mode: 'MOCK',
+          ...CLEAR_PAY_SESSION,
+          ...CLEAR_CRYPTO,
+          ...CLEAR_BANK,
+        },
+      });
+      return;
+    }
+
+    if (method === 'bank_transfer') {
+      const setting = await this.settings.getSetting();
+      const rate = Number(setting.usdtVndRate);
+      const bin = setting.bankBin.trim();
+      const accountNumber = setting.bankAccountNumber.trim();
+      const accountName = setting.bankAccountName.trim();
+      if (bin === '' || accountNumber === '' || accountName === '' || !(rate > 0)) {
+        throw new BadRequestException(K.paymentMethodUnavailable);
+      }
+
+      /*
+       * Chụp lại thông tin tài khoản VÀ số tiền VND ngay lúc này. Tỉ giá thay
+       * đổi hằng ngày; nếu tính lại mỗi lần đọc thì số trên QR khách đã quét
+       * sẽ khác số đơn hàng ghi nhận, và không đối soát nổi sao kê.
+       */
+      const amountVnd = usdtToVnd(Number(order.totalAmount), rate);
+      const content = transferContentForOrder(order.code);
+
+      /*
+       * QR sinh NGAY TẠI MÁY CHỦ thay vì nhúng ảnh từ dịch vụ ngoài: trang
+       * thanh toán không gửi số tài khoản, số tiền và mã đơn cho bên thứ ba,
+       * và vẫn hiện QR kể cả khi dịch vụ đó chết. Payload có bộ test riêng
+       * (src/payments/vietqr.spec.ts) vì quét sai là chuyển nhầm tiền.
+       */
+      const qrDataUrl = await toDataURL(
+        buildVietQrPayload({ bankBin: bin, accountNumber, amountVnd, content }),
+        { errorCorrectionLevel: 'M', margin: 1, width: 320 },
+      );
+
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          mode: 'BANK',
+          bankBin: bin,
+          bankAccountNumber: accountNumber,
+          bankAccountName: accountName,
+          bankAmountVnd: new Prisma.Decimal(amountVnd),
+          bankTransferContent: content,
+          customerClaimedAt: null,
+          // Xóa phiên Binance Pay cũ nhưng GIỮ qrcodeLink cho QR ngân hàng —
+          // vì vậy không dùng CLEAR_PAY_SESSION ở đây.
+          prepayId: null,
+          checkoutUrl: null,
+          deeplink: null,
+          universalUrl: null,
+          qrcodeLink: qrDataUrl,
+          ...CLEAR_CRYPTO,
+        },
       });
       return;
     }
@@ -540,6 +650,7 @@ export class OrdersService {
           deeplink: session.deeplink,
           universalUrl: session.universalUrl,
           ...CLEAR_CRYPTO,
+          ...CLEAR_BANK,
         },
       });
       return;
@@ -583,6 +694,7 @@ export class OrdersService {
         cryptoAmount: new Prisma.Decimal(amount.toFixed(6)),
         cryptoTxId: null,
         ...CLEAR_PAY_SESSION,
+        ...CLEAR_BANK,
       },
     });
   }

@@ -10,6 +10,7 @@ import {
   Copy,
   ExternalLink,
   FlaskConical,
+  Landmark,
   PackageSearch,
   RefreshCw,
   ServerCrash,
@@ -18,6 +19,8 @@ import {
 } from 'lucide-react';
 import {
   formatUsdt,
+  formatVnd,
+  vietQrBankName,
   type CheckPaymentDto,
   type OrderDetailDto,
   type PaymentInfoDto,
@@ -44,6 +47,7 @@ function methodOfPayment(payment: PaymentInfoDto | null): PaymentMethod | null {
   if (!payment) return null;
   if (payment.mode === 'MOCK') return 'mock';
   if (payment.mode === 'BINANCE') return 'binance_pay';
+  if (payment.mode === 'BANK') return 'bank_transfer';
   return payment.cryptoNetwork === 'TRC20' ? 'crypto_trc20' : 'crypto_bep20';
 }
 
@@ -98,6 +102,36 @@ function CopyIconButton({ text, label }: { text: string; label: string }) {
   );
 }
 
+/** Một dòng "nhãn — giá trị" kèm nút sao chép, dùng cho thông tin chuyển khoản. */
+function CopyRow({
+  label,
+  value,
+  copyText,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  copyText: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-2.5">
+      <dt className="shrink-0 text-neutral-500">{label}</dt>
+      <dd className="flex min-w-0 items-center gap-1">
+        <span
+          className={cn(
+            'truncate font-mono text-neutral-950',
+            strong ? 'text-base font-semibold' : 'font-medium',
+          )}
+        >
+          {value}
+        </span>
+        <CopyIconButton text={copyText} label={label} />
+      </dd>
+    </div>
+  );
+}
+
 export default function PaymentPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = use(params);
   const router = useRouter();
@@ -109,6 +143,8 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   const [missing, setMissing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const redirectingRef = useRef(false);
 
@@ -210,6 +246,27 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   const selectedMethod = methodOfPayment(order?.payment ?? null);
 
   /** Đổi phương thức: API cấu hình lại phiên thanh toán rồi trả về đơn mới. */
+  /**
+   * "Tôi đã chuyển khoản" — chỉ báo cho cửa hàng biết để đối soát sao kê.
+   * Đơn KHÔNG tự chuyển sang đã thanh toán; admin xác nhận sau khi thấy tiền về.
+   */
+  const handleClaimTransfer = async () => {
+    if (claiming) return;
+    setClaiming(true);
+    setClaimError(null);
+    try {
+      const updated = await apiFetch<OrderDetailDto>(
+        `/orders/${code}/claim-transfer`,
+        { method: 'POST', token },
+      );
+      setOrder(updated);
+    } catch (err) {
+      setClaimError(apiErrorMessage(err, t.common.connectionError));
+    } finally {
+      setClaiming(false);
+    }
+  };
+
   const handleSelectMethod = async (method: PaymentMethod) => {
     if (!token || switching || redirectingRef.current || method === selectedMethod) return;
     setSwitching(true);
@@ -405,6 +462,82 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 {t.checkout.openMock}
                 <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
               </Link>
+            </div>
+          ) : payment?.mode === 'BANK' ? (
+            <div className="space-y-4 rounded-lg border border-neutral-200 p-4">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                <Landmark className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                {t.checkout.bankTitle}
+              </p>
+
+              {/* QR do máy chủ tự dựng (data URI) — không gọi dịch vụ ngoài. */}
+              {payment.qrcodeLink && (
+                <div className="mx-auto w-fit rounded-xl border border-neutral-200 p-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={payment.qrcodeLink}
+                    alt={t.checkout.bankQrAlt}
+                    className="h-52 w-52"
+                  />
+                </div>
+              )}
+              <p className="text-center text-sm text-neutral-500">
+                {t.checkout.bankScanHint}
+              </p>
+
+              {/* Luôn hiện dạng chữ: khách có thể tự nhập nếu không quét được QR */}
+              <dl className="divide-y divide-neutral-100 text-sm">
+                <CopyRow
+                  label={t.checkout.bankAmountLabel}
+                  value={formatVnd(payment.bankAmountVnd ?? 0)}
+                  copyText={String(payment.bankAmountVnd ?? 0)}
+                  strong
+                />
+                <CopyRow
+                  label={t.checkout.bankAccountLabel}
+                  value={payment.bankAccountNumber ?? ''}
+                  copyText={payment.bankAccountNumber ?? ''}
+                />
+                <div className="flex items-center justify-between gap-3 py-2.5">
+                  <dt className="shrink-0 text-neutral-500">
+                    {t.checkout.bankNameLabel}
+                  </dt>
+                  <dd className="text-right font-medium text-neutral-950">
+                    {vietQrBankName(payment.bankBin ?? '')}
+                    <span className="block text-xs font-normal text-neutral-500">
+                      {payment.bankAccountName}
+                    </span>
+                  </dd>
+                </div>
+                <CopyRow
+                  label={t.checkout.bankContentLabel}
+                  value={payment.bankTransferContent ?? ''}
+                  copyText={payment.bankTransferContent ?? ''}
+                  strong
+                />
+              </dl>
+
+              <p className="rounded-lg border border-neutral-300 bg-neutral-50 p-3 text-sm text-neutral-700">
+                {t.checkout.bankContentWarning}
+              </p>
+
+              {payment.customerClaimedAt ? (
+                <p className="flex items-center justify-center gap-2 text-sm font-medium text-neutral-700">
+                  <Clock className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                  {t.checkout.bankClaimed}
+                </p>
+              ) : (
+                <Button
+                  className="w-full"
+                  loading={claiming}
+                  onClick={() => void handleClaimTransfer()}
+                >
+                  {t.checkout.bankClaimAction}
+                </Button>
+              )}
+              {claimError && (
+                <p className="text-center text-sm text-red-600">{claimError}</p>
+              )}
             </div>
           ) : payment?.mode === 'CRYPTO' ? (
             <div className="space-y-4 rounded-lg border border-neutral-200 p-4">

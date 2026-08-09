@@ -14,6 +14,8 @@ import {
 import {
   formatUsdt,
   formatUserCode,
+  formatVnd,
+  vietQrBankName,
   type AdminOrderDetailDto,
   type OrderItemDto,
   type PaymentInfoDto,
@@ -379,7 +381,43 @@ export default function AdminOrderDetailPage({
                   value={payment.merchantTradeNo ?? t.common.dash}
                   mono
                 />
-                {payment.mode === 'CRYPTO' ? (
+                {payment.mode === 'BANK' ? (
+                  <>
+                    <InfoRow
+                      label={t.admin.infoBankAccount}
+                      value={
+                        payment.bankAccountNumber
+                          ? `${vietQrBankName(payment.bankBin ?? '')} · ${payment.bankAccountNumber}`
+                          : t.common.dash
+                      }
+                      mono
+                    />
+                    <InfoRow
+                      label={t.admin.infoBankAmount}
+                      value={
+                        payment.bankAmountVnd !== undefined
+                          ? formatVnd(payment.bankAmountVnd)
+                          : t.common.dash
+                      }
+                      mono
+                    />
+                    {/* Nội dung chuyển khoản là thứ DUY NHẤT để dò ra đơn này
+                        trong sao kê ngân hàng. */}
+                    <InfoRow
+                      label={t.admin.infoBankContent}
+                      value={payment.bankTransferContent ?? t.common.dash}
+                      mono
+                    />
+                    <InfoRow
+                      label={t.admin.infoBankClaimed}
+                      value={
+                        payment.customerClaimedAt
+                          ? formatDate(payment.customerClaimedAt)
+                          : t.admin.infoBankNotClaimed
+                      }
+                    />
+                  </>
+                ) : payment.mode === 'CRYPTO' ? (
                   <>
                     <InfoRow
                       label={t.admin.infoCryptoNetwork}
