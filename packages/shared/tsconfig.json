@@ -7,5 +7,8 @@
     "rootDir": "src",
     "declaration": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Test không được biên dịch vào dist: bản chạy thật không cần, và bản CJS
+  // trong dist còn làm vitest báo lỗi giả khi quét cả thư mục build.
+  "exclude": ["src/**/*.spec.ts"]
 }

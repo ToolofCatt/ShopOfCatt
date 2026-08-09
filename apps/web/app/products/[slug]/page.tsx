@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ChevronRight, ServerCrash } from 'lucide-react';
@@ -10,6 +11,42 @@ import { ApiError, apiFetch } from '@/lib/api';
 import { getServerDictionary } from '@/lib/i18n/server';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Tiêu đề + mô tả riêng cho từng sản phẩm. Không có hàm này thì mọi trang đều
+ * mang đúng một tiêu đề "Catt Store": tab trình duyệt, lịch sử, kết quả tìm
+ * kiếm và link chia sẻ đều không phân biệt được sản phẩm nào.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const { locale } = await getServerDictionary();
+  try {
+    const product = await apiFetch<ProductDto>(`/products/${slug}`, { locale });
+    const description =
+      product.shortDescription?.trim() ||
+      product.description?.trim().slice(0, 160) ||
+      undefined;
+    return {
+      title: product.name,
+      description,
+      openGraph: {
+        type: 'website',
+        title: product.name,
+        description,
+        url: `/products/${product.slug}`,
+        ...(product.image ? { images: [product.image] } : {}),
+      },
+      alternates: { canonical: `/products/${product.slug}` },
+    };
+  } catch {
+    // Sản phẩm không tồn tại → để notFound() ở component xử lý, metadata để trống.
+    return {};
+  }
+}
 
 /** Renders description text: blocks split by blank lines; "- " lines become lists. */
 function renderDescription(description: string): ReactNode[] {

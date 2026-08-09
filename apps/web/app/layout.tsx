@@ -11,14 +11,41 @@ import './globals.css';
 
 const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || 'Catt Store';
 
+/**
+ * Địa chỉ công khai của cửa hàng. Không có nó thì Next.js không dựng được URL
+ * tuyệt đối cho thẻ chia sẻ mạng xã hội — dán link vào Zalo/Facebook sẽ ra
+ * ô trắng không tiêu đề, không ảnh.
+ */
+export const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
+).replace(/\/$/, '');
+
 export async function generateMetadata(): Promise<Metadata> {
-  const { t } = await getServerDictionary();
+  const { locale, t } = await getServerDictionary();
   return {
+    metadataBase: new URL(SITE_URL),
     title: {
       default: SITE_NAME,
       template: `%s — ${SITE_NAME}`,
     },
     description: t.meta.description,
+    applicationName: SITE_NAME,
+    openGraph: {
+      type: 'website',
+      siteName: SITE_NAME,
+      title: SITE_NAME,
+      description: t.meta.description,
+      url: SITE_URL,
+      locale,
+    },
+    twitter: {
+      card: 'summary',
+      title: SITE_NAME,
+      description: t.meta.description,
+    },
+    // Trang quản trị, thanh toán, đơn hàng đều là nội dung riêng tư —
+    // chặn lập chỉ mục ở tầng robots.ts, đây chỉ là mặc định cho phần công khai.
+    robots: { index: true, follow: true },
   };
 }
 

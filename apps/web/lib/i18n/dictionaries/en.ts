@@ -273,6 +273,14 @@ export const en: Dictionary = {
     statsError: 'Could not load order statistics',
   },
 
+  errorPage: {
+    title: 'Something went wrong',
+    hint: 'An unexpected error occurred. Trying again usually fixes it; if not, please contact the store.',
+    retry: 'Try again',
+    backHome: 'Back to home',
+    code: 'Error code',
+  },
+
   notFound: {
     title: 'Page not found',
     hint: 'The page you are looking for does not exist or has been removed.',

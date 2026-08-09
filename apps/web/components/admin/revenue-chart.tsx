@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { ArrowDownRight, ArrowUpRight } from 'lucide-react';
-import { formatUsdt, type RevenuePointDto } from '@webcatt/shared';
+import { formatUsdt, sumMoney, type RevenuePointDto } from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
@@ -109,7 +109,7 @@ export function RevenueChart() {
   }, [days, token, t, reloadKey]);
 
   const sum = (points: RevenuePointDto[] | null): number =>
-    (points ?? []).reduce((total, point) => total + point.revenue, 0);
+    sumMoney((points ?? []).map((point) => point.revenue));
   const periodTotal = sum(data);
   const previousTotal = sum(previous);
   /** null = kỳ trước không có doanh thu nên phần trăm không có ý nghĩa. */

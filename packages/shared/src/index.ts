@@ -526,6 +526,19 @@ export function formatUsdt(amount: number): string {
   })} USDT`;
 }
 
+/**
+ * Cộng dồn tiền rồi làm tròn về 2 chữ số.
+ *
+ * Cộng số thực trong JavaScript sinh rác nhị phân: bảy giá trị doanh thu đã
+ * làm tròn cộng lại từng ra `94.46000000000001`. Con số đó rò ra phần trăm
+ * tăng trưởng và các phép so sánh, nên mọi chỗ cộng tiền ở giao diện đều đi
+ * qua hàm này.
+ */
+export function sumMoney(values: readonly number[]): number {
+  const total = values.reduce((acc, value) => acc + value, 0);
+  return Math.round(total * 100) / 100;
+}
+
 /** Hiển thị mã khách hàng thống nhất toàn hệ thống: 100001 → "#100001". */
 export function formatUserCode(code: number): string {
   return `#${code}`;

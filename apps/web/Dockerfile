@@ -36,8 +36,10 @@ COPY apps/web apps/web
 # URL trình duyệt dùng để gọi API — phải là địa chỉ máy khách truy cập được
 ARG NEXT_PUBLIC_API_URL="http://localhost:3001/api"
 ARG NEXT_PUBLIC_SITE_NAME="Catt Store"
+ARG NEXT_PUBLIC_SITE_URL="http://localhost:3000"
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL \
-    NEXT_PUBLIC_SITE_NAME=$NEXT_PUBLIC_SITE_NAME
+    NEXT_PUBLIC_SITE_NAME=$NEXT_PUBLIC_SITE_NAME \
+    NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 
 RUN pnpm --filter @webcatt/shared build \
  && pnpm --filter @webcatt/web build

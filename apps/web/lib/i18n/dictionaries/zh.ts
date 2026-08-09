@@ -265,6 +265,14 @@ export const zh: Dictionary = {
     statsError: '无法加载订单统计',
   },
 
+  errorPage: {
+    title: '页面出错了',
+    hint: '发生了意外错误。多数情况下重试即可；若仍不行，请联系店铺。',
+    retry: '重试',
+    backHome: '返回首页',
+    code: '错误代码',
+  },
+
   notFound: {
     title: '页面不存在',
     hint: '您访问的页面不存在或已被删除。',

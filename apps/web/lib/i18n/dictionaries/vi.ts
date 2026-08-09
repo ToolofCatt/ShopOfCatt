@@ -276,6 +276,14 @@ export const vi = {
     statsError: 'Không tải được thống kê đơn hàng',
   },
 
+  errorPage: {
+    title: 'Trang gặp sự cố',
+    hint: 'Đã xảy ra lỗi ngoài dự kiến. Thử lại giúp bạn trong hầu hết trường hợp; nếu vẫn không được, hãy liên hệ cửa hàng.',
+    retry: 'Thử lại',
+    backHome: 'Về trang chủ',
+    code: 'Mã lỗi',
+  },
+
   notFound: {
     title: 'Không tìm thấy trang',
     hint: 'Trang bạn đang tìm không tồn tại hoặc đã bị xóa.',

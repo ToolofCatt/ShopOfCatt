@@ -20,6 +20,7 @@ import {
   formatUsdt,
   formatUserCode,
   isAdminRole,
+  sumMoney,
   type OrderSummaryDto,
 } from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
@@ -142,7 +143,7 @@ export default function AccountPage() {
   const completed = orders?.filter(
     (order) => order.status === 'PAID' || order.status === 'DELIVERED',
   );
-  const totalSpent = completed?.reduce((sum, order) => sum + order.totalAmount, 0);
+  const totalSpent = completed && sumMoney(completed.map((o) => o.totalAmount));
 
   const handleLogout = () => {
     logout();
