@@ -48,7 +48,9 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-webcatt}?schema=public"
+      # Mật khẩu nằm giữa chuỗi kết nối nên PHẢI chỉ gồm chữ và số — xem ghi chú
+      # ở POSTGRES_PASSWORD trong .env.docker.example.
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:?Thieu POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-webcatt}?schema=public"
       PORT: "3001"
       JWT_SECRET: "${JWT_SECRET:?Thieu JWT_SECRET - hay tao file .env tu .env.docker.example}"
       WEB_URL: "${WEB_URL:-http://localhost:3000}"
@@ -76,8 +78,11 @@ services:
       SEED_ON_START: "${SEED_ON_START:-true}"
       # true = tạo thêm sản phẩm/khách/thông báo MẪU. Cửa hàng thật để false.
       SEED_DEMO: "${SEED_DEMO:-false}"
+    # Mặc định CHỈ nghe trên localhost — người ngoài vào qua proxy HTTPS. Publish
+    # 0.0.0.0 là để lộ API dạng HTTP không mã hoá, và Docker tự ghi luật DNAT
+    # vượt qua ufw nên tường lửa cũng không chặn được.
     ports:
-      - "${API_PORT:-3001}:3001"
+      - "${APP_BIND:-127.0.0.1}:${API_PORT:-3001}:3001"
     mem_limit: "${API_MEM_LIMIT:-768m}"
     # Cho Nest kịp đóng kết nối Prisma khi redeploy thay vì cắt ngang request.
     stop_grace_period: 20s
@@ -108,7 +113,7 @@ services:
       NEXT_PUBLIC_SITE_NAME: "${NEXT_PUBLIC_SITE_NAME:-Catt Store}"
       NEXT_PUBLIC_SITE_URL: "${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}"
     ports:
-      - "${WEB_PORT:-3000}:3000"
+      - "${APP_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"
     mem_limit: "${WEB_MEM_LIMIT:-512m}"
     stop_grace_period: 20s
     logging:
@@ -143,17 +148,20 @@ services:
       options: { max-size: "10m", max-file: "3" }
 
   # --------------------------------------------- reverse proxy + HTTPS
-  # Gộp web + api về CÙNG một tên miền: / → web, /api → api, và tự xin chứng chỉ
-  # Let's Encrypt. Bật bằng:  docker compose --profile proxy up -d --build
-  # Trước khi bật, đặt trong .env:
-  #   SITE_DOMAIN=shop.cua-ban.com
+  # ĐƯỜNG VÀO DUY NHẤT từ Internet. Gộp web + api về CÙNG một tên miền
+  # (/ → web, /api → api) và tự xin + tự gia hạn chứng chỉ Let's Encrypt.
+  #
+  # Chạy luôn cùng stack, KHÔNG phải tuỳ chọn: web/api chỉ nghe trên localhost
+  # nên nếu không có proxy thì bên ngoài không vào được gì cả.
+  #
+  # Đặt trong .env:
+  #   SITE_DOMAIN=shop.cua-ban.com   (đã trỏ A/AAAA về máy chủ này)
   #   ACME_EMAIL=ban@vidu.com
-  #   NEXT_PUBLIC_API_URL=/api      (rồi build lại web)
+  #   NEXT_PUBLIC_API_URL=/api       (rồi build lại web)
   proxy:
     image: caddy:2-alpine
     container_name: webcatt-proxy
     restart: unless-stopped
-    profiles: ["proxy"]
     depends_on:
       - web
       - api
@@ -166,9 +174,11 @@ services:
       # deploy lại xin mới và đụng hạn mức của Let's Encrypt.
       - webcatt_caddy_data:/data
       - webcatt_caddy_config:/config
+    # Let's Encrypt xác thực qua đúng cổng 80/443 — chỉ đổi khi chạy thử trong
+    # máy và hai cổng này đã bị chiếm.
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     logging:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }

@@ -138,12 +138,15 @@ hay vai trò của tài khoản đang dùng.
 
 | Dịch vụ | Mô tả |
 |---|---|
-| `postgres` | PostgreSQL 16 (UTF-8), dữ liệu lưu ở volume `webcatt_pgdata` |
+| `postgres` | PostgreSQL 17 (UTF-8), dữ liệu lưu ở volume `webcatt_pgdata`, chỉ nghe trên `127.0.0.1` |
 | `api` | NestJS — tự chạy `prisma migrate deploy` khi khởi động, có healthcheck `/api/health` |
 | `web` | Next.js bản `standalone` — image gọn, chỉ chứa file cần chạy |
-| `proxy` | *(tùy chọn)* nginx gộp web + api về cùng một tên miền |
+| `proxy` | Caddy — đường vào duy nhất từ Internet, tự xin + tự gia hạn chứng chỉ Let's Encrypt |
+| `backup` | `pg_dump` định kỳ ra `./backups`, tự xoá bản cũ theo `BACKUP_KEEP` |
 
 `web` chỉ khởi động sau khi `api` báo **healthy**, và `api` chỉ khởi động sau khi `postgres` sẵn sàng.
+
+**Web và API chỉ nghe trên `127.0.0.1`** (biến `APP_BIND`) — mọi truy cập từ ngoài đi qua `proxy` để luôn có HTTPS. Publish thẳng ra `0.0.0.0` là để lộ HTTP không mã hoá, và Docker tự ghi luật DNAT vượt qua `ufw` nên tường lửa cũng không chặn được.
 
 ### ⚠️ Biến `NEXT_PUBLIC_API_URL` được nhúng lúc build
 
@@ -153,28 +156,36 @@ Next.js nhúng các biến `NEXT_PUBLIC_*` vào bundle **khi build**, không đ�
 docker compose up -d --build web
 ```
 
-### Chạy qua reverse proxy (một tên miền duy nhất)
+### Một tên miền duy nhất, HTTPS tự động
 
-Cách này gọn hơn khi triển khai thật: web và API dùng chung một origin nên **không dính CORS**.
+Web và API dùng chung một origin nên **không dính CORS**, và Caddy tự lo chứng chỉ.
 
 ```bash
 # Trong .env:
+SITE_DOMAIN=shop.cua-ban.com     # đã trỏ A/AAAA về máy chủ này
+ACME_EMAIL=ban@vidu.com
 NEXT_PUBLIC_API_URL=/api
+NEXT_PUBLIC_SITE_URL=https://shop.cua-ban.com
+WEB_URL=https://shop.cua-ban.com
+API_PUBLIC_URL=https://shop.cua-ban.com
 
-docker compose --profile proxy up -d --build
-# → http://localhost:8080
+docker compose up -d --build
+# → https://shop.cua-ban.com
 ```
 
-Nginx sẽ chuyển `/api/*` sang container API, phần còn lại sang web (xem `docker/nginx.conf`).
+Caddy chuyển `/api/*` sang container API, phần còn lại sang web (xem `docker/Caddyfile`). Chạy thử trong máy thì để `SITE_DOMAIN=localhost` — chứng chỉ tự ký, trình duyệt cảnh báo nhưng luồng vẫn đúng.
+
+📘 Từng bước chi tiết cho VPS: [docs/TRIEN-KHAI.md](docs/TRIEN-KHAI.md)
 
 ### Checklist trước khi chạy thật (production)
 
-- [ ] Đặt `JWT_SECRET` ngẫu nhiên và dài (`openssl rand -hex 32`)
-- [ ] Đổi `POSTGRES_PASSWORD`, đổi `ADMIN_PASSWORD`
-- [ ] Đặt `SEED_ON_START=false` (tránh tạo lại tài khoản mặc định)
-- [ ] Đặt `WEB_URL` / `API_PUBLIC_URL` / `NEXT_PUBLIC_API_URL` theo tên miền thật (HTTPS)
-- [ ] Bỏ dòng mở cổng `POSTGRES_PORT` nếu không cần truy cập database từ ngoài
-- [ ] `PAYMENT_MOCK=false` + điền khóa Binance Pay thật
+- [ ] Điền `JWT_SECRET`, `POSTGRES_PASSWORD`, `ADMIN_PASSWORD` — cả ba để trống trong file mẫu, container **từ chối khởi động** cho tới khi bạn tự đặt. Mật khẩu Postgres chỉ dùng chữ và số (nó nằm giữa chuỗi kết nối).
+- [ ] Đặt `SITE_DOMAIN` + `ACME_EMAIL` theo tên miền thật đã trỏ DNS
+- [ ] Đặt `WEB_URL` / `API_PUBLIC_URL` / `NEXT_PUBLIC_SITE_URL` = `https://<tên miền>`, `NEXT_PUBLIC_API_URL=/api`, rồi **build lại web**
+- [ ] Giữ `APP_BIND=127.0.0.1` — chỉ đổi khi bạn thật sự cần bỏ qua HTTPS
+- [ ] `PAYMENT_MOCK=false` (mặc định), và bật ít nhất một phương thức thanh toán thật trong `/admin/settings`
+- [ ] Mở `/admin` xem **dải cảnh báo đỏ ở đầu trang tổng quan** — hết cảnh báo mới thật sự bán được
+- [ ] Chạy thử **khôi phục** từ một bản sao lưu (`./docker/restore.sh`) trước khi bán đơn đầu tiên
 
 ---
 
@@ -217,7 +228,9 @@ apps/
 packages/
   shared/         # Types + hằng số dùng chung
 docker/
-  nginx.conf      # Cấu hình reverse proxy (profile "proxy")
+  Caddyfile       # Reverse proxy + HTTPS tự động
+  backup.sh       # pg_dump định kỳ
+  restore.sh      # Khôi phục từ một bản dump
 docs/SPEC.md      # Đặc tả chi tiết hệ thống
 docker-compose.yml       # Toàn bộ stack
 docker-compose.dev.yml   # Chỉ database, cho môi trường dev

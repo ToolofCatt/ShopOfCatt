@@ -348,6 +348,15 @@ async function ensureUser(
   return { code: created.code, created: true };
 }
 
+/** Mật khẩu mẫu đi kèm mã nguồn — không được phép dùng thật. */
+const PLACEHOLDER_PASSWORDS = new Set([
+  'dat-mat-khau-manh-cua-ban',
+  'admin@123',
+  'change-me',
+  'changeme',
+  'password',
+]);
+
 async function seedUsers(): Promise<void> {
   const adminEmail = (process.env.ADMIN_EMAIL ?? 'admin@cattstore.local')
     .trim()
@@ -356,6 +365,13 @@ async function seedUsers(): Promise<void> {
   if (!adminPassword) {
     throw new Error(
       'Thiếu ADMIN_PASSWORD — đặt trong .env trước khi seed. Không còn mật khẩu mặc định.',
+    );
+  }
+  // Giá trị mẫu nằm công khai trong .env.docker.example — copy file rồi quên
+  // sửa là ai cũng đăng nhập được vào tài khoản chủ shop.
+  if (PLACEHOLDER_PASSWORDS.has(adminPassword.trim().toLowerCase())) {
+    throw new Error(
+      'ADMIN_PASSWORD vẫn là giá trị mẫu công khai trong mã nguồn — hãy đặt mật khẩu riêng trong .env.',
     );
   }
   const adminHash = await bcrypt.hash(adminPassword, 10);

@@ -78,7 +78,7 @@ openssl rand -base64 48
 
 ```bash
 docker compose config                       # kiểm cú pháp trước
-docker compose --profile proxy up -d --build
+docker compose up -d --build
 docker compose ps                           # cả 5 dịch vụ phải "healthy"/"running"
 docker compose logs -f api                  # xem migration chạy xong chưa
 ```
@@ -194,7 +194,7 @@ thêm kho — bộ quét chạy mỗi 2 phút.
 cd /opt/catt-store
 ./docker/backup.sh   # hoặc chờ bản sao lưu tự động gần nhất
 git pull
-docker compose --profile proxy up -d --build
+docker compose up -d --build
 docker compose logs -f api    # migration chạy tự động lúc khởi động
 ```
 
