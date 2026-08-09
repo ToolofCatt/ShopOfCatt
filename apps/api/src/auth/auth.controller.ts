@@ -11,6 +11,7 @@ import {
 import type { User } from '@prisma/client';
 import type { AuthResponse, CaptchaDto, PublicUser } from '@webcatt/shared';
 import type { Request } from 'express';
+import { RateLimit, RateLimitGuard } from '../security/rate-limit.guard';
 import { clientIp } from '../security/rate-limit.service';
 import { AuthService } from './auth.service';
 import { CurrentUser } from './current-user.decorator';
@@ -53,9 +54,12 @@ export class AuthController {
     return toPublicUser(user);
   }
 
+  // Mỗi lần gọi chạy bcrypt hai lượt — vừa là công cụ dò mật khẩu hiện tại,
+  // vừa là đòn bẩy làm nghẽn CPU nếu bắn dồn.
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, RateLimitGuard)
+  @RateLimit({ limit: 10, windowMs: 15 * 60_000 })
   changePassword(
     @CurrentUser() user: User,
     @Body() dto: ChangePasswordDto,

@@ -7,7 +7,7 @@ name: webcatt
 services:
   # ---------------------------------------------------------------- database
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: webcatt-postgres
     restart: unless-stopped
     environment:
@@ -29,6 +29,12 @@ services:
       timeout: 5s
       retries: 10
       start_period: 20s
+    # Một truy vấn chạy loạn không được kéo sập cả máy chủ.
+    mem_limit: "${POSTGRES_MEM_LIMIT:-1g}"
+    shm_size: "256m"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
   # ------------------------------------------------------------------- api
   api:
@@ -72,6 +78,12 @@ services:
       SEED_DEMO: "${SEED_DEMO:-false}"
     ports:
       - "${API_PORT:-3001}:3001"
+    mem_limit: "${API_MEM_LIMIT:-768m}"
+    # Cho Nest kịp đóng kết nối Prisma khi redeploy thay vì cắt ngang request.
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
 
   # ------------------------------------------------------------------- web
   web:
@@ -95,13 +107,18 @@ services:
       NEXT_PUBLIC_SITE_NAME: "${NEXT_PUBLIC_SITE_NAME:-Catt Store}"
     ports:
       - "${WEB_PORT:-3000}:3000"
+    mem_limit: "${WEB_MEM_LIMIT:-512m}"
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
 
   # ------------------------------------------------------------- sao lưu
   # Mỗi dòng kho LÀ một sản phẩm — mất CSDL là mất hàng hoá, không dựng lại được.
   # Dịch vụ này chạy pg_dump định kỳ vào thư mục ./backups trên máy chủ.
   # Khôi phục:  ./docker/restore.sh backups/webcatt-YYYYMMDD-HHMMSS.sql.gz
   backup:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     container_name: webcatt-backup
     restart: unless-stopped
     depends_on:
@@ -123,22 +140,38 @@ services:
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
-  # ----------------------------------------------- reverse proxy (tùy chọn)
-  # Gộp web + api về CÙNG một tên miền: / → web, /api → api.
-  # Bật bằng:  docker compose --profile proxy up -d --build
-  # Trước khi bật, đặt trong .env:  NEXT_PUBLIC_API_URL=/api
+  # --------------------------------------------- reverse proxy + HTTPS
+  # Gộp web + api về CÙNG một tên miền: / → web, /api → api, và tự xin chứng chỉ
+  # Let's Encrypt. Bật bằng:  docker compose --profile proxy up -d --build
+  # Trước khi bật, đặt trong .env:
+  #   SITE_DOMAIN=shop.cua-ban.com
+  #   ACME_EMAIL=ban@vidu.com
+  #   NEXT_PUBLIC_API_URL=/api      (rồi build lại web)
   proxy:
-    image: nginx:1.27-alpine
+    image: caddy:2-alpine
     container_name: webcatt-proxy
     restart: unless-stopped
     profiles: ["proxy"]
     depends_on:
       - web
       - api
+    environment:
+      SITE_DOMAIN: "${SITE_DOMAIN:-localhost}"
+      ACME_EMAIL: "${ACME_EMAIL:-}"
     volumes:
-      - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Chứng chỉ phải sống qua các lần dựng lại container, nếu không mỗi lần
+      # deploy lại xin mới và đụng hạn mức của Let's Encrypt.
+      - webcatt_caddy_data:/data
+      - webcatt_caddy_config:/config
     ports:
-      - "${PROXY_PORT:-8080}:80"
+      - "80:80"
+      - "443:443"
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
 
 volumes:
   webcatt_pgdata:
+  webcatt_caddy_data:
+  webcatt_caddy_config:

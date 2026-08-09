@@ -1,0 +1,44 @@
+# Reverse proxy + HTTPS TỰ ĐỘNG.
+#
+# Caddy tự xin chứng chỉ Let's Encrypt cho ${SITE_DOMAIN} và tự gia hạn — không
+# cần certbot, không cần cron. Điều kiện: tên miền đã trỏ A/AAAA về máy chủ này
+# và cổng 80 + 443 mở ra Internet.
+#
+# Chạy nội bộ (chưa có tên miền): đặt SITE_DOMAIN=localhost trong .env — Caddy
+# cấp chứng chỉ tự ký, trình duyệt sẽ cảnh báo, nhưng luồng vẫn chạy qua HTTPS.
+
+{
+	email {$ACME_EMAIL}
+	# Giảm rác log: chỉ ghi mức INFO trở lên
+	log {
+		level INFO
+	}
+}
+
+{$SITE_DOMAIN} {
+	encode zstd gzip
+
+	# API đứng trước để /api không bị nuốt bởi route của web
+	handle /api/* {
+		reverse_proxy api:3001
+	}
+
+	handle {
+		reverse_proxy web:3000
+	}
+
+	header {
+		# HSTS: sau lần truy cập đầu, trình duyệt từ chối hạ xuống HTTP
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Không quảng cáo phần mềm máy chủ
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}
