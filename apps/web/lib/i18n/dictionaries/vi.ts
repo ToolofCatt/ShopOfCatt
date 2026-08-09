@@ -284,6 +284,21 @@ export const vi = {
     code: 'Mã lỗi',
   },
 
+  legal: {
+    termsTitle: "Điều khoản sử dụng",
+    refundTitle: "Chính sách hoàn tiền & bảo hành",
+    privacyTitle: "Chính sách bảo mật",
+    updatedAt: "Cập nhật lần cuối:",
+    emptyTitle: "Chưa có nội dung",
+    emptyHint: "Cửa hàng chưa soạn nội dung cho trang này. Vui lòng liên hệ để được hỗ trợ.",
+  },
+
+  footer: {
+    rights: "Cửa hàng sản phẩm số",
+    policies: "Chính sách",
+    contact: "Liên hệ",
+  },
+
   notFound: {
     title: 'Không tìm thấy trang',
     hint: 'Trang bạn đang tìm không tồn tại hoặc đã bị xóa.',
@@ -649,6 +664,7 @@ export const vi = {
       'admin.grant': 'Cấp quyền admin',
       'admin.revoke': 'Thu hồi quyền admin',
       'settings.update': 'Cập nhật cấu hình',
+      'legal.update': 'Cập nhật trang chính sách',
       'customer.reset_password': 'Đặt lại mật khẩu khách',
       'coupon.create': 'Tạo mã giảm giá',
       'coupon.update': 'Cập nhật mã giảm giá',
@@ -664,6 +680,17 @@ export const vi = {
       `Hủy đơn ${code}? Kho đang giữ sẽ được hoàn lại.`,
 
     /* ===== v5 — cấu hình thanh toán + trạng thái Binance ===== */
+    navLegal: "Chính sách",
+    legalTitle: "Trang chính sách",
+    legalSubtitle: "Điều khoản, hoàn tiền và bảo mật — khách đọc được từ chân trang.",
+    legalLoadError: "Không tải được trang chính sách",
+    legalFieldTitle: "Tiêu đề",
+    legalFieldBody: "Nội dung",
+    legalBodyHint: "Soạn như Word. Để trống sẽ hiện thông báo chưa có nội dung.",
+    legalBodyPlaceholder: "Nhập nội dung chính sách…",
+    legalSaved: "Đã lưu trang chính sách.",
+    legalViewPublic: "Xem trang công khai",
+    legalUpdatedAt: (d: string) => `Cập nhật lần cuối: ${d}`,
     navSettings: 'Cấu hình',
     settingsTitle: 'Cấu hình',
     settingsSubtitle: 'Phương thức thanh toán và ví nhận USDT của cửa hàng.',

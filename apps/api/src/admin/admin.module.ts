@@ -3,6 +3,7 @@ import { AnnouncementModule } from '../announcement/announcement.module';
 import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
 import { CouponsModule } from '../coupons/coupons.module';
+import { LegalModule } from '../legal/legal.module';
 import { OrdersModule } from '../orders/orders.module';
 import { SettingsModule } from '../settings/settings.module';
 import { TranslationModule } from '../translation/translation.module';
@@ -18,6 +19,7 @@ import { AdminService } from './admin.service';
     AuditModule,
     SettingsModule,
     CouponsModule,
+    LegalModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

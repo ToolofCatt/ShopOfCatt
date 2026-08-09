@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   Megaphone,
+  FileText,
   Package,
   ReceiptText,
   ScrollText,
@@ -57,6 +58,7 @@ export function AdminSidebar() {
     { href: '/admin/audit', label: t.admin.navAudit, icon: ScrollText },
     { href: '/admin/settings', label: t.admin.navSettings, icon: Settings },
     { href: '/admin/announcement', label: t.admin.navAnnouncement, icon: Megaphone },
+    { href: '/admin/legal', label: t.admin.navLegal, icon: FileText },
   ];
 
   return (

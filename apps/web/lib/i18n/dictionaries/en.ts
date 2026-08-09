@@ -281,6 +281,21 @@ export const en: Dictionary = {
     code: 'Error code',
   },
 
+  legal: {
+    termsTitle: "Terms of service",
+    refundTitle: "Refund & warranty policy",
+    privacyTitle: "Privacy policy",
+    updatedAt: "Last updated:",
+    emptyTitle: "No content yet",
+    emptyHint: "The store has not written this page yet. Please contact us for help.",
+  },
+
+  footer: {
+    rights: "Digital goods store",
+    policies: "Policies",
+    contact: "Contact",
+  },
+
   notFound: {
     title: 'Page not found',
     hint: 'The page you are looking for does not exist or has been removed.',
@@ -643,6 +658,7 @@ export const en: Dictionary = {
       'admin.grant': 'Grant admin',
       'admin.revoke': 'Revoke admin',
       'settings.update': 'Update settings',
+      'legal.update': 'Update policy page',
       'customer.reset_password': 'Reset customer password',
       'coupon.create': 'Create discount code',
       'coupon.update': 'Update discount code',
@@ -657,6 +673,17 @@ export const en: Dictionary = {
       `Cancel order ${code}? Reserved stock will be released.`,
 
     /* ===== v5 — payment settings + Binance status ===== */
+    navLegal: "Policies",
+    legalTitle: "Policy pages",
+    legalSubtitle: "Terms, refunds and privacy — customers reach them from the footer.",
+    legalLoadError: "Could not load policy pages",
+    legalFieldTitle: "Title",
+    legalFieldBody: "Content",
+    legalBodyHint: "Write it like a Word document. Leave empty to show a placeholder.",
+    legalBodyPlaceholder: "Write your policy…",
+    legalSaved: "Policy page saved.",
+    legalViewPublic: "View public page",
+    legalUpdatedAt: (d) => `Last updated: ${d}`,
     navSettings: 'Settings',
     settingsTitle: 'Settings',
     settingsSubtitle: 'Payment methods and USDT deposit wallets for the store.',

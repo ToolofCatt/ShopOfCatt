@@ -8,6 +8,7 @@ import { BinanceExchangeModule } from './binance-exchange/binance-exchange.modul
 import { CouponsModule } from './coupons/coupons.module';
 import { CustomersModule } from './customers/customers.module';
 import { HealthModule } from './health/health.module';
+import { LegalModule } from './legal/legal.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
@@ -27,6 +28,7 @@ import { TranslationModule } from './translation/translation.module';
     ProductsModule,
     AnnouncementModule,
     TranslationModule,
+    LegalModule,
     SettingsModule,
     CouponsModule,
     OrdersModule,

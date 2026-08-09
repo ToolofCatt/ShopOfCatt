@@ -7,6 +7,7 @@ import { I18nProvider } from '@/lib/i18n/client';
 import { LOCALE_HTML_LANG } from '@/lib/i18n/config';
 import { getServerDictionary } from '@/lib/i18n/server';
 import { Header } from '@/components/header';
+import { Footer } from '@/components/footer';
 import './globals.css';
 
 const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || 'Catt Store';
@@ -62,6 +63,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <AuthProvider>
             <Header />
             <main className="flex-1">{children}</main>
+            <Footer />
           </AuthProvider>
         </I18nProvider>
       </body>

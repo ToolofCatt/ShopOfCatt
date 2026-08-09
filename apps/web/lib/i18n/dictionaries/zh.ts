@@ -273,6 +273,21 @@ export const zh: Dictionary = {
     code: '错误代码',
   },
 
+  legal: {
+    termsTitle: "服务条款",
+    refundTitle: "退款与保修政策",
+    privacyTitle: "隐私政策",
+    updatedAt: "最后更新：",
+    emptyTitle: "暂无内容",
+    emptyHint: "店铺尚未编写此页面，如需帮助请联系我们。",
+  },
+
+  footer: {
+    rights: "数字商品商店",
+    policies: "政策",
+    contact: "联系方式",
+  },
+
   notFound: {
     title: '页面不存在',
     hint: '您访问的页面不存在或已被删除。',
@@ -628,6 +643,7 @@ export const zh: Dictionary = {
       'admin.grant': '授予管理员',
       'admin.revoke': '撤销管理员',
       'settings.update': '更新设置',
+      'legal.update': '更新政策页面',
       'customer.reset_password': '重置客户密码',
       'coupon.create': '创建优惠码',
       'coupon.update': '更新优惠码',
@@ -641,6 +657,17 @@ export const zh: Dictionary = {
     cancelOrderConfirm: (code: string) => `取消订单 ${code}？已锁定的库存将被释放。`,
 
     /* ===== v5 —— 付款设置 + Binance 状态 ===== */
+    navLegal: "政策",
+    legalTitle: "政策页面",
+    legalSubtitle: "条款、退款与隐私 —— 客户可从页脚进入。",
+    legalLoadError: "无法加载政策页面",
+    legalFieldTitle: "标题",
+    legalFieldBody: "内容",
+    legalBodyHint: "像写 Word 一样编辑。留空则显示占位提示。",
+    legalBodyPlaceholder: "请输入政策内容…",
+    legalSaved: "政策页面已保存。",
+    legalViewPublic: "查看公开页面",
+    legalUpdatedAt: (d) => `最后更新：${d}`,
     navSettings: '设置',
     settingsTitle: '设置',
     settingsSubtitle: '商店的付款方式与 USDT 收款钱包。',

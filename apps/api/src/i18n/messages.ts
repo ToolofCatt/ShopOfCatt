@@ -175,6 +175,11 @@ export const K = {
   adminSupportTooMany: 'admin.support_too_many',
   cannotResetSelf: 'admin.cannot_reset_self',
 
+  // --- trang chính sách ---
+  legalSlugInvalid: 'legal.slug_invalid',
+  legalTitleInvalid: 'legal.title_invalid',
+  legalBodyInvalid: 'legal.body_invalid',
+
   // --- misc ---
   databaseDown: 'health.database_down',
   internalError: 'common.internal_error',
@@ -887,6 +892,22 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Không tìm thấy mã giảm giá',
     en: 'Discount code not found',
     zh: '未找到该优惠码',
+  },
+
+  [K.legalSlugInvalid]: {
+    vi: 'Trang chính sách không tồn tại',
+    en: 'This policy page does not exist',
+    zh: '该政策页面不存在',
+  },
+  [K.legalTitleInvalid]: {
+    vi: 'Tiêu đề trang chính sách không hợp lệ',
+    en: 'Invalid policy page title',
+    zh: '政策页面标题无效',
+  },
+  [K.legalBodyInvalid]: {
+    vi: 'Nội dung trang chính sách không hợp lệ',
+    en: 'Invalid policy page content',
+    zh: '政策页面内容无效',
   },
 
   // --- misc ---

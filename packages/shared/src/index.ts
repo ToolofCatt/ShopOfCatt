@@ -285,6 +285,28 @@ export interface CaptchaDto {
   question: string;
 }
 
+// ---------- Trang chính sách ----------
+/**
+ * Ba trang chính sách cố định. Bán hàng số thì tranh chấp "key không dùng
+ * được" là chuyện thường ngày — có sẵn điều khoản và chính sách hoàn tiền thì
+ * mọi tranh chấp đều quy về một văn bản, thay vì cãi nhau theo cảm tính.
+ * Đường dẫn công khai: /legal/{slug}
+ */
+export const LEGAL_PAGE_SLUGS = ['terms', 'refund', 'privacy'] as const;
+export type LegalPageSlug = (typeof LEGAL_PAGE_SLUGS)[number];
+
+export function isLegalPageSlug(value: string): value is LegalPageSlug {
+  return (LEGAL_PAGE_SLUGS as readonly string[]).includes(value);
+}
+
+export interface LegalPageDto {
+  slug: LegalPageSlug;
+  title: string;
+  /** HTML đã lọc ở máy chủ. Rỗng = chủ shop chưa soạn nội dung. */
+  body: string;
+  updatedAt: string;
+}
+
 // ---------- Thông tin cửa hàng công khai ----------
 export interface PublicStoreInfoDto {
   /** Kênh liên hệ hỗ trợ — hiện ở khối "Quên mật khẩu". Rỗng = chưa đặt. */
@@ -462,6 +484,7 @@ export const AUDIT_ACTIONS = [
   'admin.grant',
   'admin.revoke',
   'settings.update',
+  'legal.update',
   'customer.reset_password',
   'coupon.create',
   'coupon.update',

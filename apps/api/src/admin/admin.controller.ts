@@ -21,6 +21,7 @@ import type {
   AdminStatsDto,
   AdminStoreSettingDto,
   AuditLogDto,
+  LegalPageDto,
   BinanceStatusDto,
   OrderSummaryDto,
   Paginated,
@@ -39,6 +40,8 @@ import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { BinanceExchangeService } from '../binance-exchange/binance-exchange.service';
 import { CouponsService } from '../coupons/coupons.service';
+import { LegalService } from '../legal/legal.service';
+import { UpdateLegalPageDto } from '../legal/dto/update-legal-page.dto';
 import {
   CreateCouponDto,
   UpdateCouponDto,
@@ -66,7 +69,24 @@ export class AdminController {
     private readonly settingsService: SettingsService,
     private readonly binanceExchange: BinanceExchangeService,
     private readonly couponsService: CouponsService,
+    private readonly legalService: LegalService,
   ) {}
+
+  // ---------- Trang chính sách ----------
+
+  @Get('legal')
+  listLegal(): Promise<LegalPageDto[]> {
+    return this.legalService.listAdmin();
+  }
+
+  @Put('legal/:slug')
+  updateLegal(
+    @CurrentUser() user: User,
+    @Param('slug') slug: string,
+    @Body() dto: UpdateLegalPageDto,
+  ): Promise<LegalPageDto> {
+    return this.legalService.update(user, slug, dto);
+  }
 
   // ---------- Mã giảm giá ----------
 

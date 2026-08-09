@@ -343,3 +343,14 @@ model AnnouncementTranslation {
 
   @@unique([announcementId, locale])
 }
+
+/// Trang chính sách của cửa hàng (điều khoản, hoàn tiền/bảo hành, bảo mật).
+/// `slug` cố định theo LEGAL_PAGE_SLUGS trong @webcatt/shared — không cho tạo
+/// tuỳ ý để đường dẫn công khai luôn ổn định.
+/// `body` là HTML đã lọc qua đúng bộ allowlist của hộp thông báo.
+model LegalPage {
+  slug      String   @id
+  title     String   @default("")
+  body      String   @default("")
+  updatedAt DateTime @updatedAt
+}
