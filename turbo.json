@@ -1,0 +1,23 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      // .next/standalone chỉ dùng khi đóng gói Docker (build lại trong container),
+      // không đưa vào cache vì symlink lồng sâu vượt giới hạn đường dẫn của Windows.
+      "outputs": ["dist/**", ".next/**", "!.next/cache/**", "!.next/standalone/**"]
+    },
+    "dev": {
+      "dependsOn": ["^build"],
+      "cache": false,
+      "persistent": true
+    },
+    "typecheck": {
+      "dependsOn": ["^build"]
+    },
+    "start": {
+      "cache": false,
+      "persistent": true
+    }
+  }
+}

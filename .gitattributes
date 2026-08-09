@@ -1,0 +1,4 @@
+# Script chạy trong container Linux phải giữ line ending LF dù clone trên Windows
+*.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf

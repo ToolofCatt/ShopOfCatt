@@ -1,0 +1,899 @@
+import { DEFAULT_LOCALE, type Locale } from './locale';
+
+export type MessageParams = Record<string, string | number>;
+type Template = string | ((params: MessageParams) => string);
+
+/**
+ * Khoá thông báo. Service/DTO ném ra KHOÁ, bộ lọc ngoại lệ dịch sang ngôn ngữ
+ * người dùng (theo header Accept-Language) trước khi trả về.
+ */
+export const K = {
+  // --- auth ---
+  emailInvalid: 'auth.email_invalid',
+  passwordInvalid: 'auth.password_invalid',
+  passwordMin: 'auth.password_min',
+  passwordRequired: 'auth.password_required',
+  confirmRequired: 'auth.confirm_required',
+  confirmMismatch: 'auth.confirm_mismatch',
+  emailTaken: 'auth.email_taken',
+  invalidCredentials: 'auth.invalid_credentials',
+  loginRequired: 'auth.login_required',
+  sessionInvalid: 'auth.session_invalid',
+  forbidden: 'auth.forbidden',
+  accountLocked: 'auth.account_locked',
+  currentPasswordWrong: 'auth.current_password_wrong',
+
+  // --- chống spam đăng ký ---
+  captchaRequired: 'auth.captcha_required',
+  captchaInvalid: 'auth.captcha_invalid',
+  tooManyRegisters: 'auth.too_many_registers',
+  tooManyLogins: 'auth.too_many_logins',
+  tooManyRequests: 'auth.too_many_requests',
+
+  // --- mã giảm giá ---
+  couponCodeRequired: 'coupon.code_required',
+  couponCodeInvalid: 'coupon.code_invalid',
+  couponNotFound: 'coupon.not_found',
+  couponInactive: 'coupon.inactive',
+  couponNotStarted: 'coupon.not_started',
+  couponExpired: 'coupon.expired',
+  couponExhausted: 'coupon.exhausted',
+  couponUserLimit: 'coupon.user_limit',
+  couponMinAmount: 'coupon.min_amount',
+  couponCodeTaken: 'coupon.code_taken',
+  couponTypeInvalid: 'coupon.type_invalid',
+  couponValueInvalid: 'coupon.value_invalid',
+  couponPercentRange: 'coupon.percent_range',
+  couponNumberInvalid: 'coupon.number_invalid',
+  couponDateInvalid: 'coupon.date_invalid',
+  couponNoteInvalid: 'coupon.note_invalid',
+  couponNotFoundAdmin: 'coupon.admin_not_found',
+
+  // --- products ---
+  productNotFound: 'product.not_found',
+  variantNotFound: 'product.variant_not_found',
+
+  // --- orders ---
+  orderVariantIdInvalid: 'order.variant_id_invalid',
+  orderVariantIdRequired: 'order.variant_id_required',
+  orderQuantityInt: 'order.quantity_int',
+  orderQuantityMin: 'order.quantity_min',
+  orderItemsInvalid: 'order.items_invalid',
+  orderItemsMin: 'order.items_min',
+  orderNotFound: 'order.not_found',
+  orderCannotCancel: 'order.cannot_cancel',
+  orderInsufficientStock: 'order.insufficient_stock',
+  orderCodeFailed: 'order.code_generate_failed',
+
+  // --- payments ---
+  paymentSessionFailed: 'payment.session_failed',
+  paymentSessionMissing: 'payment.session_missing',
+  paymentMockDisabled: 'payment.mock_disabled',
+  paymentWebhookDisabled: 'payment.webhook_disabled',
+  paymentInvalidSignature: 'payment.invalid_signature',
+  paymentCodeInvalid: 'payment.code_invalid',
+  paymentCodeRequired: 'payment.code_required',
+  binanceNotConfigured: 'payment.binance_not_configured',
+  binanceHttpError: 'payment.binance_http_error',
+  binanceRejected: 'payment.binance_rejected',
+  binanceCertFailed: 'payment.binance_cert_failed',
+
+  // --- payments: chọn phương thức & crypto on-chain ---
+  paymentMethodInvalid: 'payment.method_invalid',
+  paymentMethodUnavailable: 'payment.method_unavailable',
+  paymentNoMethodConfigured: 'payment.no_method_configured',
+  paymentCryptoAmountUnavailable: 'payment.crypto_amount_unavailable',
+  paymentTxIdInvalid: 'payment.txid_invalid',
+  paymentTxIdRequired: 'payment.txid_required',
+  paymentTxNotFound: 'payment.tx_not_found',
+  paymentTxNetworkMismatch: 'payment.tx_network_mismatch',
+  paymentTxAmountMismatch: 'payment.tx_amount_mismatch',
+  paymentTxAlreadyUsed: 'payment.tx_already_used',
+
+  // --- admin: product form ---
+  adminNameInvalid: 'admin.name_invalid',
+  adminNameRequired: 'admin.name_required',
+  adminPriceNumber: 'admin.price_number',
+  adminPriceMin: 'admin.price_min',
+  adminSlugInvalid: 'admin.slug_invalid',
+  adminShortDescriptionInvalid: 'admin.short_description_invalid',
+  adminDescriptionInvalid: 'admin.description_invalid',
+  adminImageInvalid: 'admin.image_invalid',
+  adminIconInvalid: 'admin.icon_invalid',
+  adminCategoryInvalid: 'admin.category_invalid',
+  adminSortOrderInt: 'admin.sort_order_int',
+  adminActiveInvalid: 'admin.active_invalid',
+  adminSlugFailed: 'admin.slug_generate_failed',
+  adminSlugExists: 'admin.slug_exists',
+  adminProductHasOrders: 'admin.product_has_orders',
+
+  // --- admin: loại sản phẩm (variant) ---
+  adminVariantNameInvalid: 'admin.variant_name_invalid',
+  adminVariantNameRequired: 'admin.variant_name_required',
+  adminVariantHasOrders: 'admin.variant_has_orders',
+  adminVariantLast: 'admin.variant_last',
+
+  // --- admin: thông báo trang chủ ---
+  adminAnnouncementActiveInvalid: 'admin.announcement_active_invalid',
+  adminAnnouncementTitleInvalid: 'admin.announcement_title_invalid',
+  adminAnnouncementBodyInvalid: 'admin.announcement_body_invalid',
+  adminAnnouncementTranslationsInvalid: 'admin.announcement_translations_invalid',
+  adminAnnouncementEmpty: 'admin.announcement_empty',
+
+  // --- admin: dịch tự động ---
+  adminTranslationNotConfigured: 'admin.translation_not_configured',
+  adminTranslationFailed: 'admin.translation_failed',
+  adminTranslationRefused: 'admin.translation_refused',
+
+  // --- admin: stock ---
+  adminStockContentInvalid: 'admin.stock_content_invalid',
+  adminStockContentRequired: 'admin.stock_content_required',
+  adminStockDedupeInvalid: 'admin.stock_dedupe_invalid',
+  adminStockMinOneLine: 'admin.stock_min_one_line',
+  adminStockStatusInvalid: 'admin.stock_status_invalid',
+  adminStockLineNotFound: 'admin.stock_line_not_found',
+  adminStockOnlyAvailableDeletable: 'admin.stock_only_available_deletable',
+
+  // --- admin: queries / orders ---
+  adminPageInvalid: 'admin.page_invalid',
+  adminLimitInvalid: 'admin.limit_invalid',
+  adminOrderStatusInvalid: 'admin.order_status_invalid',
+  adminSearchInvalid: 'admin.search_invalid',
+  adminOnlyPaidRedeliver: 'admin.order_only_paid_redeliver',
+  adminUserIdInvalid: 'admin.user_id_invalid',
+
+  // --- admin: khách hàng & phân quyền ---
+  superadminRequired: 'admin.superadmin_required',
+  customerNotFound: 'admin.customer_not_found',
+  cannotLockSelf: 'admin.cannot_lock_self',
+  cannotLockAdmin: 'admin.cannot_lock_admin',
+  cannotModifySuperadmin: 'admin.cannot_modify_superadmin',
+  alreadyAdmin: 'admin.already_admin',
+  notAdmin: 'admin.not_admin',
+  cannotGrantLocked: 'admin.cannot_grant_locked',
+
+  // --- admin: nhật ký & thống kê ---
+  auditActionInvalid: 'admin.audit_action_invalid',
+  seriesDaysInvalid: 'admin.series_days_invalid',
+
+  // --- admin: cấu hình cửa hàng ---
+  adminSettingsFlagInvalid: 'admin.settings_flag_invalid',
+  adminSettingsAddressInvalid: 'admin.settings_address_invalid',
+  adminCryptoAddressRequired: 'admin.crypto_address_required',
+  adminBep20AddressInvalid: 'admin.bep20_address_invalid',
+  adminTrc20AddressInvalid: 'admin.trc20_address_invalid',
+  adminSupportContactInvalid: 'admin.support_contact_invalid',
+  adminSupportUrlInvalid: 'admin.support_url_invalid',
+  adminSupportNoteInvalid: 'admin.support_note_invalid',
+  adminSupportTooMany: 'admin.support_too_many',
+  cannotResetSelf: 'admin.cannot_reset_self',
+
+  // --- misc ---
+  databaseDown: 'health.database_down',
+  internalError: 'common.internal_error',
+} as const;
+
+const MESSAGES: Record<string, Record<Locale, Template>> = {
+  // --- auth ---
+  [K.emailInvalid]: {
+    vi: 'Email không hợp lệ',
+    en: 'Invalid email address',
+    zh: '邮箱格式不正确',
+  },
+  [K.passwordInvalid]: {
+    vi: 'Mật khẩu không hợp lệ',
+    en: 'Invalid password',
+    zh: '密码无效',
+  },
+  [K.passwordMin]: {
+    vi: (p) => `Mật khẩu phải có ít nhất ${p.min} ký tự`,
+    en: (p) => `Password must be at least ${p.min} characters`,
+    zh: (p) => `密码至少需要 ${p.min} 个字符`,
+  },
+  [K.passwordRequired]: {
+    vi: 'Vui lòng nhập mật khẩu',
+    en: 'Please enter your password',
+    zh: '请输入密码',
+  },
+  [K.confirmRequired]: {
+    vi: 'Vui lòng xác nhận mật khẩu',
+    en: 'Please confirm your password',
+    zh: '请确认密码',
+  },
+  [K.confirmMismatch]: {
+    vi: 'Mật khẩu xác nhận không khớp',
+    en: 'Passwords do not match',
+    zh: '两次输入的密码不一致',
+  },
+  [K.emailTaken]: {
+    vi: 'Email đã được đăng ký',
+    en: 'This email is already registered',
+    zh: '该邮箱已被注册',
+  },
+  [K.invalidCredentials]: {
+    vi: 'Email hoặc mật khẩu không đúng',
+    en: 'Incorrect email or password',
+    zh: '邮箱或密码不正确',
+  },
+  [K.loginRequired]: {
+    vi: 'Vui lòng đăng nhập để tiếp tục',
+    en: 'Please sign in to continue',
+    zh: '请先登录',
+  },
+  [K.sessionInvalid]: {
+    vi: 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn',
+    en: 'Your session is invalid or has expired',
+    zh: '登录状态无效或已过期',
+  },
+  [K.forbidden]: {
+    vi: 'Bạn không có quyền truy cập khu vực này',
+    en: 'You do not have permission to access this area',
+    zh: '您没有访问该区域的权限',
+  },
+  [K.accountLocked]: {
+    vi: 'Tài khoản của bạn đã bị khóa',
+    en: 'Your account has been locked',
+    zh: '您的账户已被锁定',
+  },
+  [K.currentPasswordWrong]: {
+    vi: 'Mật khẩu hiện tại không đúng',
+    en: 'The current password is incorrect',
+    zh: '当前密码不正确',
+  },
+
+  // --- products ---
+  [K.productNotFound]: {
+    vi: 'Sản phẩm không tồn tại',
+    en: 'Product not found',
+    zh: '商品不存在',
+  },
+  [K.variantNotFound]: {
+    vi: 'Loại sản phẩm không tồn tại',
+    en: 'Product option not found',
+    zh: '商品类型不存在',
+  },
+
+  // --- orders ---
+  [K.orderVariantIdInvalid]: {
+    vi: 'Mã loại sản phẩm không hợp lệ',
+    en: 'Invalid product option id',
+    zh: '商品类型 ID 无效',
+  },
+  [K.orderVariantIdRequired]: {
+    vi: 'Vui lòng chọn loại sản phẩm',
+    en: 'Please choose a product option',
+    zh: '请选择商品类型',
+  },
+  [K.orderQuantityInt]: {
+    vi: 'Số lượng phải là số nguyên',
+    en: 'Quantity must be an integer',
+    zh: '数量必须是整数',
+  },
+  [K.orderQuantityMin]: {
+    vi: 'Số lượng tối thiểu là 1',
+    en: 'Minimum quantity is 1',
+    zh: '数量最少为 1',
+  },
+  [K.orderItemsInvalid]: {
+    vi: 'Danh sách sản phẩm không hợp lệ',
+    en: 'Invalid item list',
+    zh: '商品列表无效',
+  },
+  [K.orderItemsMin]: {
+    vi: 'Đơn hàng phải có ít nhất 1 sản phẩm',
+    en: 'An order must contain at least 1 item',
+    zh: '订单至少需要 1 件商品',
+  },
+  [K.orderNotFound]: {
+    vi: 'Đơn hàng không tồn tại',
+    en: 'Order not found',
+    zh: '订单不存在',
+  },
+  [K.orderCannotCancel]: {
+    vi: 'Đơn hàng không thể hủy',
+    en: 'This order cannot be cancelled',
+    zh: '该订单无法取消',
+  },
+  [K.orderInsufficientStock]: {
+    vi: (p) => `Sản phẩm "${p.name}" không đủ hàng (còn ${p.remaining})`,
+    en: (p) => `"${p.name}" does not have enough stock (${p.remaining} left)`,
+    zh: (p) => `商品“${p.name}”库存不足（仅剩 ${p.remaining}）`,
+  },
+  [K.orderCodeFailed]: {
+    vi: 'Không tạo được mã đơn hàng, vui lòng thử lại',
+    en: 'Could not generate an order code, please try again',
+    zh: '无法生成订单号，请重试',
+  },
+
+  // --- payments ---
+  [K.paymentSessionFailed]: {
+    vi: 'Không tạo được phiên thanh toán Binance',
+    en: 'Could not create the Binance payment session',
+    zh: '无法创建 Binance 付款会话',
+  },
+  [K.paymentSessionMissing]: {
+    vi: 'Không tạo được phiên thanh toán',
+    en: 'Could not create a payment session',
+    zh: '无法创建付款会话',
+  },
+  [K.paymentMockDisabled]: {
+    vi: 'Chế độ thanh toán thử nghiệm đang tắt',
+    en: 'Sandbox payment mode is disabled',
+    zh: '测试付款模式已关闭',
+  },
+  [K.paymentWebhookDisabled]: {
+    vi: 'Webhook Binance không khả dụng ở chế độ thanh toán thử nghiệm',
+    en: 'The Binance webhook is unavailable in sandbox payment mode',
+    zh: '测试付款模式下 Binance Webhook 不可用',
+  },
+  [K.paymentInvalidSignature]: {
+    vi: 'Chữ ký không hợp lệ',
+    en: 'Invalid signature',
+    zh: '签名无效',
+  },
+  [K.paymentCodeInvalid]: {
+    vi: 'Mã đơn hàng không hợp lệ',
+    en: 'Invalid order code',
+    zh: '订单号无效',
+  },
+  [K.paymentCodeRequired]: {
+    vi: 'Vui lòng cung cấp mã đơn hàng',
+    en: 'An order code is required',
+    zh: '请提供订单号',
+  },
+  [K.binanceNotConfigured]: {
+    vi: 'Chưa cấu hình BINANCE_PAY_API_KEY / BINANCE_PAY_API_SECRET',
+    en: 'BINANCE_PAY_API_KEY / BINANCE_PAY_API_SECRET are not configured',
+    zh: '尚未配置 BINANCE_PAY_API_KEY / BINANCE_PAY_API_SECRET',
+  },
+  [K.binanceHttpError]: {
+    vi: (p) => `Binance Pay trả về mã lỗi HTTP ${p.status}`,
+    en: (p) => `Binance Pay returned HTTP error ${p.status}`,
+    zh: (p) => `Binance Pay 返回 HTTP 错误 ${p.status}`,
+  },
+  [K.binanceRejected]: {
+    vi: 'Binance Pay từ chối yêu cầu',
+    en: 'Binance Pay rejected the request',
+    zh: 'Binance Pay 拒绝了该请求',
+  },
+  [K.binanceCertFailed]: {
+    vi: 'Không lấy được chứng chỉ công khai từ Binance Pay',
+    en: 'Could not fetch the public certificate from Binance Pay',
+    zh: '无法从 Binance Pay 获取公钥证书',
+  },
+
+  // --- payments: chọn phương thức & crypto on-chain ---
+  [K.paymentMethodInvalid]: {
+    vi: 'Phương thức thanh toán không hợp lệ',
+    en: 'Invalid payment method',
+    zh: '付款方式无效',
+  },
+  [K.paymentNoMethodConfigured]: {
+    vi: 'Cửa hàng chưa bật phương thức thanh toán nào — vui lòng liên hệ quản trị viên',
+    en: 'The store has no payment method enabled — please contact the administrator',
+    zh: '店铺尚未启用任何付款方式 — 请联系管理员',
+  },
+  [K.paymentMethodUnavailable]: {
+    vi: 'Phương thức thanh toán này hiện không khả dụng',
+    en: 'This payment method is currently unavailable',
+    zh: '该付款方式当前不可用',
+  },
+  [K.paymentCryptoAmountUnavailable]: {
+    vi: 'Không tạo được số tiền thanh toán riêng cho đơn hàng — vui lòng thử lại sau ít phút',
+    en: 'Could not allocate a unique payment amount for this order — please try again in a few minutes',
+    zh: '暂时无法为该订单生成唯一付款金额，请几分钟后重试',
+  },
+  [K.paymentTxIdInvalid]: {
+    vi: 'Mã giao dịch (TxID) không hợp lệ',
+    en: 'Invalid transaction id (TxID)',
+    zh: '交易哈希（TxID）无效',
+  },
+  [K.paymentTxIdRequired]: {
+    vi: 'Vui lòng nhập mã giao dịch (TxID)',
+    en: 'Please enter the transaction id (TxID)',
+    zh: '请输入交易哈希（TxID）',
+  },
+  [K.paymentTxNotFound]: {
+    vi: 'Chưa tìm thấy giao dịch nạp với TxID này — vui lòng chờ vài phút rồi thử lại',
+    en: 'No confirmed deposit was found for this TxID yet — please wait a few minutes and try again',
+    zh: '尚未找到该 TxID 对应的入账记录，请稍等几分钟后重试',
+  },
+  [K.paymentTxNetworkMismatch]: {
+    vi: 'Giao dịch này không đúng mạng thanh toán của đơn hàng',
+    en: 'This transaction is on a different network than the order',
+    zh: '该交易所在网络与订单的付款网络不符',
+  },
+  [K.paymentTxAmountMismatch]: {
+    vi: 'Số tiền của giao dịch không khớp với đơn hàng',
+    en: 'The transaction amount does not match this order',
+    zh: '该交易金额与订单不符',
+  },
+  [K.paymentTxAlreadyUsed]: {
+    vi: 'TxID này đã được dùng cho một đơn hàng khác',
+    en: 'This TxID has already been used for another order',
+    zh: '该 TxID 已被其他订单使用',
+  },
+
+  // --- admin: product form ---
+  [K.adminNameInvalid]: {
+    vi: 'Tên sản phẩm không hợp lệ',
+    en: 'Invalid product name',
+    zh: '商品名称无效',
+  },
+  [K.adminNameRequired]: {
+    vi: 'Tên sản phẩm không được để trống',
+    en: 'Product name is required',
+    zh: '商品名称不能为空',
+  },
+  [K.adminPriceNumber]: {
+    vi: 'Giá phải là số (tối đa 2 chữ số thập phân)',
+    en: 'Price must be a number with at most 2 decimals',
+    zh: '价格必须是数字（最多 2 位小数）',
+  },
+  [K.adminPriceMin]: {
+    vi: 'Giá không được âm',
+    en: 'Price cannot be negative',
+    zh: '价格不能为负数',
+  },
+  [K.adminSlugInvalid]: {
+    vi: 'Slug không hợp lệ',
+    en: 'Invalid slug',
+    zh: 'Slug 无效',
+  },
+  [K.adminShortDescriptionInvalid]: {
+    vi: 'Mô tả ngắn không hợp lệ',
+    en: 'Invalid short description',
+    zh: '简短描述无效',
+  },
+  [K.adminDescriptionInvalid]: {
+    vi: 'Mô tả không hợp lệ',
+    en: 'Invalid description',
+    zh: '详细描述无效',
+  },
+  [K.adminImageInvalid]: {
+    vi: 'Đường dẫn ảnh không hợp lệ',
+    en: 'Invalid image URL',
+    zh: '图片地址无效',
+  },
+  [K.adminIconInvalid]: {
+    vi: 'Icon không hợp lệ',
+    en: 'Invalid icon',
+    zh: '图标无效',
+  },
+  [K.adminCategoryInvalid]: {
+    vi: 'Danh mục không hợp lệ',
+    en: 'Invalid category',
+    zh: '分类无效',
+  },
+  [K.adminSortOrderInt]: {
+    vi: 'Thứ tự sắp xếp phải là số nguyên',
+    en: 'Sort order must be an integer',
+    zh: '排序必须是整数',
+  },
+  [K.adminActiveInvalid]: {
+    vi: 'Trạng thái hiển thị không hợp lệ',
+    en: 'Invalid visibility flag',
+    zh: '显示状态无效',
+  },
+  [K.adminSlugFailed]: {
+    vi: 'Không tạo được slug từ tên sản phẩm',
+    en: 'Could not generate a slug from the product name',
+    zh: '无法根据商品名称生成 slug',
+  },
+  [K.adminSlugExists]: {
+    vi: 'Slug đã tồn tại',
+    en: 'This slug already exists',
+    zh: '该 slug 已存在',
+  },
+  [K.adminProductHasOrders]: {
+    vi: 'Sản phẩm đã có đơn hàng, hãy ẩn thay vì xóa',
+    en: 'This product has orders — hide it instead of deleting',
+    zh: '该商品已有订单，请隐藏而不是删除',
+  },
+
+  // --- admin: loại sản phẩm (variant) ---
+  [K.adminVariantNameInvalid]: {
+    vi: 'Tên loại sản phẩm không hợp lệ',
+    en: 'Invalid product option name',
+    zh: '商品类型名称无效',
+  },
+  [K.adminVariantNameRequired]: {
+    vi: 'Tên loại sản phẩm không được để trống',
+    en: 'Product option name is required',
+    zh: '商品类型名称不能为空',
+  },
+  [K.adminVariantHasOrders]: {
+    vi: 'Loại sản phẩm đã có đơn hàng, hãy ẩn thay vì xóa',
+    en: 'This option has orders — hide it instead of deleting',
+    zh: '该商品类型已有订单，请隐藏而不是删除',
+  },
+  [K.adminVariantLast]: {
+    vi: 'Mỗi sản phẩm phải có ít nhất một loại',
+    en: 'Every product must keep at least one option',
+    zh: '每个商品至少要保留一个类型',
+  },
+
+  // --- admin: thông báo trang chủ ---
+  [K.adminAnnouncementActiveInvalid]: {
+    vi: 'Trạng thái hiển thị thông báo không hợp lệ',
+    en: 'Invalid announcement visibility flag',
+    zh: '公告显示状态无效',
+  },
+  [K.adminAnnouncementTitleInvalid]: {
+    vi: 'Tiêu đề thông báo không hợp lệ',
+    en: 'Invalid announcement title',
+    zh: '公告标题无效',
+  },
+  [K.adminAnnouncementBodyInvalid]: {
+    vi: 'Nội dung thông báo không hợp lệ',
+    en: 'Invalid announcement body',
+    zh: '公告内容无效',
+  },
+  [K.adminAnnouncementTranslationsInvalid]: {
+    vi: 'Bản dịch thông báo không hợp lệ',
+    en: 'Invalid announcement translations',
+    zh: '公告译文无效',
+  },
+  [K.adminAnnouncementEmpty]: {
+    vi: 'Vui lòng nhập nội dung thông báo trước khi dịch',
+    en: 'Please write the announcement before translating it',
+    zh: '请先填写公告内容再翻译',
+  },
+
+  // --- admin: dịch tự động ---
+  [K.adminTranslationNotConfigured]: {
+    vi: 'Chưa cấu hình ANTHROPIC_API_KEY nên không dùng được dịch tự động',
+    en: 'ANTHROPIC_API_KEY is not configured, automatic translation is unavailable',
+    zh: '尚未配置 ANTHROPIC_API_KEY，无法使用自动翻译',
+  },
+  [K.adminTranslationFailed]: {
+    vi: 'Dịch tự động thất bại, vui lòng thử lại',
+    en: 'Automatic translation failed, please try again',
+    zh: '自动翻译失败，请重试',
+  },
+  [K.adminTranslationRefused]: {
+    vi: 'Trợ lý dịch đã từ chối nội dung này',
+    en: 'The translation assistant declined this content',
+    zh: '翻译助手拒绝处理该内容',
+  },
+
+  // --- admin: stock ---
+  [K.adminStockContentInvalid]: {
+    vi: 'Nội dung kho không hợp lệ',
+    en: 'Invalid stock content',
+    zh: '库存内容无效',
+  },
+  [K.adminStockContentRequired]: {
+    vi: 'Vui lòng nhập ít nhất một dòng',
+    en: 'Please enter at least one line',
+    zh: '请至少输入一行',
+  },
+  [K.adminStockDedupeInvalid]: {
+    vi: 'Tùy chọn bỏ qua dòng trùng không hợp lệ',
+    en: 'Invalid duplicate-skipping option',
+    zh: '跳过重复行的选项无效',
+  },
+  [K.adminStockMinOneLine]: {
+    vi: 'Vui lòng nhập ít nhất một dòng hợp lệ',
+    en: 'Please enter at least one valid line',
+    zh: '请至少输入一行有效内容',
+  },
+  [K.adminStockStatusInvalid]: {
+    vi: 'Trạng thái kho không hợp lệ',
+    en: 'Invalid stock status',
+    zh: '库存状态无效',
+  },
+  [K.adminStockLineNotFound]: {
+    vi: 'Dòng kho không tồn tại',
+    en: 'Stock line not found',
+    zh: '库存行不存在',
+  },
+  [K.adminStockOnlyAvailableDeletable]: {
+    vi: 'Chỉ xóa được dòng chưa bán',
+    en: 'Only unsold lines can be deleted',
+    zh: '只能删除未售出的行',
+  },
+
+  // --- admin: queries / orders ---
+  [K.adminPageInvalid]: {
+    vi: 'Số trang không hợp lệ',
+    en: 'Invalid page number',
+    zh: '页码无效',
+  },
+  [K.adminLimitInvalid]: {
+    vi: 'Kích thước trang không hợp lệ',
+    en: 'Invalid page size',
+    zh: '每页数量无效',
+  },
+  [K.adminOrderStatusInvalid]: {
+    vi: 'Trạng thái đơn hàng không hợp lệ',
+    en: 'Invalid order status',
+    zh: '订单状态无效',
+  },
+  [K.adminSearchInvalid]: {
+    vi: 'Từ khóa tìm kiếm không hợp lệ',
+    en: 'Invalid search keyword',
+    zh: '搜索关键词无效',
+  },
+  [K.adminOnlyPaidRedeliver]: {
+    vi: 'Chỉ giao lại được đơn đã thanh toán',
+    en: 'Only paid orders can be re-delivered',
+    zh: '只有已付款的订单才能补发',
+  },
+  [K.adminUserIdInvalid]: {
+    vi: 'Mã khách hàng không hợp lệ',
+    en: 'Invalid customer id',
+    zh: '客户 ID 无效',
+  },
+
+  // --- admin: khách hàng & phân quyền ---
+  [K.superadminRequired]: {
+    vi: 'Chỉ chủ cửa hàng mới thực hiện được thao tác này',
+    en: 'Only the shop owner can perform this action',
+    zh: '只有店主才能执行此操作',
+  },
+  [K.customerNotFound]: {
+    vi: 'Khách hàng không tồn tại',
+    en: 'Customer not found',
+    zh: '客户不存在',
+  },
+  [K.cannotLockSelf]: {
+    vi: 'Bạn không thể tự khóa tài khoản của mình',
+    en: 'You cannot lock your own account',
+    zh: '您不能锁定自己的账户',
+  },
+  [K.cannotLockAdmin]: {
+    vi: 'Không thể khóa tài khoản quản trị viên',
+    en: 'Administrator accounts cannot be locked',
+    zh: '无法锁定管理员账户',
+  },
+  [K.cannotModifySuperadmin]: {
+    vi: 'Không thể thay đổi tài khoản chủ cửa hàng',
+    en: 'The shop owner account cannot be modified',
+    zh: '无法更改店主账户',
+  },
+  [K.alreadyAdmin]: {
+    vi: 'Tài khoản này đã là quản trị viên',
+    en: 'This account is already an administrator',
+    zh: '该账户已是管理员',
+  },
+  [K.notAdmin]: {
+    vi: 'Tài khoản này không phải quản trị viên',
+    en: 'This account is not an administrator',
+    zh: '该账户不是管理员',
+  },
+  [K.cannotGrantLocked]: {
+    vi: 'Không thể cấp quyền cho tài khoản đang bị khóa',
+    en: 'A locked account cannot be granted admin rights',
+    zh: '无法为已锁定的账户授予管理员权限',
+  },
+
+  // --- admin: nhật ký & thống kê ---
+  [K.auditActionInvalid]: {
+    vi: 'Hành động lọc không hợp lệ',
+    en: 'Invalid audit action filter',
+    zh: '操作筛选无效',
+  },
+  [K.seriesDaysInvalid]: {
+    vi: 'Khoảng thời gian không hợp lệ (chỉ nhận 7, 14, 30 hoặc 60 ngày)',
+    en: 'Invalid time range (only 7, 14, 30 or 60 days are supported)',
+    zh: '时间范围无效（仅支持 7、14、30 或 60 天）',
+  },
+
+  // --- admin: cấu hình cửa hàng ---
+  [K.adminSettingsFlagInvalid]: {
+    vi: 'Giá trị bật/tắt không hợp lệ',
+    en: 'Invalid on/off value',
+    zh: '开关取值无效',
+  },
+  [K.adminSettingsAddressInvalid]: {
+    vi: 'Địa chỉ ví không hợp lệ',
+    en: 'Invalid wallet address',
+    zh: '钱包地址无效',
+  },
+  [K.adminCryptoAddressRequired]: {
+    vi: 'Bật thanh toán crypto cần ít nhất một địa chỉ ví (BEP20 hoặc TRC20)',
+    en: 'Enabling crypto payments requires at least one wallet address (BEP20 or TRC20)',
+    zh: '开启加密货币付款需要至少填写一个钱包地址（BEP20 或 TRC20）',
+  },
+  [K.adminBep20AddressInvalid]: {
+    vi: 'Địa chỉ BEP20 không hợp lệ (dạng 0x + 40 ký tự hex)',
+    en: 'Invalid BEP20 address (expected 0x followed by 40 hex characters)',
+    zh: 'BEP20 地址无效（应为 0x 加 40 位十六进制字符）',
+  },
+  [K.adminTrc20AddressInvalid]: {
+    vi: 'Địa chỉ TRC20 không hợp lệ (bắt đầu bằng T, dài 34 ký tự)',
+    en: 'Invalid TRC20 address (starts with T, 34 characters long)',
+    zh: 'TRC20 地址无效（以 T 开头，共 34 个字符）',
+  },
+
+  [K.adminSupportContactInvalid]: {
+    vi: 'Kênh liên hệ hỗ trợ không hợp lệ',
+    en: 'Invalid support contact',
+    zh: '客服联系方式无效',
+  },
+  [K.adminSupportUrlInvalid]: {
+    vi: 'Liên kết hỗ trợ không hợp lệ (chỉ nhận http, https hoặc mailto)',
+    en: 'Invalid support link (only http, https or mailto are allowed)',
+    zh: '客服链接无效（仅支持 http、https 或 mailto）',
+  },
+  [K.adminSupportNoteInvalid]: {
+    vi: 'Lời nhắn hỗ trợ không hợp lệ',
+    en: 'Invalid support message',
+    zh: '客服提示语无效',
+  },
+  [K.adminSupportTooMany]: {
+    vi: 'Chỉ thêm được tối đa 6 kênh liên hệ',
+    en: 'You can add at most 6 support channels',
+    zh: '最多只能添加 6 个联系方式',
+  },
+  [K.cannotResetSelf]: {
+    vi: 'Không thể tự đặt lại mật khẩu của chính mình — hãy dùng chức năng đổi mật khẩu',
+    en: 'You cannot reset your own password — use the change-password feature instead',
+    zh: '无法重置自己的密码 — 请使用修改密码功能',
+  },
+
+  // --- chống spam đăng ký ---
+  [K.captchaRequired]: {
+    vi: 'Vui lòng trả lời câu hỏi xác minh',
+    en: 'Please answer the verification question',
+    zh: '请回答验证问题',
+  },
+  [K.captchaInvalid]: {
+    vi: 'Câu trả lời xác minh không đúng hoặc đã hết hạn — vui lòng thử lại',
+    en: 'The verification answer is wrong or has expired — please try again',
+    zh: '验证答案错误或已过期 — 请重试',
+  },
+  [K.tooManyRegisters]: {
+    vi: 'Bạn đã tạo quá nhiều tài khoản — vui lòng thử lại sau',
+    en: 'Too many accounts created from this address — please try again later',
+    zh: '该地址创建的账号过多 — 请稍后再试',
+  },
+  [K.tooManyLogins]: {
+    vi: 'Đăng nhập sai quá nhiều lần — vui lòng thử lại sau vài phút',
+    en: 'Too many failed sign-in attempts — please try again in a few minutes',
+    zh: '登录尝试次数过多 — 请几分钟后再试',
+  },
+  [K.tooManyRequests]: {
+    vi: 'Bạn thao tác quá nhanh — vui lòng thử lại sau',
+    en: 'Too many requests — please slow down and try again',
+    zh: '请求过于频繁 — 请稍后再试',
+  },
+
+  // --- mã giảm giá ---
+  [K.couponCodeRequired]: {
+    vi: 'Vui lòng nhập mã giảm giá',
+    en: 'Please enter a discount code',
+    zh: '请输入优惠码',
+  },
+  [K.couponCodeInvalid]: {
+    vi: 'Mã giảm giá chỉ gồm chữ, số và dấu gạch ngang',
+    en: 'A discount code may only contain letters, digits and hyphens',
+    zh: '优惠码只能包含字母、数字和连字符',
+  },
+  [K.couponNotFound]: {
+    vi: 'Mã giảm giá không tồn tại',
+    en: 'This discount code does not exist',
+    zh: '优惠码不存在',
+  },
+  [K.couponInactive]: {
+    vi: 'Mã giảm giá đã ngừng áp dụng',
+    en: 'This discount code is no longer active',
+    zh: '该优惠码已停用',
+  },
+  [K.couponNotStarted]: {
+    vi: 'Mã giảm giá chưa đến ngày áp dụng',
+    en: 'This discount code is not active yet',
+    zh: '该优惠码尚未开始生效',
+  },
+  [K.couponExpired]: {
+    vi: 'Mã giảm giá đã hết hạn',
+    en: 'This discount code has expired',
+    zh: '该优惠码已过期',
+  },
+  [K.couponExhausted]: {
+    vi: 'Mã giảm giá đã hết lượt sử dụng',
+    en: 'This discount code has reached its usage limit',
+    zh: '该优惠码的使用次数已用完',
+  },
+  [K.couponUserLimit]: {
+    vi: 'Bạn đã dùng hết số lần cho phép của mã này',
+    en: 'You have already used this code the maximum number of times',
+    zh: '您使用该优惠码的次数已达上限',
+  },
+  [K.couponMinAmount]: {
+    vi: (p) => `Đơn hàng phải từ ${p.min} USDT mới dùng được mã này`,
+    en: (p) => `This code requires an order of at least ${p.min} USDT`,
+    zh: (p) => `订单需满 ${p.min} USDT 才能使用该优惠码`,
+  },
+  [K.couponCodeTaken]: {
+    vi: 'Mã giảm giá này đã tồn tại',
+    en: 'This discount code already exists',
+    zh: '该优惠码已存在',
+  },
+  [K.couponTypeInvalid]: {
+    vi: 'Kiểu giảm giá không hợp lệ',
+    en: 'Invalid discount type',
+    zh: '折扣类型无效',
+  },
+  [K.couponValueInvalid]: {
+    vi: 'Giá trị giảm phải lớn hơn 0',
+    en: 'The discount value must be greater than 0',
+    zh: '折扣值必须大于 0',
+  },
+  [K.couponPercentRange]: {
+    vi: 'Giảm theo phần trăm chỉ nhận giá trị từ 1 đến 100',
+    en: 'A percentage discount must be between 1 and 100',
+    zh: '百分比折扣必须在 1 到 100 之间',
+  },
+  [K.couponNumberInvalid]: {
+    vi: 'Giá trị số không hợp lệ',
+    en: 'Invalid numeric value',
+    zh: '数值无效',
+  },
+  [K.couponDateInvalid]: {
+    vi: 'Ngày không hợp lệ',
+    en: 'Invalid date',
+    zh: '日期无效',
+  },
+  [K.couponNoteInvalid]: {
+    vi: 'Ghi chú không hợp lệ',
+    en: 'Invalid note',
+    zh: '备注无效',
+  },
+  [K.couponNotFoundAdmin]: {
+    vi: 'Không tìm thấy mã giảm giá',
+    en: 'Discount code not found',
+    zh: '未找到该优惠码',
+  },
+
+  // --- misc ---
+  [K.databaseDown]: {
+    vi: 'Không kết nối được cơ sở dữ liệu',
+    en: 'Cannot reach the database',
+    zh: '无法连接数据库',
+  },
+  [K.internalError]: {
+    vi: 'Đã xảy ra lỗi, vui lòng thử lại',
+    en: 'Something went wrong, please try again',
+    zh: '发生错误，请稍后重试',
+  },
+};
+
+/**
+ * Gói khoá + tham số vào MỘT chuỗi, dùng cho `message` của class-validator
+ * (decorator chỉ nhận chuỗi). Ví dụ: "auth.password_min#{"min":8}"
+ */
+export function withParams(key: string, params: MessageParams): string {
+  return `${key}#${JSON.stringify(params)}`;
+}
+
+/** Tách chuỗi dạng "key#{json}" thành khoá và tham số. */
+export function parseMessage(value: string): { key: string; params: MessageParams } {
+  const index = value.indexOf('#');
+  if (index === -1) return { key: value, params: {} };
+  const key = value.slice(0, index);
+  try {
+    return { key, params: JSON.parse(value.slice(index + 1)) as MessageParams };
+  } catch {
+    return { key, params: {} };
+  }
+}
+
+export function isMessageKey(value: unknown): value is string {
+  if (typeof value !== 'string') return false;
+  const { key } = parseMessage(value);
+  return Object.prototype.hasOwnProperty.call(MESSAGES, key);
+}
+
+/** Dịch một khoá; nếu không phải khoá đã biết thì trả về nguyên văn. */
+export function translate(
+  key: string,
+  locale: Locale,
+  params: MessageParams = {},
+): string {
+  const entry = MESSAGES[key];
+  if (!entry) return key;
+  const template = entry[locale] ?? entry[DEFAULT_LOCALE];
+  return typeof template === 'function' ? template(params) : template;
+}

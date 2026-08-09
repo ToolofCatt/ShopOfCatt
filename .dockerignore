@@ -1,0 +1,36 @@
+# Dependencies & build output — luôn được cài/build lại bên trong image
+**/node_modules
+**/dist
+**/.next
+**/.turbo
+**/out
+**/*.tsbuildinfo
+
+# Dữ liệu PostgreSQL nhúng của môi trường dev (rất nặng, không được đưa vào image)
+apps/api/pgdata
+
+# Bí mật — container nhận biến môi trường từ docker-compose, không bake vào image
+**/.env
+**/.env.local
+**/.env.*.local
+.env.docker
+
+# Git & công cụ
+.git
+.gitignore
+.gitattributes
+.github
+.vscode
+.idea
+
+# Docker
+Dockerfile
+**/Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# Tài liệu & linh tinh
+docs
+README.md
+**/*.log
+**/.DS_Store

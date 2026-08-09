@@ -1,0 +1,99 @@
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+::selection {
+  background-color: #0a0a0a;
+  color: #ffffff;
+}
+
+/* Hide native number-input spinners — quantity/price steppers render their own controls. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ===== Nội dung có định dạng (hộp thông báo + trình soạn thảo) =====
+   Dùng chung một bộ luật để những gì admin thấy khi soạn giống hệt lúc hiển thị. */
+.wc-prose > *:first-child {
+  margin-top: 0;
+}
+.wc-prose > *:last-child {
+  margin-bottom: 0;
+}
+.wc-prose p {
+  margin: 0.5em 0;
+}
+.wc-prose h3 {
+  margin: 0.9em 0 0.4em;
+  font-size: 1.05em;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #0a0a0a;
+}
+.wc-prose h4 {
+  margin: 0.8em 0 0.35em;
+  font-weight: 600;
+  color: #0a0a0a;
+}
+.wc-prose strong,
+.wc-prose b {
+  font-weight: 600;
+  color: #0a0a0a;
+}
+.wc-prose em,
+.wc-prose i {
+  font-style: italic;
+}
+.wc-prose u {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.wc-prose s,
+.wc-prose strike {
+  text-decoration: line-through;
+}
+.wc-prose ul,
+.wc-prose ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+.wc-prose ul {
+  list-style: disc;
+}
+.wc-prose ol {
+  list-style: decimal;
+}
+.wc-prose li {
+  margin: 0.2em 0;
+}
+.wc-prose blockquote {
+  margin: 0.6em 0;
+  border-left: 2px solid #d4d4d4;
+  padding-left: 0.9em;
+  color: #525252;
+}
+.wc-prose code {
+  border-radius: 0.25rem;
+  background-color: #f5f5f5;
+  padding: 0.1em 0.35em;
+  font-family: var(--font-mono), ui-monospace, monospace;
+  font-size: 0.9em;
+}
+.wc-prose a {
+  font-weight: 500;
+  color: #0a0a0a;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.wc-prose a:hover {
+  text-decoration: none;
+}

@@ -1,0 +1,29 @@
+# Chỉ chạy PostgreSQL cho môi trường phát triển (code chạy trực tiếp trên máy).
+# Dùng khi bạn có Docker nhưng muốn `pnpm dev` chạy ngoài container:
+#     docker compose -f docker-compose.dev.yml up -d
+# Kết nối trùng với apps/api/.env: postgresql://postgres:postgres@localhost:5433/webcatt
+
+name: webcatt-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: webcatt-postgres-dev
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: "postgres"
+      POSTGRES_PASSWORD: "postgres"
+      POSTGRES_DB: "webcatt"
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5433:5432"
+    volumes:
+      - webcatt_pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d webcatt"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  webcatt_pgdata_dev:

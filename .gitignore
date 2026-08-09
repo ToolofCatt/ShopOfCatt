@@ -1,0 +1,38 @@
+# deps
+node_modules/
+
+# builds
+dist/
+dist-seed/
+.next/
+.turbo/
+out/
+
+# env
+.env
+.env.local
+.env.*.local
+
+# local database (embedded postgres)
+apps/api/pgdata/
+
+# Bản sao lưu dữ liệu — chứa key sản phẩm dạng rõ, email khách và hash mật khẩu.
+# TUYỆT ĐỐI không đưa vào version control.
+backups/
+*.dump
+*.sql.gz
+
+# File tạm khi kiểm thử
+*.tmp.js
+*.tmp.mjs
+*.tmp.ts
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# misc
+.DS_Store
+
+*.tsbuildinfo

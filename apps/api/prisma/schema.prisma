@@ -1,0 +1,323 @@
+generator client {
+  provider = "prisma-client-js"
+  // "native" cho máy dev; musl cho image Docker Alpine
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+  /// Chủ cửa hàng — duy nhất có quyền cấp/thu hồi quyền admin
+  SUPERADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  DELIVERED
+  CANCELLED
+  EXPIRED
+}
+
+enum StockStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  EXPIRED
+}
+
+enum DiscountType {
+  /// Giảm theo phần trăm (value = 1..100)
+  PERCENT
+  /// Giảm số tiền cố định (value = số USDT)
+  FIXED
+}
+
+model User {
+  id String @id @default(cuid())
+  /// Mã khách hàng ngẫu nhiên 8 chữ số — không lộ số lượng/tăng trưởng khách
+  code         Int      @unique
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(USER)
+  /// Khác null = tài khoản đang bị khóa (không đăng nhập/gọi API được)
+  lockedAt DateTime?
+  /// Lần đổi mật khẩu gần nhất — token cấp TRƯỚC mốc này bị từ chối
+  passwordChangedAt DateTime?
+  createdAt         DateTime   @default(now())
+  orders            Order[]
+  auditLogs         AuditLog[]
+}
+
+/// Nhật ký thao tác của quản trị viên — ai làm gì, lúc nào.
+model AuditLog {
+  id      String  @id @default(cuid())
+  actorId String?
+  actor   User?   @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  /// Ảnh chụp — vẫn đọc được nếu tài khoản bị xóa
+  actorEmail String
+  actorCode  Int
+  /// Khoá hành động, ví dụ "product.update", "customer.lock"
+  action     String
+  entityType String?
+  entityId   String?
+  /// Chi tiết ngắn gọn (tên, thay đổi giá...), hiển thị ở trang nhật ký
+  details   Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([actorId])
+  @@index([action])
+}
+
+model Product {
+  id               String  @id @default(cuid())
+  slug             String  @unique
+  name             String
+  shortDescription String?
+  description      String?
+  currency         String  @default("USDT")
+  image            String?
+  icon             String?
+  category         String?
+  sortOrder        Int     @default(0)
+  active           Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// Mỗi sản phẩm có ít nhất một loại; giá nằm ở từng loại
+  variants     ProductVariant[]
+  translations ProductTranslation[]
+  orderItems   OrderItem[]
+}
+
+/// Một "loại" của sản phẩm (ví dụ: gói 1 tháng / 1 năm) — có giá và kho riêng.
+model ProductVariant {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String
+  price     Decimal @db.Decimal(18, 2)
+  sortOrder Int     @default(0)
+  active    Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stockItems   StockItem[]
+  orderItems   OrderItem[]
+  translations ProductVariantTranslation[]
+
+  @@index([productId, active])
+}
+
+/// Bản dịch của sản phẩm sang một ngôn ngữ khác tiếng Việt ("en" | "zh").
+model ProductTranslation {
+  id               String  @id @default(cuid())
+  productId        String
+  product          Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  locale           String
+  name             String
+  shortDescription String?
+  description      String?
+  category         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([productId, locale])
+}
+
+model ProductVariantTranslation {
+  id        String         @id @default(cuid())
+  variantId String
+  variant   ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  locale    String
+  name      String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([variantId, locale])
+}
+
+model StockItem {
+  id          String         @id @default(cuid())
+  variantId   String
+  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  content     String
+  status      StockStatus    @default(AVAILABLE)
+  orderItemId String?
+  orderItem   OrderItem?     @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+  soldAt      DateTime?
+
+  @@index([variantId, status])
+  @@index([orderItemId])
+}
+
+model Order {
+  id     String      @id @default(cuid())
+  code   String      @unique
+  userId String
+  user   User        @relation(fields: [userId], references: [id])
+  status OrderStatus @default(PENDING)
+  /// Tiền hàng trước khi giảm giá
+  subtotalAmount Decimal @default(0) @db.Decimal(18, 2)
+  /// Số tiền được giảm bởi mã giảm giá
+  discountAmount Decimal @default(0) @db.Decimal(18, 2)
+  /// Số tiền khách phải trả = subtotalAmount - discountAmount
+  totalAmount Decimal @db.Decimal(18, 2)
+  couponId    String?
+  coupon      Coupon? @relation(fields: [couponId], references: [id], onDelete: SetNull)
+  /// Ảnh chụp mã đã dùng — vẫn đọc được nếu mã bị xóa
+  couponCode String?
+  currency   String      @default("USDT")
+  createdAt  DateTime    @default(now())
+  expiresAt  DateTime?
+  paidAt     DateTime?
+  items      OrderItem[]
+  payment    Payment?
+
+  @@index([userId, createdAt])
+  @@index([status, expiresAt])
+  @@index([couponId])
+}
+
+/// Mã giảm giá. `usedCount` được GIỮ CHỖ ngay khi đặt hàng và trả lại khi đơn
+/// bị hủy/hết hạn, nên mã không bao giờ bị dùng quá số lần cho phép.
+model Coupon {
+  id String @id @default(cuid())
+  /// Luôn lưu chữ HOA — so khớp không phân biệt hoa thường
+  code String       @unique
+  type DiscountType
+  /// PERCENT: 1..100 (%) — FIXED: số USDT
+  value Decimal @db.Decimal(18, 2)
+  /// Giá trị đơn tối thiểu mới dùng được mã
+  minAmount Decimal @default(0) @db.Decimal(18, 2)
+  /// Tổng số lần dùng tối đa; null = không giới hạn
+  maxUses   Int?
+  usedCount Int  @default(0)
+  /// Số lần tối đa MỘT khách được dùng; null = không giới hạn
+  perUserLimit Int?
+  startsAt     DateTime?
+  expiresAt    DateTime?
+  active       Boolean   @default(true)
+  /// Ghi chú nội bộ, chỉ admin thấy
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders Order[]
+
+  @@index([active, expiresAt])
+}
+
+model OrderItem {
+  id          String          @id @default(cuid())
+  orderId     String
+  order       Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String
+  product     Product         @relation(fields: [productId], references: [id])
+  variantId   String?
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  /// Ảnh chụp tại thời điểm đặt hàng — không đổi khi sản phẩm bị sửa/xóa
+  productName String
+  variantName String          @default("")
+  unitPrice   Decimal         @db.Decimal(18, 2)
+  quantity    Int
+  stockItems  StockItem[]
+
+  /// Tra theo orderId chạy BÊN TRONG giao dịch giao hàng (đang giữ khoá dòng),
+  /// không có index là quét tuần tự cả bảng ngay giữa đường tiền.
+  @@index([orderId])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  orderId         String        @unique
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider        String        @default("BINANCE_PAY")
+  mode            String        @default("MOCK")
+  merchantTradeNo String        @unique
+  prepayId        String?
+  amount          Decimal       @db.Decimal(18, 2)
+  currency        String        @default("USDT")
+  status          PaymentStatus @default(PENDING)
+  checkoutUrl     String?
+  qrcodeLink      String?
+  deeplink        String?
+  universalUrl    String?
+  rawWebhook      Json?
+  /// Thanh toán crypto on-chain: "BEP20" | "TRC20"
+  cryptoNetwork String?
+  /// Địa chỉ ví nhận (ảnh chụp lúc tạo đơn)
+  cryptoAddress String?
+  /// Số USDT DUY NHẤT khách phải gửi để hệ thống khớp đúng đơn (thêm phần lẻ)
+  cryptoAmount Decimal? @db.Decimal(18, 6)
+  /// TxID của giao dịch nạp đã khớp/được xác nhận.
+  /// @unique là hàng rào CHỐNG DÙNG LẠI: một khoản nạp chỉ trả được cho MỘT đơn,
+  /// kể cả khi nhiều request cùng khai một TxID trong cùng một khoảnh khắc.
+  cryptoTxId String?  @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  /// Bộ quét đối soát lọc theo (mode, status) mỗi 60 giây
+  @@index([mode, status])
+}
+
+/// Cấu hình cửa hàng — bản ghi duy nhất id = "main". Địa chỉ ví KHÔNG bí mật
+/// nên để trong DB cho admin sửa; khóa API Binance để trong biến môi trường.
+model StoreSetting {
+  id String @id @default("main")
+  /// Cổng thanh toán giả lập — MẶC ĐỊNH TẮT. Chỉ có tác dụng khi biến môi
+  /// trường PAYMENT_MOCK=true; bật nhầm ở môi trường thật = phát hàng miễn phí.
+  mockEnabled       Boolean  @default(false)
+  binancePayEnabled Boolean  @default(false)
+  cryptoEnabled     Boolean  @default(false)
+  bep20Address      String   @default("")
+  trc20Address      String   @default("")
+  /// Danh sách kênh liên hệ hỗ trợ — mảng {label, value, url?}, admin tự sửa.
+  /// Hiện ở khối "Quên mật khẩu" trang đăng nhập.
+  supportChannels Json   @default("[]")
+  /// Lời nhắn tùy chỉnh ở khối "Quên mật khẩu"; rỗng = dùng câu mặc định.
+  supportNote String   @default("")
+  updatedAt   DateTime @updatedAt
+}
+
+/// Hộp thông báo hiển thị trên trang chủ. Chỉ có duy nhất một bản ghi (id = "main").
+/// `body` là HTML đã được lọc theo danh sách thẻ cho phép (xem sanitize-html.ts).
+model Announcement {
+  id        String   @id @default("main")
+  active    Boolean  @default(false)
+  title     String   @default("")
+  body      String   @default("")
+  updatedAt DateTime @updatedAt
+
+  translations AnnouncementTranslation[]
+}
+
+model AnnouncementTranslation {
+  id             String       @id @default(cuid())
+  announcementId String
+  announcement   Announcement @relation(fields: [announcementId], references: [id], onDelete: Cascade)
+  locale         String
+  title          String
+  body           String
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([announcementId, locale])
+}

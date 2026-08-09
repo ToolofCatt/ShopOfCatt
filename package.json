@@ -1,0 +1,24 @@
+{
+  "name": "webcatt",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "db:embedded": "pnpm --filter @webcatt/api db:embedded",
+    "db:deploy": "pnpm --filter @webcatt/api db:deploy",
+    "db:push": "pnpm --filter @webcatt/api db:push",
+    "db:seed": "pnpm --filter @webcatt/api db:seed",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "docker:reset": "docker compose down -v"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0"
+  }
+}
