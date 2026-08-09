@@ -6,6 +6,7 @@ import {
   type AdminStoreSettingDto,
   type CryptoNetwork,
   type PaymentMethodDto,
+  type StoreReadinessDto,
   type SupportChannelDto,
 } from '@webcatt/shared';
 import { diffChanges } from '../audit/audit-diff';
@@ -117,6 +118,40 @@ export class SettingsService {
     }
 
     return methods;
+  }
+
+  /**
+   * Những thứ đang chặn việc bán hàng, để trang tổng quan cảnh báo sớm.
+   *
+   * `getEnabledMethods` âm thầm bỏ qua phương thức thiếu cấu hình (đúng, vì
+   * khách không nên thấy nút thanh toán hỏng) — nhưng chủ shop thì PHẢI biết,
+   * nếu không cửa hàng trông vẫn bình thường mà không đơn nào đặt được.
+   */
+  async getReadiness(): Promise<StoreReadinessDto> {
+    const [setting, methods] = await Promise.all([
+      this.getSetting(),
+      this.getEnabledMethods(),
+    ]);
+    const binancePayKey = (
+      this.config.get<string>('BINANCE_PAY_API_KEY') ?? ''
+    ).trim();
+
+    return {
+      activePaymentMethods: methods.map((entry) => entry.method),
+      binancePayKeyMissing: setting.binancePayEnabled && binancePayKey === '',
+      mockActive: methods.some((entry) => entry.method === 'mock'),
+      stockAvailable: await this.countAvailableStock(),
+    };
+  }
+
+  /** Số key bán được ngay: AVAILABLE (chưa giữ chỗ, chưa bán) ở loại đang bật. */
+  private async countAvailableStock(): Promise<number> {
+    return this.prisma.stockItem.count({
+      where: {
+        status: 'AVAILABLE',
+        variant: { active: true, product: { active: true } },
+      },
+    });
   }
 
   /** Địa chỉ ví nhận theo mạng — chuỗi rỗng khi chưa cấu hình. */

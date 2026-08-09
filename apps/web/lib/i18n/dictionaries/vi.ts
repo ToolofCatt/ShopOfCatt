@@ -692,6 +692,27 @@ export const vi = {
     legalViewPublic: "Xem trang công khai",
     legalUpdatedAt: (d: string) => `Cập nhật lần cuối: ${d}`,
     exportCsv: 'Xuất CSV',
+
+    /** Cảnh báo cửa hàng chưa sẵn sàng bán — hiện ở đầu trang tổng quan. */
+    readiness: {
+      noPaymentTitle: 'Cửa hàng chưa nhận được đơn nào',
+      noPaymentHint:
+        'Chưa bật phương thức thanh toán nào, nên mọi lần khách bấm đặt hàng đều báo lỗi. Bật ít nhất một phương thức để bắt đầu bán.',
+      noProductTitle: 'Chưa có sản phẩm nào đang bán',
+      noProductHint: 'Khách vào trang chủ sẽ thấy cửa hàng trống.',
+      noStockTitle: 'Đã hết hàng trong kho',
+      noStockHint:
+        'Sản phẩm vẫn hiện nhưng không đặt được vì không còn key nào. Thêm hàng vào kho của từng loại.',
+      mockTitle: 'Đang bật cổng thanh toán giả lập',
+      mockHint:
+        'Khách nhận hàng mà KHÔNG trả tiền. Chỉ dùng khi chạy thử — phải tắt trước khi bán thật.',
+      binanceKeyTitle: 'Binance Pay bật nhưng máy chủ thiếu khoá',
+      binanceKeyHint:
+        'Thiếu BINANCE_PAY_API_KEY nên khách không thấy phương thức này. Kiểm tra biến môi trường rồi khởi động lại máy chủ.',
+      goSettings: 'Mở cài đặt',
+      goProducts: 'Mở sản phẩm',
+      goAddProduct: 'Thêm sản phẩm',
+    },
     navSettings: 'Cấu hình',
     settingsTitle: 'Cấu hình',
     settingsSubtitle: 'Phương thức thanh toán và ví nhận USDT của cửa hàng.',

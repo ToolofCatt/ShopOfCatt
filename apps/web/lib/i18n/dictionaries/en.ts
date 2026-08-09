@@ -685,6 +685,26 @@ export const en: Dictionary = {
     legalViewPublic: "View public page",
     legalUpdatedAt: (d) => `Last updated: ${d}`,
     exportCsv: 'Export CSV',
+
+    readiness: {
+      noPaymentTitle: 'Your store cannot take any orders',
+      noPaymentHint:
+        'No payment method is enabled, so every checkout fails. Turn on at least one to start selling.',
+      noProductTitle: 'No products are on sale',
+      noProductHint: 'Visitors will see an empty storefront.',
+      noStockTitle: 'Out of stock',
+      noStockHint:
+        'Products are still listed but cannot be ordered — no keys left. Add stock to each variant.',
+      mockTitle: 'The mock payment gateway is active',
+      mockHint:
+        'Customers receive goods WITHOUT paying. Testing only — turn this off before selling for real.',
+      binanceKeyTitle: 'Binance Pay is on but the server key is missing',
+      binanceKeyHint:
+        'BINANCE_PAY_API_KEY is not set, so customers never see this method. Check the environment variable and restart the server.',
+      goSettings: 'Open settings',
+      goProducts: 'Open products',
+      goAddProduct: 'Add product',
+    },
     navSettings: 'Settings',
     settingsTitle: 'Settings',
     settingsSubtitle: 'Payment methods and USDT deposit wallets for the store.',

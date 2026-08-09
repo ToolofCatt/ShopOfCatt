@@ -24,6 +24,7 @@ import { slugify } from '../common/slugify';
 import { FulfillmentService } from '../orders/fulfillment.service';
 import { toOrderDetailDto, toOrderSummaryDto } from '../orders/order.mapper';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import {
   VARIANT_ORDER_BY,
   collectVariantIds,
@@ -102,6 +103,7 @@ export class AdminService {
     private readonly fulfillment: FulfillmentService,
     private readonly translation: TranslationService,
     private readonly audit: AuditService,
+    private readonly settings: SettingsService,
   ) {}
 
   // ---------- Thống kê ----------
@@ -121,6 +123,7 @@ export class AdminService {
       customersNew30d,
       activeVariants,
       topProducts,
+      readiness,
     ] = await Promise.all([
       this.prisma.order.aggregate({
         _sum: { totalAmount: true },
@@ -144,6 +147,7 @@ export class AdminService {
         },
       }),
       this.getTopProducts(last30Days),
+      this.settings.getReadiness(),
     ]);
 
     const counts = await getVariantStockCountMap(
@@ -171,6 +175,7 @@ export class AdminService {
       customersNew30d,
       topProducts,
       lowStock,
+      readiness,
     };
   }
 

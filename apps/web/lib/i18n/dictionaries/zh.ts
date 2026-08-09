@@ -669,6 +669,23 @@ export const zh: Dictionary = {
     legalViewPublic: "查看公开页面",
     legalUpdatedAt: (d) => `最后更新：${d}`,
     exportCsv: '导出 CSV',
+
+    readiness: {
+      noPaymentTitle: '店铺目前无法接受任何订单',
+      noPaymentHint: '尚未启用任何支付方式，顾客下单都会失败。请至少启用一种。',
+      noProductTitle: '没有在售商品',
+      noProductHint: '顾客打开首页只会看到空店铺。',
+      noStockTitle: '库存已售罄',
+      noStockHint: '商品仍在展示但无法下单，因为没有可发货的卡密。请为各规格补充库存。',
+      mockTitle: '模拟支付通道已开启',
+      mockHint: '顾客无需付款即可拿货。仅供测试——正式售卖前必须关闭。',
+      binanceKeyTitle: '已开启币安支付，但服务器缺少密钥',
+      binanceKeyHint:
+        '未设置 BINANCE_PAY_API_KEY，顾客看不到该支付方式。请检查环境变量后重启服务器。',
+      goSettings: '打开设置',
+      goProducts: '打开商品',
+      goAddProduct: '添加商品',
+    },
     navSettings: '设置',
     settingsTitle: '设置',
     settingsSubtitle: '商店的付款方式与 USDT 收款钱包。',

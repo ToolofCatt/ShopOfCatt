@@ -434,6 +434,24 @@ export interface AdminStatsDto {
     variantName: string;
     availableStock: number;
   }[];
+  /** Những thứ đang CHẶN việc bán hàng — hiện cảnh báo ngay ở trang tổng quan. */
+  readiness: StoreReadinessDto;
+}
+
+/**
+ * Vì sao cần: cửa hàng cài mới chưa bật phương thức thanh toán nào, giao diện
+ * trông vẫn bình thường nhưng mọi lần khách bấm đặt hàng đều lỗi 503. Chủ shop
+ * chỉ phát hiện khi khách phàn nàn — hoặc không bao giờ, vì khách bỏ đi luôn.
+ */
+export interface StoreReadinessDto {
+  /** Phương thức thanh toán THỰC SỰ dùng được (đã bật + đủ cấu hình). */
+  activePaymentMethods: PaymentMethod[];
+  /** Bật Binance Pay trong cài đặt nhưng máy chủ thiếu BINANCE_PAY_API_KEY. */
+  binancePayKeyMissing: boolean;
+  /** Đang chạy cổng thanh toán giả lập — tuyệt đối không để bật khi bán thật. */
+  mockActive: boolean;
+  /** Tổng số key/tài khoản còn trong kho của các loại đang bán. */
+  stockAvailable: number;
 }
 
 /** Một ngày trong biểu đồ doanh thu. `date` dạng YYYY-MM-DD (múi giờ máy chủ). */
