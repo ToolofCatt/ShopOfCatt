@@ -383,6 +383,7 @@ export const AUDIT_ACTIONS = [
   'stock.delete',
   'order.redeliver',
   'order.cancel',
+  'order.mark_paid',
   'announcement.update',
   'announcement.translate',
   'customer.lock',

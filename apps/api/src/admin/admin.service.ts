@@ -778,6 +778,51 @@ export class AdminService {
     return this.getOrderDetail(code);
   }
 
+  /**
+   * Xác nhận đã nhận tiền NGOÀI hệ thống rồi giao hàng.
+   *
+   * Đây là van an toàn của cả cửa hàng: khách chuyển khoản ngân hàng, hoặc gửi
+   * USDT mà bộ đối soát tự động không khớp được (sai mạng, gửi từ sàn gộp lệnh,
+   * Binance API lỗi…). Trước khi có nút này, tiền đã vào tài khoản mà không có
+   * cách nào giao hàng ngoài sửa tay cơ sở dữ liệu.
+   *
+   * Chỉ nhận đơn PENDING/EXPIRED — đơn đã PAID/DELIVERED gọi lại không làm gì
+   * thêm (markPaidAndDeliver có chốt trạng thái), đơn CANCELLED thì phải để
+   * khách đặt lại chứ không hồi sinh.
+   */
+  async markOrderPaid(
+    actor: User,
+    code: string,
+    note?: string,
+  ): Promise<AdminOrderDetailDto> {
+    const order = await this.prisma.order.findUnique({
+      where: { code },
+      select: { id: true, status: true },
+    });
+    if (!order) {
+      throw new NotFoundException(K.orderNotFound);
+    }
+    if (order.status !== 'PENDING' && order.status !== 'EXPIRED') {
+      throw new BadRequestException(K.adminCannotMarkPaid);
+    }
+
+    const result = await this.fulfillment.markPaidAndDeliver({
+      orderId: order.id,
+    });
+    await this.audit.log(
+      actor,
+      'order.mark_paid',
+      { type: 'order', id: order.id },
+      {
+        code,
+        from: order.status,
+        to: result?.status ?? 'PAID',
+        ...(note?.trim() ? { note: note.trim() } : {}),
+      },
+    );
+    return this.getOrderDetail(code);
+  }
+
   /** Hủy đơn PENDING thay khách: nhả kho giữ chỗ, payment → FAILED. */
   async cancelOrder(actor: User, code: string): Promise<AdminOrderDetailDto> {
     const order = await this.prisma.order.findUnique({
