@@ -610,6 +610,7 @@ export const en: Dictionary = {
       'stock.delete': 'Delete stock line',
       'order.redeliver': 'Redeliver order',
       'order.cancel': 'Cancel order',
+      'order.mark_paid': 'Mark order as paid',
       'announcement.update': 'Update announcement',
       'announcement.translate': 'Translate announcement',
       'customer.lock': 'Lock account',
@@ -624,6 +625,9 @@ export const en: Dictionary = {
     },
 
     cancelOrder: 'Cancel order',
+    markPaidAction: 'Mark as paid',
+    markPaidPrompt:
+      'Confirm that you HAVE RECEIVED the money for this order and deliver it now.\n\nNote where the money came from so it can be reconciled later (e.g. "Bank transfer 14:05", "USDT sent on the wrong network, verified manually"):',
     cancelOrderConfirm: (code: string) =>
       `Cancel order ${code}? Reserved stock will be released.`,
 

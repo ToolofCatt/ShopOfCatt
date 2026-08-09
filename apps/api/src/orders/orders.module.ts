@@ -4,6 +4,7 @@ import { CouponsModule } from '../coupons/coupons.module';
 import { BinanceModule } from '../payments/binance.module';
 import { SettingsModule } from '../settings/settings.module';
 import { CryptoReconcileService } from './crypto-reconcile.service';
+import { DeliverySweeperService } from './delivery-sweeper.service';
 import { FulfillmentService } from './fulfillment.service';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
@@ -11,7 +12,12 @@ import { OrdersService } from './orders.service';
 @Module({
   imports: [AuthModule, BinanceModule, SettingsModule, CouponsModule],
   controllers: [OrdersController],
-  providers: [OrdersService, FulfillmentService, CryptoReconcileService],
+  providers: [
+    OrdersService,
+    FulfillmentService,
+    CryptoReconcileService,
+    DeliverySweeperService,
+  ],
   exports: [OrdersService, FulfillmentService],
 })
 export class OrdersModule {}

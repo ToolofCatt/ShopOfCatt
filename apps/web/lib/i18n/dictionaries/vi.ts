@@ -617,6 +617,7 @@ export const vi = {
       'stock.delete': 'Xóa dòng kho',
       'order.redeliver': 'Giao bù đơn',
       'order.cancel': 'Hủy đơn',
+      'order.mark_paid': 'Xác nhận đã thanh toán',
       'announcement.update': 'Cập nhật thông báo',
       'announcement.translate': 'Dịch thông báo',
       'customer.lock': 'Khóa tài khoản',
@@ -632,6 +633,9 @@ export const vi = {
     auditGroupCoupons: 'Mã giảm giá',
 
     cancelOrder: 'Hủy đơn',
+    markPaidAction: 'Đánh dấu đã thanh toán',
+    markPaidPrompt:
+      'Xác nhận đã NHẬN ĐƯỢC TIỀN cho đơn này rồi giao hàng ngay.\n\nGhi lại nguồn tiền để sau này còn đối chiếu (ví dụ: "Chuyển khoản VCB 14:05", "USDT TRC20 sai mạng, đã kiểm tra thủ công"):',
     cancelOrderConfirm: (code: string) =>
       `Hủy đơn ${code}? Kho đang giữ sẽ được hoàn lại.`,
 

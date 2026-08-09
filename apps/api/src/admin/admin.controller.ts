@@ -47,6 +47,7 @@ import { SettingsService } from '../settings/settings.service';
 import { UpdateSettingsDto } from '../settings/dto/update-settings.dto';
 import { AdminService } from './admin.service';
 import { AddStockDto } from './dto/add-stock.dto';
+import { MarkPaidDto } from './dto/mark-paid.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { OrdersQueryDto } from './dto/orders-query.dto';
@@ -287,6 +288,20 @@ export class AdminController {
     @Param('code') code: string,
   ): Promise<AdminOrderDetailDto> {
     return this.adminService.redeliverOrder(user, code);
+  }
+
+  /**
+   * Xác nhận đã nhận tiền ngoài hệ thống (chuyển khoản ngân hàng, USDT không tự
+   * khớp được) rồi giao hàng ngay. Ghi nhật ký kèm ghi chú của quản trị viên.
+   */
+  @Post('orders/:code/mark-paid')
+  @HttpCode(HttpStatus.OK)
+  markOrderPaid(
+    @CurrentUser() user: User,
+    @Param('code') code: string,
+    @Body() dto: MarkPaidDto,
+  ): Promise<AdminOrderDetailDto> {
+    return this.adminService.markOrderPaid(user, code, dto.note);
   }
 
   @Post('orders/:code/cancel')

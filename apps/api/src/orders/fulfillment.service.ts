@@ -168,6 +168,21 @@ export class FulfillmentService {
   async deliverOrder(orderId: string): Promise<boolean> {
     return this.prisma.$transaction(
       async (tx) => {
+        /*
+         * Khóa hàng Order TRƯỚC MỌI THỨ KHÁC. Hai lý do:
+         *
+         * 1. Chống giao gấp đôi. `alreadySold` được đọc rồi mới ghi ở dưới; nếu
+         *    hai lần "giao lại" chạy song song (admin bấm hai lần, hai tab), cả
+         *    hai cùng đọc alreadySold = 0, rồi `SKIP LOCKED` cấp cho mỗi bên một
+         *    tập dòng kho KHÁC NHAU — khách nhận gấp đôi số key. Khóa ở đây bắt
+         *    lần thứ hai phải xếp hàng, và khi tới lượt nó thấy hàng đã giao.
+         *
+         * 2. Thống nhất THỨ TỰ KHÓA. `releaseExpiredOrders` khóa Order rồi mới
+         *    tới StockItem; nếu ở đây làm ngược lại thì hai bên ôm khóa của nhau
+         *    và Postgres phải hủy một bên (deadlock).
+         */
+        await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`;
+
         const items = await tx.orderItem.findMany({
           where: { orderId },
           orderBy: { id: 'asc' },

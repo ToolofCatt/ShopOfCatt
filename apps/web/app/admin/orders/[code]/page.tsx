@@ -2,7 +2,15 @@
 
 import Link from 'next/link';
 import { use, useCallback, useEffect, useState, type ReactNode } from 'react';
-import { ArrowLeft, Ban, PackageCheck, SearchX, ServerCrash, TriangleAlert } from 'lucide-react';
+import {
+  ArrowLeft,
+  BadgeCheck,
+  Ban,
+  PackageCheck,
+  SearchX,
+  ServerCrash,
+  TriangleAlert,
+} from 'lucide-react';
 import {
   formatUsdt,
   formatUserCode,
@@ -67,6 +75,8 @@ export default function AdminOrderDetailPage({
   const [deliverError, setDeliverError] = useState<string | null>(null);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [markingPaid, setMarkingPaid] = useState(false);
+  const [markPaidError, setMarkPaidError] = useState<string | null>(null);
 
   const loadOrder = useCallback(async (): Promise<AdminOrderDetail> => {
     return apiFetch<AdminOrderDetail>(`/admin/orders/${code}`, { token });
@@ -100,6 +110,30 @@ export default function AdminOrderDetailPage({
       setDeliverError(apiErrorMessage(err, t.common.connectionError));
     } finally {
       setDelivering(false);
+    }
+  };
+
+  /**
+   * Xác nhận đã nhận tiền ngoài hệ thống (chuyển khoản ngân hàng, hoặc khách
+   * nạp USDT mà bộ đối soát tự động không khớp được). Ghi chú đi vào nhật ký để
+   * sau này còn truy được vì sao đơn này được duyệt tay.
+   */
+  const handleMarkPaid = async () => {
+    if (markingPaid) return;
+    const note = window.prompt(t.admin.markPaidPrompt, '');
+    if (note === null) return;
+    setMarkingPaid(true);
+    setMarkPaidError(null);
+    try {
+      const updated = await apiFetch<AdminOrderDetail>(
+        `/admin/orders/${code}/mark-paid`,
+        { method: 'POST', body: { note: note.trim() }, token },
+      );
+      setOrder(updated);
+    } catch (err) {
+      setMarkPaidError(apiErrorMessage(err, t.common.connectionError));
+    } finally {
+      setMarkingPaid(false);
     }
   };
 
@@ -184,6 +218,20 @@ export default function AdminOrderDetailPage({
           <OrderStatusBadge status={order.status} />
         </div>
         <div className="flex flex-wrap items-center gap-3">
+          {/* Đơn chờ hoặc đã hết hạn vẫn xác nhận tay được: khách chuyển khoản
+              ngân hàng, hoặc nạp USDT mà bộ đối soát không khớp. */}
+          {(order.status === 'PENDING' || order.status === 'EXPIRED') && (
+            <Button
+              size="sm"
+              loading={markingPaid}
+              onClick={() => void handleMarkPaid()}
+            >
+              {!markingPaid && (
+                <BadgeCheck strokeWidth={1.75} className="h-4 w-4" />
+              )}
+              {t.admin.markPaidAction}
+            </Button>
+          )}
           {order.status === 'PENDING' && (
             <Button
               variant="danger"
@@ -202,6 +250,9 @@ export default function AdminOrderDetailPage({
       </div>
 
       {cancelError && <p className="mb-4 text-sm text-red-600">{cancelError}</p>}
+      {markPaidError && (
+        <p className="mb-4 text-sm text-red-600">{markPaidError}</p>
+      )}
 
       {needsRedelivery && (
         <Card className="mb-6 border-neutral-300 p-5">

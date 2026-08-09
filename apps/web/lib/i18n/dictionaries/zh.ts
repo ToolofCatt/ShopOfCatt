@@ -597,6 +597,7 @@ export const zh: Dictionary = {
       'stock.delete': '删除库存行',
       'order.redeliver': '补发订单',
       'order.cancel': '取消订单',
+      'order.mark_paid': '标记为已付款',
       'announcement.update': '更新公告',
       'announcement.translate': '翻译公告',
       'customer.lock': '锁定账户',
@@ -611,6 +612,9 @@ export const zh: Dictionary = {
     },
 
     cancelOrder: '取消订单',
+    markPaidAction: '标记为已付款',
+    markPaidPrompt:
+      '确认已经收到该订单的款项并立即发货。\n\n请记录款项来源以便日后对账（例如"银行转账 14:05"、"USDT 走错链，已人工核实"）：',
     cancelOrderConfirm: (code: string) => `取消订单 ${code}？已锁定的库存将被释放。`,
 
     /* ===== v5 —— 付款设置 + Binance 状态 ===== */

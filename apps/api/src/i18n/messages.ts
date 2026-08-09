@@ -162,6 +162,8 @@ export const K = {
   adminCryptoAddressRequired: 'admin.crypto_address_required',
   adminBep20AddressInvalid: 'admin.bep20_address_invalid',
   adminTrc20AddressInvalid: 'admin.trc20_address_invalid',
+  adminCannotMarkPaid: 'admin.cannot_mark_paid',
+  adminMarkPaidNoteInvalid: 'admin.mark_paid_note_invalid',
   adminSupportContactInvalid: 'admin.support_contact_invalid',
   adminSupportUrlInvalid: 'admin.support_url_invalid',
   adminSupportNoteInvalid: 'admin.support_note_invalid',
@@ -707,6 +709,16 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     zh: 'TRC20 地址无效（以 T 开头，共 34 个字符）',
   },
 
+  [K.adminCannotMarkPaid]: {
+    vi: 'Chỉ đánh dấu đã thanh toán được cho đơn đang chờ hoặc đã hết hạn',
+    en: 'Only pending or expired orders can be marked as paid',
+    zh: '只有待付款或已过期的订单才能标记为已付款',
+  },
+  [K.adminMarkPaidNoteInvalid]: {
+    vi: 'Ghi chú xác nhận thanh toán không hợp lệ (tối đa 300 ký tự)',
+    en: 'Invalid payment confirmation note (max 300 characters)',
+    zh: '付款确认备注无效（最多 300 个字符）',
+  },
   [K.adminSupportContactInvalid]: {
     vi: 'Kênh liên hệ hỗ trợ không hợp lệ',
     en: 'Invalid support contact',
