@@ -10,9 +10,11 @@ import {
   Post,
   Put,
   Query,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import type { User } from '@prisma/client';
+import type { Response } from 'express';
 import type {
   AddStockResponse,
   AdminAnnouncementDto,
@@ -294,6 +296,26 @@ export class AdminController {
     @Query() query: OrdersQueryDto,
   ): Promise<Paginated<OrderSummaryDto>> {
     return this.adminService.listOrders(query);
+  }
+
+  /**
+   * Xuất đơn hàng ra CSV theo đúng bộ lọc đang xem — dùng để làm sổ sách.
+   * Đặt TRƯỚC route 'orders/:code' vì Nest khớp theo thứ tự khai báo, nếu không
+   * 'export' sẽ bị hiểu là một mã đơn.
+   */
+  @Get('orders/export')
+  async exportOrders(
+    @Query() query: OrdersQueryDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<string> {
+    const csv = await this.adminService.exportOrdersCsv(query);
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="don-hang-${stamp}.csv"`,
+    );
+    return csv;
   }
 
   @Get('orders/:code')

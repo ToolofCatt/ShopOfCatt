@@ -32,6 +32,7 @@ import {
   toProductVariantDto,
 } from '../products/product.mapper';
 import { TranslationService } from '../translation/translation.service';
+import { buildOrdersCsv } from './orders-csv';
 import { AddStockDto } from './dto/add-stock.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
@@ -43,6 +44,8 @@ import { UpdateVariantDto } from './dto/update-variant.dto';
 import { K } from '../i18n/messages';
 
 const DEFAULT_ORDERS_PAGE_SIZE = 20;
+/** Trần số dòng khi xuất CSV — một cú bấm không được kéo sập tiến trình. */
+const EXPORT_MAX_ROWS = 20000;
 const DEFAULT_STOCK_PAGE_SIZE = 50;
 
 /** Tên loại được tạo tự động cùng sản phẩm mới. */
@@ -690,10 +693,8 @@ export class AdminService {
 
   // ---------- Đơn hàng ----------
 
-  async listOrders(query: OrdersQueryDto): Promise<Paginated<OrderSummaryDto>> {
-    const page = query.page ?? 1;
-    const limit = query.limit ?? DEFAULT_ORDERS_PAGE_SIZE;
-
+  /** Bộ lọc dùng chung giữa danh sách đơn và bản xuất CSV — hai nơi phải khớp nhau. */
+  private buildOrdersWhere(query: OrdersQueryDto): Prisma.OrderWhereInput {
     const where: Prisma.OrderWhereInput = {};
     if (query.status) where.status = query.status;
     if (query.userId) where.userId = query.userId;
@@ -709,6 +710,13 @@ export class AdminService {
         where.OR.push({ user: { code: numeric } });
       }
     }
+    return where;
+  }
+
+  async listOrders(query: OrdersQueryDto): Promise<Paginated<OrderSummaryDto>> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? DEFAULT_ORDERS_PAGE_SIZE;
+    const where = this.buildOrdersWhere(query);
 
     const [orders, total] = await Promise.all([
       this.prisma.order.findMany({
@@ -728,6 +736,53 @@ export class AdminService {
       items: orders.map((order) => toOrderSummaryDto(order, order.user)),
       total,
     };
+  }
+
+  /**
+   * Xuất đơn hàng ra CSV theo đúng bộ lọc đang xem trên trang quản trị.
+   *
+   * KHÔNG phân trang: mục đích là làm sổ sách và khai thuế, lấy nửa dữ liệu còn
+   * tệ hơn không lấy. Chặn trần ở EXPORT_MAX_ROWS để một cửa hàng lâu năm không
+   * kéo sập tiến trình bằng một cú bấm.
+   */
+  async exportOrdersCsv(query: OrdersQueryDto): Promise<string> {
+    const where = this.buildOrdersWhere(query);
+    const orders = await this.prisma.order.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      take: EXPORT_MAX_ROWS,
+      include: {
+        items: { select: { productName: true, variantName: true, quantity: true } },
+        user: { select: { email: true, code: true } },
+        payment: { select: { mode: true, status: true } },
+      },
+    });
+
+    return buildOrdersCsv(
+      orders.map((order) => ({
+        code: order.code,
+        createdAt: order.createdAt,
+        paidAt: order.paidAt,
+        status: order.status,
+        customerEmail: order.user.email,
+        customerCode: order.user.code,
+        subtotal: Number(order.subtotalAmount),
+        discount: Number(order.discountAmount),
+        total: Number(order.totalAmount),
+        currency: order.currency,
+        couponCode: order.couponCode,
+        paymentMode: order.payment?.mode ?? null,
+        paymentStatus: order.payment?.status ?? null,
+        itemsCount: order.items.length,
+        products: order.items
+          .map((item) =>
+            item.variantName
+              ? `${item.productName} – ${item.variantName} x${item.quantity}`
+              : `${item.productName} x${item.quantity}`,
+          )
+          .join('; '),
+      })),
+    );
   }
 
   async getOrderDetail(code: string): Promise<AdminOrderDetailDto> {

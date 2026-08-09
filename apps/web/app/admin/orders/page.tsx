@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { ChevronRight, ReceiptText, Search, ServerCrash } from 'lucide-react';
+import { ChevronRight, Download, ReceiptText, Search, ServerCrash } from 'lucide-react';
 import {
   formatUsdt,
   formatUserCode,
@@ -11,7 +11,7 @@ import {
   type OrderSummaryDto,
   type Paginated,
 } from '@webcatt/shared';
-import { apiErrorMessage, apiFetch } from '@/lib/api';
+import { apiBaseUrl, apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import { Button, Card, EmptyState, Input, Spinner } from '@/components/ui';
@@ -53,6 +53,37 @@ export default function AdminOrdersPage() {
   const [data, setData] = useState<Paginated<OrderSummaryDto> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  /**
+   * Tải CSV theo ĐÚNG bộ lọc đang xem. Không dùng thẻ <a href> được vì endpoint
+   * cần header Authorization, nên phải fetch rồi tự tạo link tải.
+   */
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      if (tab !== 'ALL') params.set('status', tab);
+      if (debouncedQuery) params.set('q', debouncedQuery);
+      const suffix = params.toString() ? `?${params.toString()}` : '';
+      const response = await fetch(`${apiBaseUrl()}/admin/orders/export${suffix}`, {
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      });
+      if (!response.ok) throw new Error(String(response.status));
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `don-hang-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      window.alert(t.common.connectionError);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Debounce the search box → one request per pause, page reset on change.
   useEffect(() => {
@@ -96,7 +127,21 @@ export default function AdminOrdersPage() {
 
   return (
     <>
-      <PageHeader title={t.admin.ordersTitle} description={t.admin.ordersSubtitle} />
+      <PageHeader
+        title={t.admin.ordersTitle}
+        description={t.admin.ordersSubtitle}
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            loading={exporting}
+            onClick={() => void handleExport()}
+          >
+            {!exporting && <Download strokeWidth={1.75} className="h-4 w-4" />}
+            {t.admin.exportCsv}
+          </Button>
+        }
+      />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <Tabs items={statusTabs} value={tab} onChange={handleTabChange} />

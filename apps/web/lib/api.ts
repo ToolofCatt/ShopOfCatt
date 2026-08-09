@@ -42,6 +42,15 @@ export function apiErrorMessage(err: unknown, connectionFallback: string): strin
   return connectionFallback;
 }
 
+/**
+ * Địa chỉ gốc của API cho các trường hợp KHÔNG dùng được `apiFetch` — ví dụ
+ * tải file: phải tự đọc `Response.blob()` thay vì JSON, nhưng vẫn cần header
+ * Authorization nên không thể dùng thẻ <a href> thường.
+ */
+export function apiBaseUrl(): string {
+  return resolveBaseUrl();
+}
+
 function resolveBaseUrl(): string {
   if (typeof window === 'undefined') {
     return process.env.API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';

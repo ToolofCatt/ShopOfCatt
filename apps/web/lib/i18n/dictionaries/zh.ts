@@ -668,6 +668,7 @@ export const zh: Dictionary = {
     legalSaved: "政策页面已保存。",
     legalViewPublic: "查看公开页面",
     legalUpdatedAt: (d) => `最后更新：${d}`,
+    exportCsv: '导出 CSV',
     navSettings: '设置',
     settingsTitle: '设置',
     settingsSubtitle: '商店的付款方式与 USDT 收款钱包。',

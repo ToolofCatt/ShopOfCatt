@@ -691,6 +691,7 @@ export const vi = {
     legalSaved: "Đã lưu trang chính sách.",
     legalViewPublic: "Xem trang công khai",
     legalUpdatedAt: (d: string) => `Cập nhật lần cuối: ${d}`,
+    exportCsv: 'Xuất CSV',
     navSettings: 'Cấu hình',
     settingsTitle: 'Cấu hình',
     settingsSubtitle: 'Phương thức thanh toán và ví nhận USDT của cửa hàng.',

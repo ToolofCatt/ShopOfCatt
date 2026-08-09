@@ -684,6 +684,7 @@ export const en: Dictionary = {
     legalSaved: "Policy page saved.",
     legalViewPublic: "View public page",
     legalUpdatedAt: (d) => `Last updated: ${d}`,
+    exportCsv: 'Export CSV',
     navSettings: 'Settings',
     settingsTitle: 'Settings',
     settingsSubtitle: 'Payment methods and USDT deposit wallets for the store.',

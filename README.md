@@ -49,6 +49,10 @@ Bấm biểu tượng 🌐 trên thanh điều hướng để đổi giữa **Ti
 
 ---
 
+> **Triển khai lên máy chủ thật?** Đọc [docs/TRIEN-KHAI.md](docs/TRIEN-KHAI.md)
+> — hướng dẫn từng bước cho VPS + tên miền + HTTPS, kèm danh sách kiểm
+> **trước khi bán đơn đầu tiên**.
+
 ## 🚀 Cách 1 — Chạy bằng Docker (khuyến nghị)
 
 Yêu cầu: **Docker Desktop** (hoặc Docker Engine + plugin compose). Không cần cài Node, pnpm hay PostgreSQL.
