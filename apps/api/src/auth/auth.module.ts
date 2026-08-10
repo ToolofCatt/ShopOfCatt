@@ -14,6 +14,7 @@ const MIN_JWT_SECRET_LENGTH = 32;
  */
 const PLACEHOLDER_SECRETS = new Set([
   'doi-thanh-chuoi-ngau-nhien-that-dai-truoc-khi-chay',
+  'doi-thanh-chuoi-bi-mat-ngau-nhien-that-dai-truoc-khi-chay',
   'webcatt-dev-secret',
   'change-me',
   'changeme',

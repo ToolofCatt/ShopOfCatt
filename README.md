@@ -95,13 +95,20 @@ Yêu cầu: Node.js ≥ 20, pnpm (`npm i -g pnpm`).
 ```bash
 pnpm install
 
+# Cấu hình. JWT_SECRET và ADMIN_PASSWORD để trống trong file mẫu — máy chủ và
+# seed từ chối chạy cho tới khi bạn tự đặt (repo công khai, chuỗi mẫu không an toàn).
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
+echo "JWT_SECRET=\"$(openssl rand -base64 48 | tr -d '\n')\"" >> apps/api/.env
+echo "ADMIN_PASSWORD=\"$(openssl rand -base64 18 | tr -d '\n')\"" >> apps/api/.env
+
 # Khởi động PostgreSQL — chọn MỘT trong hai:
 pnpm db:embedded                              # PostgreSQL nhúng, giữ cửa sổ này mở
 docker compose -f docker-compose.dev.yml up -d # hoặc chỉ chạy database bằng Docker
 
 # Cửa sổ terminal khác:
 pnpm db:deploy    # tạo bảng (chạy migration)
-pnpm db:seed      # dữ liệu mẫu
+pnpm db:seed      # tạo tài khoản chủ shop (SEED_DEMO=true để có thêm hàng mẫu)
 pnpm dev          # web :3000 + api :3001
 ```
 
