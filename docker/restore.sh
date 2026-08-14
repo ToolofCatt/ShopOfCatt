@@ -16,6 +16,14 @@ if [ -z "$FILE" ] || [ ! -f "$FILE" ]; then
   exit 1
 fi
 
+# Nạp .env như docker compose vẫn làm. Không nạp thì POSTGRES_USER/POSTGRES_DB ở
+# đây rơi về mặc định, trong khi compose đã tạo CSDL bằng giá trị trong .env —
+# phục hồi sẽ trỏ vào sai tên user hoặc sai database.
+if [ -f .env ]; then
+  # shellcheck disable=SC1091
+  . ./.env
+fi
+
 DB="${POSTGRES_DB:-webcatt}"
 USER="${POSTGRES_USER:-postgres}"
 
@@ -25,15 +33,30 @@ printf "Go 'YES' de xac nhan: "
 read -r answer
 [ "$answer" = "YES" ] || { echo "Da huy."; exit 1; }
 
-echo "[1/3] Dung API de khong ai ghi vao CSDL giua chung..."
-docker compose stop api web
+# Phục hồi hỏng giữa đường là CSDL trống rỗng. Dừng ở đây và nói thật to, tuyệt
+# đối không đi tiếp tới bước khởi động lại api/web.
+trap 'echo "" >&2; echo "!! PHUC HOI THAT BAI - api/web dang DUNG. CSDL co the dang do dang." >&2; echo "!! Dung file sao luu khac roi chay lai; DUNG khoi dong api khi chua xong." >&2' EXIT
 
-echo "[2/3] Xoa schema cu va nap ban sao luu..."
-docker compose exec -T postgres psql -U "$USER" -d "$DB" \
+echo "[1/4] Dung API va dich vu sao luu de khong ai ghi vao CSDL giua chung..."
+# Phải dừng cả `backup`: nếu chu kỳ sao lưu nổ đúng lúc đang phục hồi, nó sẽ
+# chụp một CSDL nửa vời và ghi đè lên chỗ bản tốt trong danh sách giữ lại.
+docker compose stop api web backup
+
+echo "[2/4] Xoa schema cu..."
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$USER" -d "$DB" \
   -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
-gunzip -c "$FILE" | docker compose exec -T postgres psql -U "$USER" -d "$DB"
 
-echo "[3/3] Khoi dong lai dich vu..."
-docker compose start api web
+echo "[3/4] Nap ban sao luu..."
+# ON_ERROR_STOP=1 là bắt buộc: không có nó, psql chạy tiếp qua mọi câu lệnh lỗi
+# rồi trả về 0, và script này từng in "Xong." trên một CSDL nạp thiếu một nửa.
+gunzip -c "$FILE" | docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$USER" -d "$DB"
 
-echo "Xong. Kiem tra: docker compose logs -f api"
+echo "[4/4] Doi chieu nhanh roi khoi dong lai dich vu..."
+docker compose exec -T postgres psql -v ON_ERROR_STOP=1 -U "$USER" -d "$DB" -c \
+  'SELECT (SELECT count(*) FROM "StockItem") AS kho, (SELECT count(*) FROM "Order") AS don, (SELECT count(*) FROM "User") AS nguoi_dung;'
+
+trap - EXIT
+docker compose start api web backup
+
+echo "Xong. So dong o tren phai khop voi luc truoc su co."
+echo "Kiem tra tiep: docker compose logs -f api"
