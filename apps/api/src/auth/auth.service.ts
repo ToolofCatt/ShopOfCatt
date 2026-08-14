@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { User } from '@prisma/client';
-import type { AuthResponse, CaptchaDto } from '@webcatt/shared';
+import { isAdminRole, type AuthResponse, type CaptchaDto } from '@webcatt/shared';
 import * as bcrypt from 'bcryptjs';
 import { generateUniqueCustomerCode } from '../common/customer-code';
 import { PrismaService } from '../prisma/prisma.service';
@@ -33,6 +33,30 @@ const LOGIN_WINDOW_MS = 15 * 60_000;
 /** Số câu hỏi xác minh một IP xin được trong 10 phút. */
 const CAPTCHA_LIMIT = 40;
 const CAPTCHA_WINDOW_MS = 10 * 60_000;
+
+/**
+ * Hạn phiên đăng nhập, chia theo vai trò.
+ *
+ * Token nằm trong `localStorage` của trình duyệt, nên một lỗ XSS bất kỳ là kẻ
+ * tấn công cầm được token cho tới khi nó hết hạn. Với khách, mất phiên nghĩa là
+ * xem lại được đơn của mình; với admin, nó là toàn quyền cửa hàng — kho key, mã
+ * giảm giá, đặt lại mật khẩu khách. Vì vậy admin dùng hạn ngắn hơn nhiều.
+ *
+ * Đổi hai giá trị này là đổi cả cửa sổ thiệt hại lẫn mức bất tiện; đừng nâng hạn
+ * của admin lên chỉ vì phải đăng nhập lại.
+ */
+const TOKEN_TTL_USER = '7d';
+const TOKEN_TTL_ADMIN = '12h';
+
+/**
+ * Hash mồi, dùng cho nhánh "email không tồn tại" khi đăng nhập. Sinh lúc nạp
+ * module nên nó KHÔNG phải là mật khẩu của ai và không có ai đăng nhập được bằng
+ * nó; mục đích duy nhất là để hai nhánh tốn thời gian bcrypt như nhau.
+ */
+const DECOY_PASSWORD_HASH = bcrypt.hashSync(
+  'khong-phai-mat-khau-cua-ai-chi-de-can-bang-thoi-gian',
+  BCRYPT_ROUNDS,
+);
 
 @Injectable()
 export class AuthService {
@@ -95,6 +119,10 @@ export class AuthService {
 
     const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) {
+      // So sánh với một hash giả trước khi trả lỗi. Không có bước này, email
+      // KHÔNG tồn tại trả về ngay còn email CÓ tồn tại phải chờ bcrypt (~100ms),
+      // nên chỉ cần đo thời gian phản hồi là dò ra danh sách khách của cửa hàng.
+      await bcrypt.compare(dto.password, DECOY_PASSWORD_HASH);
       throw new UnauthorizedException(K.invalidCredentials);
     }
     const valid = await bcrypt.compare(dto.password, user.passwordHash);
@@ -138,7 +166,9 @@ export class AuthService {
       email: user.email,
       role: user.role,
     };
-    const accessToken = await this.jwt.signAsync(payload);
+    const accessToken = await this.jwt.signAsync(payload, {
+      expiresIn: isAdminRole(user.role) ? TOKEN_TTL_ADMIN : TOKEN_TTL_USER,
+    });
     return { accessToken, user: toPublicUser(user) };
   }
 }

@@ -1,36 +1,11 @@
 import path from 'node:path';
 import type { NextConfig } from 'next';
 
-/**
- * Nguồn được phép gọi từ trình duyệt. Trang web gọi API bằng fetch nên
- * connect-src phải chứa cả API cùng miền lẫn cấu hình 2 cổng khi chạy dev.
+/*
+ * CSP KHÔNG nằm ở đây nữa — nó ở `middleware.ts`, vì nonce phải sinh theo từng
+ * request và headers() ở file này là hằng số. Đừng thêm lại: hai header CSP cùng
+ * lúc là trình duyệt lấy phần giao của hai bên và trang sẽ trắng.
  */
-const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
-const apiOrigin = apiUrl.startsWith('http') ? new URL(apiUrl).origin : '';
-
-/**
- * CSP đủ chặt để một đoạn script lạ không chạy được, nhưng vẫn cho Next.js
- * hoạt động. `'unsafe-inline'` cho style là bắt buộc với Tailwind + Next;
- * `'unsafe-inline'`/`'unsafe-eval'` cho script chỉ bật ở chế độ dev
- * (React Refresh cần eval), production thì bỏ.
- */
-const isDev = process.env.NODE_ENV !== 'production';
-const csp = [
-  "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
-  "style-src 'self' 'unsafe-inline'",
-  // Ảnh sản phẩm có thể là URL ngoài do admin nhập
-  "img-src 'self' data: https:",
-  "font-src 'self' data:",
-  `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ''}`,
-  // QR Binance Pay / VietQR hiển thị bằng <img>, không nhúng iframe
-  "frame-src 'none'",
-  // Không cho trang khác nhúng trang quản trị vào iframe (chống clickjacking)
-  "frame-ancestors 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-  "object-src 'none'",
-].join('; ');
 
 const nextConfig: NextConfig = {
   // Xuất bản dạng standalone để image Docker chỉ chứa đúng thứ cần chạy
@@ -48,7 +23,6 @@ const nextConfig: NextConfig = {
       {
         source: '/:path*',
         headers: [
-          { key: 'Content-Security-Policy', value: csp },
           { key: 'X-Content-Type-Options', value: 'nosniff' },
           { key: 'X-Frame-Options', value: 'DENY' },
           {

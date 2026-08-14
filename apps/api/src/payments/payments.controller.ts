@@ -29,6 +29,18 @@ function headerValue(request: Request, name: string): string {
   return value ?? '';
 }
 
+/**
+ * Webhook chỉ được nhận trong khoảng này quanh thời điểm Binance ký.
+ *
+ * Chữ ký RSA của Binance không bao giờ hết hạn, nên một webhook hợp lệ bị ghi lại
+ * (log của proxy, người trong mạng) có thể phát lại mãi mãi. Hiện tại hai nhánh
+ * xử lý đều có guard trạng thái nên phát lại không cộng tiền hai lần — cửa sổ này
+ * để nó VẪN vô hại kể cả khi ai đó sửa hai nhánh kia sau này.
+ *
+ * 5 phút là đủ rộng cho lệch giờ giữa các máy chủ và một lần Binance thử lại.
+ */
+const WEBHOOK_MAX_AGE_MS = 5 * 60_000;
+
 @Controller('payments')
 export class PaymentsController {
   constructor(
@@ -51,6 +63,19 @@ export class PaymentsController {
     const nonce = headerValue(request, 'binancepay-nonce');
     const signature = headerValue(request, 'binancepay-signature');
     const rawBody = request.rawBody ? request.rawBody.toString('utf8') : '';
+
+    // Kiểm hạn TRƯỚC khi xác minh chữ ký: rẻ hơn, và tránh phải tải chứng chỉ
+    // cho một loạt webhook phát lại.
+    const signedAtMs = Number.parseInt(timestamp, 10);
+    if (
+      !Number.isFinite(signedAtMs) ||
+      Math.abs(Date.now() - signedAtMs) > WEBHOOK_MAX_AGE_MS
+    ) {
+      throw new HttpException(
+        { returnCode: 'FAIL', returnMessage: 'Stale or invalid timestamp' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     let valid = false;
     if (timestamp && nonce && signature && rawBody) {
