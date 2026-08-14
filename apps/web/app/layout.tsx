@@ -6,20 +6,11 @@ import { AuthProvider } from '@/lib/auth';
 import { I18nProvider } from '@/lib/i18n/client';
 import { LOCALE_HTML_LANG } from '@/lib/i18n/config';
 import { getServerDictionary } from '@/lib/i18n/server';
+import { SITE_URL } from '@/lib/site';
 import { Header } from '@/components/header';
-import { Footer } from '@/components/footer';
 import './globals.css';
 
 const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || 'Catt Store';
-
-/**
- * Địa chỉ công khai của cửa hàng. Không có nó thì Next.js không dựng được URL
- * tuyệt đối cho thẻ chia sẻ mạng xã hội — dán link vào Zalo/Facebook sẽ ra
- * ô trắng không tiêu đề, không ảnh.
- */
-export const SITE_URL = (
-  process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'
-).replace(/\/$/, '');
 
 export async function generateMetadata(): Promise<Metadata> {
   const { locale, t } = await getServerDictionary();
@@ -63,7 +54,6 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
           <AuthProvider>
             <Header />
             <main className="flex-1">{children}</main>
-            <Footer />
           </AuthProvider>
         </I18nProvider>
       </body>

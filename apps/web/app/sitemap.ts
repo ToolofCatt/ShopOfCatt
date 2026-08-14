@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 import type { ProductDto } from '@webcatt/shared';
 import { apiFetch } from '@/lib/api';
-import { SITE_URL } from './layout';
+import { SITE_URL } from '@/lib/site';
 
 /** Sitemap dựng lại mỗi giờ — đủ tươi cho một cửa hàng, không đập vào API mỗi lượt bot ghé. */
 export const revalidate = 3600;

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { SITE_URL } from './layout';
+import { SITE_URL } from '@/lib/site';
 
 /**
  * Chỉ cho lập chỉ mục phần cửa hàng công khai. Trang quản trị, đơn hàng, thanh
