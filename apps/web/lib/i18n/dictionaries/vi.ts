@@ -112,21 +112,7 @@ export const vi = {
       binance_pay: 'Binance Pay',
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
-      bank_transfer: 'Chuyển khoản ngân hàng',
     } satisfies Record<PaymentMethod, string>,
-
-    /* ===== v8 — chuyển khoản ngân hàng (VietQR) ===== */
-    bankTitle: 'Chuyển khoản ngân hàng',
-    bankQrAlt: 'Mã QR chuyển khoản',
-    bankScanHint: 'Mở app ngân hàng, quét mã QR — số tiền và nội dung tự điền sẵn.',
-    bankAmountLabel: 'Số tiền',
-    bankAccountLabel: 'Số tài khoản',
-    bankNameLabel: 'Ngân hàng',
-    bankContentLabel: 'Nội dung',
-    bankContentWarning:
-      'Bắt buộc ghi ĐÚNG nội dung chuyển khoản — cửa hàng dựa vào đó để tìm ra đơn của bạn.',
-    bankClaimAction: 'Tôi đã chuyển khoản',
-    bankClaimed: 'Đã ghi nhận — cửa hàng đang đối soát và sẽ giao hàng sớm.',
 
     cryptoTitle: 'Chuyển USDT on-chain',
     cryptoAmountLabel: 'Số tiền phải gửi',
@@ -293,12 +279,6 @@ export const vi = {
     emptyHint: "Cửa hàng chưa soạn nội dung cho trang này. Vui lòng liên hệ để được hỗ trợ.",
   },
 
-  footer: {
-    rights: "Cửa hàng sản phẩm số",
-    policies: "Chính sách",
-    contact: "Liên hệ",
-  },
-
   notFound: {
     title: 'Không tìm thấy trang',
     hint: 'Trang bạn đang tìm không tồn tại hoặc đã bị xóa.',
@@ -328,7 +308,6 @@ export const vi = {
 
   paymentMode: {
     MOCK: 'Giả lập (Mock)',
-    BANK: 'Chuyển khoản ngân hàng',
     BINANCE: 'Binance Pay',
     CRYPTO: 'USDT on-chain',
   },
@@ -746,16 +725,6 @@ export const vi = {
     binanceWithdrawWarning: 'Khóa API đang có quyền rút tiền — hãy dùng khóa chỉ-đọc.',
     binanceReadOnlyOk: 'Khóa API không có quyền rút tiền ✓',
 
-    infoBankAccount: 'Tài khoản nhận',
-
-    infoBankAmount: 'Số tiền VND',
-
-    infoBankContent: 'Nội dung CK',
-
-    infoBankClaimed: 'Khách báo đã chuyển',
-
-    infoBankNotClaimed: 'Chưa báo',
-
     infoCryptoNetwork: 'Mạng',
     infoCryptoAddress: 'Ví nhận',
     infoCryptoAmount: 'Số tiền on-chain',
@@ -806,17 +775,6 @@ export const vi = {
     resetPasswordDone: 'Đã đặt lại mật khẩu. Gửi mật khẩu này cho khách:',
     resetPasswordWarning: 'Mật khẩu chỉ hiện MỘT lần — hãy sao chép ngay.',
 
-    settingBankTransfer: 'Chuyển khoản ngân hàng (VietQR)',
-    settingBankTransferHint:
-      'Khách quét QR chuyển khoản, bạn đối soát sao kê rồi bấm "Xác nhận đã thanh toán".',
-    settingBankLabel: 'Ngân hàng',
-    settingBankPick: '— Chọn ngân hàng —',
-    settingBankAccountLabel: 'Số tài khoản',
-    settingBankHolderLabel: 'Tên chủ tài khoản',
-    settingBankHolderHint: 'Viết IN HOA không dấu, đúng như trên sao kê ngân hàng.',
-    settingRateLabel: 'Tỉ giá 1 USDT = ? VND',
-    settingRateHint:
-      'Dùng để quy đổi giá USDT sang số tiền VND in lên mã QR. Nhớ cập nhật khi tỉ giá đổi.',
     settingSupportTitle: 'Hỗ trợ khách hàng',
     settingSupportHint:
       'Hiện ở mục "Quên mật khẩu" trang đăng nhập để khách nhắn cho bạn đặt lại mật khẩu.',

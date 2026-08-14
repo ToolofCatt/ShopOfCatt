@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calcDiscount, formatUsdt, sumMoney, usdtToVnd } from './index';
+import { calcDiscount, formatUsdt, sumMoney } from './index';
 
 describe('sumMoney', () => {
   it('không để lại rác nhị phân khi cộng dồn', () => {
@@ -42,13 +42,6 @@ describe('calcDiscount', () => {
   it('luôn tối đa 2 chữ số thập phân', () => {
     const d = calcDiscount(33.33, 'PERCENT', 33);
     expect(Number.isInteger(d * 100)).toBe(true);
-  });
-});
-
-describe('usdtToVnd', () => {
-  it('làm tròn LÊN — cửa hàng không bao giờ thu thiếu', () => {
-    expect(usdtToVnd(9.5, 26000)).toBe(247000);
-    expect(usdtToVnd(1.00001, 26000)).toBe(26001);
   });
 });
 

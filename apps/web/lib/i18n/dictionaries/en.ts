@@ -107,22 +107,7 @@ export const en: Dictionary = {
       binance_pay: 'Binance Pay',
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
-      bank_transfer: 'Bank transfer',
     },
-
-    /* ===== v8 — Vietnamese bank transfer (VietQR) ===== */
-    bankTitle: 'Bank transfer',
-    bankQrAlt: 'Bank transfer QR code',
-    bankScanHint:
-      'Open your banking app and scan the QR — amount and reference are filled in for you.',
-    bankAmountLabel: 'Amount',
-    bankAccountLabel: 'Account number',
-    bankNameLabel: 'Bank',
-    bankContentLabel: 'Reference',
-    bankContentWarning:
-      'You must use this exact transfer reference — the store uses it to find your order.',
-    bankClaimAction: 'I have sent the transfer',
-    bankClaimed: 'Noted — the store is reconciling it and will deliver shortly.',
 
     cryptoTitle: 'USDT on-chain transfer',
     cryptoAmountLabel: 'Amount to send',
@@ -290,12 +275,6 @@ export const en: Dictionary = {
     emptyHint: "The store has not written this page yet. Please contact us for help.",
   },
 
-  footer: {
-    rights: "Digital goods store",
-    policies: "Policies",
-    contact: "Contact",
-  },
-
   notFound: {
     title: 'Page not found',
     hint: 'The page you are looking for does not exist or has been removed.',
@@ -325,7 +304,6 @@ export const en: Dictionary = {
 
   paymentMode: {
     MOCK: 'Sandbox (Mock)',
-    BANK: 'Bank transfer',
     BINANCE: 'Binance Pay',
     CRYPTO: 'USDT on-chain',
   },
@@ -738,16 +716,6 @@ export const en: Dictionary = {
     binanceWithdrawWarning: 'This API key can withdraw funds — switch to a read-only key.',
     binanceReadOnlyOk: 'API key cannot withdraw funds ✓',
 
-    infoBankAccount: 'Receiving account',
-
-    infoBankAmount: 'Amount (VND)',
-
-    infoBankContent: 'Transfer note',
-
-    infoBankClaimed: 'Customer says paid',
-
-    infoBankNotClaimed: 'Not reported yet',
-
     infoCryptoNetwork: 'Network',
     infoCryptoAddress: 'Deposit address',
     infoCryptoAmount: 'On-chain amount',
@@ -799,17 +767,6 @@ export const en: Dictionary = {
     resetPasswordDone: 'Password reset. Send this password to the customer:',
     resetPasswordWarning: 'Shown only ONCE — copy it now.',
 
-    settingBankTransfer: 'Bank transfer (VietQR)',
-    settingBankTransferHint:
-      'Customers scan a QR to transfer; you check your statement and press "Mark as paid".',
-    settingBankLabel: 'Bank',
-    settingBankPick: '— Pick a bank —',
-    settingBankAccountLabel: 'Account number',
-    settingBankHolderLabel: 'Account holder name',
-    settingBankHolderHint: 'UPPERCASE without diacritics, exactly as on your statement.',
-    settingRateLabel: 'Rate: 1 USDT = ? VND',
-    settingRateHint:
-      'Converts USDT prices into the VND amount printed on the QR. Update it when the rate moves.',
     settingSupportTitle: 'Customer support',
     settingSupportHint:
       'Shown under "Forgot your password?" on the sign-in page so customers can reach you for a reset.',

@@ -26,7 +26,7 @@ pnpm db:seed        # tạo tài khoản chủ shop
 pnpm dev            # web :3000 + api :3001
 
 pnpm typecheck      # bắt buộc xanh trước khi commit
-pnpm test           # vitest — 38 test (28 api + 10 shared)
+pnpm test           # vitest — 69 test (60 api + 9 shared)
 pnpm build
 ```
 
@@ -40,6 +40,7 @@ API nằm sau tiền tố `/api` (`app.setGlobalPrefix('api')`), nên địa ch�
 | `pnpm build` treo vài phút rồi vẫn chưa xong | `next dev` đang giữ khoá thư mục `.next` | Dừng dev server rồi build lại — build sạch chỉ mất ~35 giây |
 | `EPERM` khi `pnpm install` | API đang chạy, giữ file DLL của Prisma query engine | Dừng API trước |
 | `pnpm test` chạy vòng lặp vô tận | Script `test` của workspace con gọi lại `turbo test` | Workspace con phải gọi thẳng `vitest run` |
+| `pnpm build` đổ ở bước cuối với `EPERM ... symlink` | Windows chỉ cho tạo symlink khi có quyền admin, mà `output: 'standalone'` cần symlink để gom `node_modules` của pnpm | Bật **Developer Mode** (Settings → System → For developers), hoặc build trong terminal admin. Phần biên dịch + dựng trang đã xong trước khi lỗi này xảy ra, và image Docker chạy trên Linux nên không bị |
 
 ---
 
@@ -48,7 +49,7 @@ API nằm sau tiền tố `/api` (`app.setGlobalPrefix('api')`), nên địa ch�
 ```
 apps/api/          NestJS 11 + Prisma 6 + PostgreSQL 17
   src/orders/        đặt đơn, giữ kho, giao hàng, đối soát crypto
-  src/payments/      cổng thanh toán, VietQR, webhook Binance Pay
+  src/payments/      cổng thanh toán, webhook Binance Pay
   src/binance-exchange/  đọc lịch sử nạp USDT, khớp số tiền duy nhất
   src/admin/         API trang quản trị (sản phẩm, đơn, thống kê, xuất CSV)
   src/settings/      cấu hình cửa hàng + phương thức thanh toán đang bật
@@ -99,6 +100,14 @@ docs/SPEC.md       đặc tả hệ thống
   trường **và** công tắc trong CSDL. Một mình công tắc CSDL không đủ.
 - HTML do admin soạn (thông báo, trang chính sách) phải đi qua `sanitize-html`
   với danh sách cho phép.
+- **CSP nằm ở `apps/web/middleware.ts`, dùng nonce sinh theo từng request.** Đừng
+  thêm nó lại vào `next.config.ts` — hai header CSP cùng lúc là trình duyệt lấy
+  phần giao và trang trắng. Cũng đừng mở lại `script-src 'unsafe-inline'`:
+  `sanitize-html` là lớp chặn XSS duy nhất, mở dòng này là bỏ luôn lớp thứ hai.
+  Kiểm CSP phải bằng bản **build**, vì ở chế độ dev nó lỏng hơn có chủ ý.
+- Token đăng nhập nằm trong `localStorage`, nên hạn của admin ngắn hơn khách:
+  12 giờ so với 7 ngày (`TOKEN_TTL_ADMIN` trong `auth.service.ts`). Một lỗ XSS là
+  kẻ tấn công giữ được token tới khi hết hạn — đừng nâng hạn admin cho tiện.
 - Bí mật mẫu bị chặn theo tên trong `auth.module.ts` và `prisma/seed.ts`. Repo
   công khai ⇒ chuỗi mẫu = ai cũng ký được token quản trị giả. Thêm chuỗi mẫu mới
   ở đâu thì thêm luôn vào hai danh sách đó.

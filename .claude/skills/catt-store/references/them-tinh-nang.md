@@ -11,8 +11,8 @@ lỗi lúc chạy chứ không phải lỗi biên dịch — trừ những chỗ
 2. `apps/api/src/orders/dto/select-payment.dto.ts` — thêm vào mảng
    `PAYMENT_METHODS`.
    → Đã có **rào chắn lúc biên dịch**: nếu quên bước này, `MissingPaymentMethod`
-   khác `never` và build hỏng. Đây là kết quả của một lỗi thật (thiếu
-   `bank_transfer` khiến mọi lần chọn phương thức đều trả 400).
+   khác `never` và build hỏng. Đây là kết quả của một lỗi thật: thiếu một phương
+   thức trong mảng khiến mọi lần chọn nó đều trả 400 dù cửa hàng đã bật.
 3. `apps/api/src/settings/settings.service.ts` → `getEnabledMethods()` — quy tắc
    "bật khi nào". Phương thức thiếu cấu hình phải **bị loại khỏi danh sách**, chứ
    không hiện nút hỏng cho khách.
@@ -24,6 +24,21 @@ lỗi lúc chạy chứ không phải lỗi biên dịch — trừ những chỗ
 7. Cả ba từ điển `vi.ts` / `en.ts` / `zh.ts`.
 8. Nếu có webhook: xác minh chữ ký trên **`rawBody`**, không phải trên JSON đã
    parse. `main.ts` đã bật `rawBody: true` cho việc này.
+
+### Bỏ một phương thức thanh toán
+
+Đi ngược danh sách trên, bắt đầu từ `@webcatt/shared` rồi để trình biên dịch chỉ
+ra mọi chỗ còn lại. Ba chỗ nó **không** chỉ ra được:
+
+- `packages/shared/tsconfig.json` có `exclude: ["src/**/*.spec.ts"]`, nên
+  `pnpm typecheck` KHÔNG kiểm test của shared. Import một hàm vừa xoá vẫn xanh
+  typecheck và chỉ đỏ khi `pnpm test`. Luôn chạy cả hai.
+- Cột trong `Payment`/`StoreSetting` — cần migration `DROP COLUMN`. Không hoàn
+  tác được, nên kiểm số đơn hiện có trước khi chạy.
+- Giá trị cũ nằm trong fixture của test (`paymentMode: 'BANK'`) là chuỗi tự do,
+  không lỗi biên dịch nhưng thành dữ liệu không thể xảy ra.
+
+Migration cũ đã phát hành thì **không sửa** — thêm migration mới để xoá.
 
 ---
 

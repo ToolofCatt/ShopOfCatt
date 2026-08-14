@@ -28,9 +28,7 @@ export function toPaymentInfoDto(
       ? 'BINANCE'
       : payment.mode === 'CRYPTO'
         ? 'CRYPTO'
-        : payment.mode === 'BANK'
-          ? 'BANK'
-          : 'MOCK';
+        : 'MOCK';
   const dto: PaymentInfoDto = {
     mode,
     status: payment.status,
@@ -38,25 +36,6 @@ export function toPaymentInfoDto(
   };
   if (mode === 'MOCK') {
     dto.mockPayUrl = `/mock-pay/${orderCode}`;
-  } else if (mode === 'BANK') {
-    if (payment.bankBin) dto.bankBin = payment.bankBin;
-    if (payment.bankAccountNumber) {
-      dto.bankAccountNumber = payment.bankAccountNumber;
-    }
-    if (payment.bankAccountName) {
-      dto.bankAccountName = payment.bankAccountName;
-    }
-    if (payment.bankAmountVnd !== null) {
-      dto.bankAmountVnd = Number(payment.bankAmountVnd);
-    }
-    if (payment.bankTransferContent) {
-      dto.bankTransferContent = payment.bankTransferContent;
-    }
-    dto.customerClaimedAt = payment.customerClaimedAt
-      ? payment.customerClaimedAt.toISOString()
-      : null;
-    // QR VietQR sinh tại máy chủ, lưu dưới dạng data URL
-    if (payment.qrcodeLink) dto.qrcodeLink = payment.qrcodeLink;
   } else if (mode === 'CRYPTO') {
     if (payment.cryptoNetwork) {
       dto.cryptoNetwork = payment.cryptoNetwork as CryptoNetwork;

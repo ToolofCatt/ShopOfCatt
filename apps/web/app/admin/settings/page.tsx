@@ -6,7 +6,6 @@ import {
   SUPPORT_CHANNELS_MAX,
   SUPPORT_FIELD_MAX_LENGTH,
   SUPPORT_NOTE_MAX_LENGTH,
-  VIETQR_BANKS,
   type AdminStoreSettingDto,
   type BinanceStatusDto,
   type SupportChannelDto,
@@ -91,11 +90,6 @@ export default function AdminSettingsPage() {
   const [cryptoEnabled, setCryptoEnabled] = useState(false);
   const [bep20Address, setBep20Address] = useState('');
   const [trc20Address, setTrc20Address] = useState('');
-  const [bankTransferEnabled, setBankTransferEnabled] = useState(false);
-  const [bankBin, setBankBin] = useState('');
-  const [bankAccountNumber, setBankAccountNumber] = useState('');
-  const [bankAccountName, setBankAccountName] = useState('');
-  const [usdtVndRate, setUsdtVndRate] = useState('');
   const [supportNote, setSupportNote] = useState('');
   const [supportChannels, setSupportChannels] = useState<SupportChannelDto[]>([]);
 
@@ -115,11 +109,6 @@ export default function AdminSettingsPage() {
     setCryptoEnabled(next.cryptoEnabled);
     setBep20Address(next.bep20Address);
     setTrc20Address(next.trc20Address);
-    setBankTransferEnabled(next.bankTransferEnabled);
-    setBankBin(next.bankBin);
-    setBankAccountNumber(next.bankAccountNumber);
-    setBankAccountName(next.bankAccountName);
-    setUsdtVndRate(next.usdtVndRate > 0 ? String(next.usdtVndRate) : '');
     setSupportNote(next.supportNote);
     setSupportChannels(next.supportChannels);
   };
@@ -192,11 +181,6 @@ export default function AdminSettingsPage() {
           cryptoEnabled,
           bep20Address: bep20Address.trim(),
           trc20Address: trc20Address.trim(),
-          bankTransferEnabled,
-          bankBin: bankBin.trim(),
-          bankAccountNumber: bankAccountNumber.trim(),
-          bankAccountName: bankAccountName.trim(),
-          usdtVndRate: usdtVndRate.trim() === '' ? 0 : Number(usdtVndRate),
           supportNote: supportNote.trim(),
           // Bỏ các dòng còn trống trước khi gửi.
           supportChannels: supportChannels
@@ -326,90 +310,6 @@ export default function AdminSettingsPage() {
                   />
                 </Field>
                 <p className="text-xs text-neutral-500">{t.admin.settingAddressesHint}</p>
-              </div>
-            )}
-
-            {/* Chuyển khoản ngân hàng VN — giá niêm yết là USDT nên bắt buộc
-                có tỉ giá mới sinh được số tiền VND cho mã QR. */}
-            <ToggleRow
-              id="setting-bank"
-              checked={bankTransferEnabled}
-              onChange={(value) => {
-                setBankTransferEnabled(value);
-                markDirty();
-              }}
-              label={t.admin.settingBankTransfer}
-              hint={t.admin.settingBankTransferHint}
-            />
-
-            {bankTransferEnabled && (
-              <div className="space-y-4 rounded-lg border border-neutral-200 p-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Field label={t.admin.settingBankLabel} htmlFor="setting-bank-bin">
-                    <select
-                      id="setting-bank-bin"
-                      value={bankBin}
-                      onChange={(event) => {
-                        setBankBin(event.target.value);
-                        markDirty();
-                      }}
-                      className="h-10 w-full cursor-pointer rounded-lg border border-neutral-300 bg-white px-3 text-sm outline-none transition-colors focus:border-neutral-950"
-                    >
-                      <option value="">{t.admin.settingBankPick}</option>
-                      {VIETQR_BANKS.map((bank) => (
-                        <option key={bank.bin} value={bank.bin}>
-                          {bank.name}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-                  <Field
-                    label={t.admin.settingBankAccountLabel}
-                    htmlFor="setting-bank-account"
-                  >
-                    <Input
-                      id="setting-bank-account"
-                      inputMode="numeric"
-                      className="font-mono"
-                      value={bankAccountNumber}
-                      onChange={(event) => {
-                        setBankAccountNumber(event.target.value.replace(/\D/g, ''));
-                        markDirty();
-                      }}
-                    />
-                  </Field>
-                </div>
-                <Field
-                  label={t.admin.settingBankHolderLabel}
-                  htmlFor="setting-bank-holder"
-                  hint={t.admin.settingBankHolderHint}
-                >
-                  <Input
-                    id="setting-bank-holder"
-                    value={bankAccountName}
-                    onChange={(event) => {
-                      setBankAccountName(event.target.value.toUpperCase());
-                      markDirty();
-                    }}
-                  />
-                </Field>
-                <Field
-                  label={t.admin.settingRateLabel}
-                  htmlFor="setting-rate"
-                  hint={t.admin.settingRateHint}
-                >
-                  <Input
-                    id="setting-rate"
-                    inputMode="decimal"
-                    className="tabular-nums"
-                    placeholder="26000"
-                    value={usdtVndRate}
-                    onChange={(event) => {
-                      setUsdtVndRate(event.target.value.replace(/[^\d.]/g, ''));
-                      markDirty();
-                    }}
-                  />
-                </Field>
               </div>
             )}
 

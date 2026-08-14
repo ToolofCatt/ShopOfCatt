@@ -13,7 +13,6 @@ export const PAYMENT_METHODS = [
   'binance_pay',
   'crypto_bep20',
   'crypto_trc20',
-  'bank_transfer',
 ] as const satisfies readonly PaymentMethod[];
 
 /**

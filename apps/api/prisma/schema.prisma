@@ -272,16 +272,6 @@ model Payment {
   /// kể cả khi nhiều request cùng khai một TxID trong cùng một khoảnh khắc.
   cryptoTxId String?  @unique
 
-  /// --- Chuyển khoản ngân hàng (ảnh chụp lúc chọn phương thức) ---
-  bankBin           String?
-  bankAccountNumber String?
-  bankAccountName   String?
-  /// Số tiền VND đã quy đổi — chốt lại để QR, khách và admin cùng nhìn một số
-  bankAmountVnd Decimal? @db.Decimal(18, 0)
-  /// Nội dung chuyển khoản khách phải ghi (mã đơn, bỏ dấu gạch)
-  bankTransferContent String?
-  /// Khách bấm "tôi đã chuyển" lúc nào — để admin biết đơn nào cần đối soát
-  customerClaimedAt DateTime?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -301,16 +291,6 @@ model StoreSetting {
   bep20Address      String   @default("")
   trc20Address      String   @default("")
 
-  /// --- Chuyển khoản ngân hàng Việt Nam (VietQR) ---
-  bankTransferEnabled Boolean @default(false)
-  /// Mã BIN ngân hàng theo chuẩn VietQR, ví dụ "970436" = Vietcombank
-  bankBin           String @default("")
-  bankAccountNumber String @default("")
-  /// Tên chủ tài khoản in trên QR — ngân hàng dùng để đối chiếu
-  bankAccountName String @default("")
-  /// Tỉ giá quy đổi 1 USDT = ? VND. Giá niêm yết là USDT nên phải có tỉ giá
-  /// mới sinh được số tiền VND; bằng 0 thì không bật được chuyển khoản.
-  usdtVndRate Decimal @default(0) @db.Decimal(18, 2)
   /// Danh sách kênh liên hệ hỗ trợ — mảng {label, value, url?}, admin tự sửa.
   /// Hiện ở khối "Quên mật khẩu" trang đăng nhập.
   supportChannels Json   @default("[]")

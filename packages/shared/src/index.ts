@@ -9,15 +9,14 @@ export function isAdminRole(role: Role): boolean {
 export type OrderStatus = 'PENDING' | 'PAID' | 'DELIVERED' | 'CANCELLED' | 'EXPIRED';
 export type PaymentStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED';
 export type StockStatus = 'AVAILABLE' | 'RESERVED' | 'SOLD';
-export type PaymentMode = 'MOCK' | 'BINANCE' | 'CRYPTO' | 'BANK';
+export type PaymentMode = 'MOCK' | 'BINANCE' | 'CRYPTO';
 
 /** Phương thức thanh toán khách chọn ở trang thanh toán. */
 export type PaymentMethod =
   | 'mock'
   | 'binance_pay'
   | 'crypto_bep20'
-  | 'crypto_trc20'
-  | 'bank_transfer';
+  | 'crypto_trc20';
 
 /** Mạng blockchain cho USDT on-chain. */
 export type CryptoNetwork = 'BEP20' | 'TRC20';
@@ -25,60 +24,6 @@ export type CryptoNetwork = 'BEP20' | 'TRC20';
 /** Kiểu giảm giá: theo phần trăm hoặc số tiền cố định. */
 export type DiscountType = 'PERCENT' | 'FIXED';
 
-// ---------- Chuyển khoản ngân hàng Việt Nam (VietQR) ----------
-
-/** Ngân hàng phổ biến kèm mã BIN theo chuẩn VietQR — admin chọn thay vì tra mã. */
-export const VIETQR_BANKS: ReadonlyArray<{ bin: string; name: string }> = [
-  { bin: '970436', name: 'Vietcombank' },
-  { bin: '970415', name: 'VietinBank' },
-  { bin: '970418', name: 'BIDV' },
-  { bin: '970405', name: 'Agribank' },
-  { bin: '970422', name: 'MB Bank' },
-  { bin: '970407', name: 'Techcombank' },
-  { bin: '970416', name: 'ACB' },
-  { bin: '970432', name: 'VPBank' },
-  { bin: '970423', name: 'TPBank' },
-  { bin: '970403', name: 'Sacombank' },
-  { bin: '970441', name: 'VIB' },
-  { bin: '970443', name: 'SHB' },
-  { bin: '970431', name: 'Eximbank' },
-  { bin: '970426', name: 'MSB' },
-  { bin: '970448', name: 'OCB' },
-  { bin: '970429', name: 'SCB' },
-  { bin: '970454', name: 'VietCapital Bank' },
-  { bin: '546034', name: 'Cake by VPBank' },
-  { bin: '963388', name: 'Timo' },
-  { bin: '970400', name: 'SaigonBank' },
-];
-
-export function vietQrBankName(bin: string): string {
-  return VIETQR_BANKS.find((b) => b.bin === bin)?.name ?? bin;
-}
-
-/**
- * Nội dung chuyển khoản = mã đơn bỏ dấu gạch. Đây là thứ DUY NHẤT dùng để đối
- * chiếu sao kê, nên chỉ giữ chữ và số — nhiều ngân hàng cắt bỏ ký tự đặc biệt.
- */
-export function bankTransferContent(orderCode: string): string {
-  return orderCode.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
-}
-
-/*
- * Ảnh QR KHÔNG lấy từ dịch vụ ngoài (img.vietqr.io): làm vậy là gửi số tài
- * khoản, số tiền và mã đơn của từng khách cho bên thứ ba, và QR biến mất khi
- * dịch vụ đó lỗi. Máy chủ tự dựng chuỗi EMVCo rồi vẽ QR, trả về trong
- * `PaymentInfoDto.qrcodeLink` dạng data URI.
- * Xem apps/api/src/payments/vietqr.ts (có bộ test riêng).
- */
-
-/** Quy đổi USDT → VND, làm tròn LÊN đồng để không bao giờ thu thiếu. */
-export function usdtToVnd(amountUsdt: number, rate: number): number {
-  return Math.ceil(amountUsdt * rate);
-}
-
-export function formatVnd(amount: number): string {
-  return `${Math.round(amount).toLocaleString('vi-VN')} ₫`;
-}
 
 export interface PaymentMethodDto {
   method: PaymentMethod;
@@ -206,13 +151,6 @@ export interface AdminStoreSettingDto {
   cryptoEnabled: boolean;
   bep20Address: string;
   trc20Address: string;
-  /** Chuyển khoản ngân hàng VN (VietQR). */
-  bankTransferEnabled: boolean;
-  bankBin: string;
-  bankAccountNumber: string;
-  bankAccountName: string;
-  /** 1 USDT = ? VND. Bằng 0 thì không bật được chuyển khoản. */
-  usdtVndRate: number;
   /** Các kênh liên hệ hiển thị ở khối "Quên mật khẩu". */
   supportChannels: SupportChannelDto[];
   /** Lời nhắn tùy chỉnh; rỗng = dùng câu mặc định theo ngôn ngữ. */
@@ -341,14 +279,6 @@ export interface PaymentInfoDto {
   cryptoAmount?: number;
   /** TxID đã khớp (khi đã thanh toán). */
   cryptoTxId?: string;
-  /** BANK mode: thông tin tài khoản nhận + số tiền VND + nội dung chuyển khoản. */
-  bankBin?: string;
-  bankAccountNumber?: string;
-  bankAccountName?: string;
-  bankAmountVnd?: number;
-  bankTransferContent?: string;
-  /** Khách đã bấm "Tôi đã chuyển" lúc nào (ISO) — admin dùng để biết cần đối soát. */
-  customerClaimedAt?: string | null;
   /** MOCK mode: relative web path to the fake gateway, e.g. /mock-pay/DH-XXXXXX */
   mockPayUrl?: string;
   /** BINANCE mode fields */

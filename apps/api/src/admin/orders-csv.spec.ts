@@ -13,7 +13,7 @@ const row = (patch: Partial<OrderCsvRow> = {}): OrderCsvRow => ({
   total: 8.55,
   currency: 'USDT',
   couponCode: 'SALE10',
-  paymentMode: 'BANK',
+  paymentMode: 'BINANCE',
   paymentStatus: 'SUCCESS',
   itemsCount: 1,
   products: 'Key Windows 11 Pro',

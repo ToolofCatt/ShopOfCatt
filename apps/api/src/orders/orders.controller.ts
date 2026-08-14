@@ -89,18 +89,6 @@ export class OrdersController {
     return this.ordersService.submitTx(user.id, code, dto.txId);
   }
 
-  // Khách báo "tôi đã chuyển khoản" — chỉ đánh dấu để admin biết đơn nào cần
-  // đối soát sao kê; KHÔNG tự chuyển trạng thái đơn.
-  @Post(':code/claim-transfer')
-  @HttpCode(HttpStatus.OK)
-  @RateLimit({ limit: 10, windowMs: MINUTES_10 })
-  claimTransfer(
-    @CurrentUser() user: User,
-    @Param('code') code: string,
-  ): Promise<OrderDetailDto> {
-    return this.ordersService.claimBankTransfer(user.id, code);
-  }
-
   @Post(':code/cancel')
   @HttpCode(HttpStatus.OK)
   cancel(
