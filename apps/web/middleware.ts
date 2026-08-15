@@ -44,7 +44,7 @@ function buildCsp(nonce: string): string {
     "img-src 'self' data: https:",
     "font-src 'self' data:",
     `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ''}`,
-    // QR Binance Pay / VietQR hiển thị bằng <img>, không nhúng iframe
+    // QR Binance Pay hiển thị bằng <img>, không nhúng iframe
     "frame-src 'none'",
     // Không cho trang khác nhúng trang quản trị vào iframe (chống clickjacking)
     "frame-ancestors 'none'",

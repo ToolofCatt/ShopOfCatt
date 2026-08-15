@@ -104,6 +104,54 @@ curl -I https://shop.cua-ban.com | grep -i strict-transport   # HSTS có mặt
 
 Đăng nhập `https://shop.cua-ban.com/login` bằng `ADMIN_EMAIL` / `ADMIN_PASSWORD`.
 
+### Biến thể: máy chủ đã có sẵn nginx phục vụ trang khác
+
+Đây chính là cách `cattshop.site` đang chạy. Máy đó còn phục vụ vài trang khác,
+nên **không được bật service `proxy` (Caddy)** — Caddy giành cổng 80/443 là hạ
+hết những trang kia.
+
+```bash
+# Dựng mọi thứ TRỪ proxy
+docker compose up -d --build postgres api web backup
+```
+
+Trong `.env` đổi cổng để không đụng dịch vụ có sẵn, và chỉ mở trên máy nội bộ:
+
+```env
+APP_BIND=127.0.0.1     # container không được lộ ra LAN/WAN
+WEB_PORT=18100
+API_PORT=18101
+POSTGRES_PORT=5433
+```
+
+Rồi thêm một file vhost **riêng** trong `/etc/nginx/sites-available/` — tuyệt đối
+không sửa file của trang khác. Ba điểm dễ sai:
+
+- **`client_max_body_size` phải ≥ 4m.** Ảnh sản phẩm được nén trong trình duyệt
+  rồi gửi lên dạng data URI trong JSON, vượt mặc định 1m của nginx.
+- **Khối `location /.well-known/acme-challenge/` phải đứng trước lệnh 301** ở vhost
+  cổng 80, nếu không certbot gia hạn sẽ hỏng.
+- **Đừng thêm `add_header Strict-Transport-Security`** — Next.js đã gửi sẵn trong
+  `next.config.ts`. `add_header` của nginx là *thêm* chứ không thay thế, hai header
+  trùng tên làm trình duyệt chỉ đọc cái đầu tiên.
+
+Chứng chỉ xin bằng webroot, và **phải có hook nạp lại nginx**:
+
+```bash
+certbot certonly --webroot -w /var/www/html -d shop.cua-ban.com -d www.shop.cua-ban.com
+
+# Không có hook này thì sau lần gia hạn đầu (~60 ngày) certbot thay file trên đĩa
+# nhưng nginx vẫn phục vụ chứng chỉ cũ trong bộ nhớ → trình duyệt báo hết hạn.
+printf '#!/bin/sh\nnginx -t && systemctl reload nginx\n' \
+  > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+chmod 755 /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+certbot renew --dry-run     # mất vài phút, phải báo "all simulated renewals succeeded"
+```
+
+Nếu máy chạy Tailscale thì nó đã giữ `<ip-tailscale>:443`, nên vhost phải
+`listen <ip-lan>:443 ssl;` chứ không phải `listen 443 ssl;` — bind wildcard sẽ
+hỏng với "Address already in use".
+
 ---
 
 ## 4. Bật phương thức thanh toán
@@ -123,14 +171,6 @@ Cần khoá API Binance **chỉ có quyền đọc**:
    thì xoá khoá đó và tạo lại — hệ thống chỉ cần quyền đọc
 
 Điền địa chỉ ví nhận USDT (lấy trong ví Binance của bạn) rồi bật.
-
-### Chuyển khoản ngân hàng
-
-Điền ngân hàng, số tài khoản, tên chủ tài khoản và **tỉ giá USDT → VND**. Thiếu
-bất kỳ thứ gì thì hệ thống từ chối bật (vì không sinh nổi số tiền trên QR).
-
-Khách chuyển xong bấm *"Tôi đã chuyển"*; bạn đối chiếu sao kê rồi vào đơn bấm
-**"Đánh dấu đã thanh toán"**. Nội dung chuyển khoản chính là mã đơn.
 
 ### Binance Pay (merchant)
 
