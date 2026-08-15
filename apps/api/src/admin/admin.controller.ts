@@ -31,8 +31,10 @@ import type {
   ProductVariantDto,
   RevenuePointDto,
   StockItemDto,
+  StoreInsightsDto,
   TranslationStatusDto,
 } from '@webcatt/shared';
+import { AnalyticsService } from '../analytics/analytics.service';
 import { AnnouncementService } from '../announcement/announcement.service';
 import { UpdateAnnouncementDto } from '../announcement/dto/update-announcement.dto';
 import { AuditQueryDto } from '../audit/dto/audit-query.dto';
@@ -56,6 +58,7 @@ import { MarkPaidDto } from './dto/mark-paid.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { OrdersQueryDto } from './dto/orders-query.dto';
+import { InsightsQueryDto } from './dto/insights-query.dto';
 import { StatsSeriesQueryDto } from './dto/stats-series-query.dto';
 import { StockQueryDto } from './dto/stock-query.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -72,6 +75,7 @@ export class AdminController {
     private readonly binanceExchange: BinanceExchangeService,
     private readonly couponsService: CouponsService,
     private readonly legalService: LegalService,
+    private readonly analytics: AnalyticsService,
   ) {}
 
   // ---------- Trang chính sách ----------
@@ -154,6 +158,12 @@ export class AdminController {
     @Query() query: StatsSeriesQueryDto,
   ): Promise<RevenuePointDto[]> {
     return this.adminService.getStatsSeries(query.days ?? 7);
+  }
+
+  /** Khách xem gì, tìm gì — số liệu để quyết định giá và nhập hàng. */
+  @Get('stats/insights')
+  getInsights(@Query() query: InsightsQueryDto): Promise<StoreInsightsDto> {
+    return this.analytics.getInsights(query.days ?? 30);
   }
 
   // ---------- Nhật ký thao tác ----------

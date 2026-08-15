@@ -1,12 +1,16 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { PackageOpen, Search, SearchX } from 'lucide-react';
 import type { ProductDto } from '@webcatt/shared';
 import { ProductCard } from '@/components/product-card';
 import { EmptyState } from '@/components/ui';
+import { apiFetch } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/client';
 import { cn } from '@/lib/cn';
+
+/** Đợi khách ngừng gõ bao lâu rồi mới ghi nhận từ khoá. */
+const SEARCH_REPORT_DELAY_MS = 1200;
 
 /** Vietnamese-aware normalization for diacritic-insensitive search. */
 function normalizeText(value: string): string {
@@ -30,17 +34,49 @@ export function ProductBrowser({ products }: { products: ProductDto[] }) {
     return seen;
   }, [products]);
 
-  const filtered = useMemo(() => {
+  const matchesQuery = useMemo(() => {
     const normalizedQuery = normalizeText(query.trim());
+    if (!normalizedQuery) return products;
     return products.filter((product) => {
-      if (category && product.category !== category) return false;
-      if (!normalizedQuery) return true;
       const haystack = normalizeText(
         `${product.name} ${product.shortDescription ?? ''} ${product.category ?? ''}`,
       );
       return haystack.includes(normalizedQuery);
     });
-  }, [products, query, category]);
+  }, [products, query]);
+
+  const filtered = useMemo(
+    () =>
+      category
+        ? matchesQuery.filter((product) => product.category === category)
+        : matchesQuery,
+    [matchesQuery, category],
+  );
+
+  /*
+   * Gửi từ khoá về máy chủ để chủ shop biết khách đang tìm gì — nhất là những
+   * từ KHÔNG ra kết quả, vì đó là gợi ý nên nhập hàng gì tiếp.
+   *
+   * Đợi khách ngừng gõ rồi mới gửi: không có bước này thì "windows" thành bảy
+   * lượt tìm rời rạc ("w", "wi", "win"...) và bảng thống kê đầy rác.
+   *
+   * Đếm theo `matchesQuery` chứ không phải `filtered`: câu hỏi cần trả lời là
+   * "cửa hàng có thứ khách tìm không", không phụ thuộc việc họ đang lọc danh
+   * mục nào.
+   */
+  const reportedRef = useRef<string | null>(null);
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2 || reportedRef.current === term) return;
+    const timer = window.setTimeout(() => {
+      reportedRef.current = term;
+      void apiFetch('/analytics/search', {
+        method: 'POST',
+        body: { term, resultCount: matchesQuery.length },
+      }).catch(() => {});
+    }, SEARCH_REPORT_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [query, matchesQuery.length]);
 
   // Cửa hàng chưa có sản phẩm nào ≠ tìm kiếm không ra kết quả.
   // Trường hợp này ẩn luôn ô tìm kiếm và bộ lọc vì chẳng có gì để lọc.
@@ -91,7 +127,9 @@ export function ProductBrowser({ products }: { products: ProductDto[] }) {
           hint={t.home.noResultsHint}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        // Hai cột ngay từ điện thoại: một cột thì mỗi thẻ cao gần nửa màn hình,
+        // xem 4 sản phẩm mất 4 lần cuộn — mà phần lớn khách vào bằng điện thoại.
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

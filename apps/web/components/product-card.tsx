@@ -22,7 +22,6 @@ export function ProductCard({ product }: { product: ProductDto }) {
       className="group flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-neutral-400"
     >
       <ProductVisual
-        icon={product.icon}
         image={product.image}
         name={product.name}
         className={cn('aspect-[4/3] w-full', outOfStock && 'opacity-50 grayscale')}
@@ -41,15 +40,25 @@ export function ProductCard({ product }: { product: ProductDto }) {
         )}
       </div>
 
-      <div className="flex items-end justify-between gap-2 border-t border-neutral-100 pt-3">
-        <p className="font-semibold tabular-nums text-neutral-950">{priceLabel}</p>
+      {/*
+        `flex-wrap` + `whitespace-nowrap`: thẻ ở lưới 2 cột trên điện thoại chỉ
+        rộng ~170px, không có hai thứ này thì giá bị ngắt làm đôi ("10.50" xuống
+        dòng rời khỏi "USDT") và nhãn tồn kho tràn ra ngoài viền thẻ.
+      */}
+      <div className="flex flex-wrap items-end justify-between gap-x-2 gap-y-1 border-t border-neutral-100 pt-3">
+        <p className="whitespace-nowrap font-semibold tabular-nums text-neutral-950">
+          {priceLabel}
+        </p>
         <div className="flex flex-col items-end gap-1">
           {outOfStock ? (
             <Badge variant="muted">{t.product.outOfStock}</Badge>
           ) : (
             <Badge variant="outline">{t.product.inStockShort(product.availableStock)}</Badge>
           )}
-          <span className="text-[11px] text-neutral-400">{t.product.sold(product.sold)}</span>
+          {/* Cửa hàng mới thì "đã bán 0" là bằng chứng NGƯỢC — ẩn cho tới khi có số thật. */}
+          {product.sold > 0 && (
+            <span className="text-[11px] text-neutral-400">{t.product.sold(product.sold)}</span>
+          )}
         </div>
       </div>
     </Link>

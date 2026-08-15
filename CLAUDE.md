@@ -26,7 +26,7 @@ pnpm db:seed        # tạo tài khoản chủ shop
 pnpm dev            # web :3000 + api :3001
 
 pnpm typecheck      # bắt buộc xanh trước khi commit
-pnpm test           # vitest — 69 test (60 api + 9 shared)
+pnpm test           # vitest — 77 test (66 api + 11 shared)
 pnpm build
 ```
 
@@ -53,6 +53,7 @@ apps/api/          NestJS 11 + Prisma 6 + PostgreSQL 17
   src/binance-exchange/  đọc lịch sử nạp USDT, khớp số tiền duy nhất
   src/admin/         API trang quản trị (sản phẩm, đơn, thống kê, xuất CSV)
   src/settings/      cấu hình cửa hàng + phương thức thanh toán đang bật
+  src/analytics/     lượt xem sản phẩm + từ khoá tìm kiếm (gộp theo ngày)
   src/security/      @RateLimit + guard
   src/i18n/          khoá thông báo lỗi (K) + bộ lọc dịch
   prisma/            schema, migrations, seed

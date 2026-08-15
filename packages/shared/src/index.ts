@@ -67,6 +67,16 @@ export type VariantTranslations = Partial<
 >;
 
 // ---------- Products ----------
+
+/**
+ * Độ dài tối đa của chuỗi data URI ảnh sản phẩm (~300 KB ảnh sau khi nén).
+ *
+ * Ảnh nằm trong cột `Product.image` nên nó đi theo MỌI bản sao lưu pg_dump —
+ * 14 bản được giữ lại, nên mỗi KB ở đây tốn 14 KB dung lượng lưu trữ.
+ * Trình duyệt nén trước khi gửi; đây là mức chặn cuối ở máy chủ.
+ */
+export const PRODUCT_IMAGE_MAX_LENGTH = 500_000;
+
 /** Một "loại" của sản phẩm — có giá và kho riêng. */
 export interface ProductVariantDto {
   id: string;
@@ -91,7 +101,6 @@ export interface ProductDto {
   minPrice: number;
   maxPrice: number;
   image: string | null;
-  icon: string | null;
   category: string | null;
   sortOrder: number;
   active: boolean;
@@ -382,6 +391,52 @@ export interface StoreReadinessDto {
   mockActive: boolean;
   /** Tổng số key/tài khoản còn trong kho của các loại đang bán. */
   stockAvailable: number;
+  /**
+   * Chưa cấu hình kênh liên hệ nào.
+   *
+   * Cửa hàng KHÔNG gửi email tự động, nên "quên mật khẩu" chỉ giải quyết được
+   * bằng cách khách nhắn cho chủ shop. Không có kênh liên hệ thì trang đăng nhập
+   * bảo khách "liên hệ quản trị viên" mà không nói liên hệ ở đâu — khách mất mật
+   * khẩu là mất luôn tài khoản và mọi key đã mua.
+   */
+  supportChannelsMissing: boolean;
+}
+
+// ---------- Thống kê hành vi khách ----------
+
+/**
+ * Một sản phẩm trong bảng "xem so với mua".
+ *
+ * `conversion` mới là con số hành động được: xem nhiều mà mua ít thường là giá
+ * sai hoặc mô tả chưa thuyết phục. Lượt xem trơ trọi gần như không dùng để
+ * quyết định gì.
+ */
+export interface ProductInsightDto {
+  productId: string;
+  name: string;
+  slug: string;
+  views: number;
+  sold: number;
+  /** sold / views, 0..1. Bằng null khi chưa có lượt xem nào (chia cho 0). */
+  conversion: number | null;
+}
+
+/** Một từ khoá khách đã gõ ở ô tìm kiếm. */
+export interface SearchInsightDto {
+  term: string;
+  count: number;
+  /** Số lần từ khoá này không ra kết quả nào — khách đang tìm thứ shop chưa có. */
+  zeroResults: number;
+}
+
+export interface StoreInsightsDto {
+  /** Số ngày dữ liệu được gộp lại. */
+  days: number;
+  products: ProductInsightDto[];
+  /** Từ khoá được tìm nhiều nhất. */
+  topSearches: SearchInsightDto[];
+  /** Từ khoá KHÔNG ra kết quả — gợi ý nên nhập hàng gì tiếp. */
+  zeroResultSearches: SearchInsightDto[];
 }
 
 /** Một ngày trong biểu đồ doanh thu. `date` dạng YYYY-MM-DD (múi giờ máy chủ). */

@@ -10,7 +10,7 @@ export default function AdminNewProductPage() {
   const { t } = useI18n();
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-6xl">
       <Link
         href="/admin/products"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-neutral-500 transition-colors hover:text-neutral-950"
@@ -18,7 +18,7 @@ export default function AdminNewProductPage() {
         <ArrowLeft strokeWidth={1.75} className="h-4 w-4" />
         {t.admin.navProducts}
       </Link>
-      <PageHeader title={t.admin.newProductTitle} description={t.admin.newProductSubtitle} />
+      <PageHeader title={t.admin.newProductTitle} />
       <ProductForm />
     </div>
   );

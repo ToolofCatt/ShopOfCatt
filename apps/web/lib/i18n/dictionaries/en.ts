@@ -3,7 +3,7 @@ import type { Dictionary } from './vi';
 export const en: Dictionary = {
   meta: {
     description:
-      'Digital goods store — license keys, gift cards and activation codes. Automatic 24/7 delivery, pay with USDT via Binance Pay.',
+      'Digital goods store — license keys, gift cards and activation codes. Automatic 24/7 delivery, pay with USDT.',
   },
 
   common: {
@@ -62,7 +62,10 @@ export const en: Dictionary = {
     total: 'Total',
     buyNow: 'Buy now',
     reassureAuto: 'Delivered instantly after payment',
-    reassurePay: 'Binance Pay — USDT',
+    payBinancePay: 'Binance Pay',
+    payCrypto: (networks: string) => `USDT on-chain (${networks})`,
+    payMock: 'Sandbox mode',
+    noPaymentMethod: 'The store is not accepting payments right now. Please check back later.',
 
     /* ===== v2 — product variants (storefront) ===== */
     priceFrom: (price: string) => `From ${price}`,
@@ -92,6 +95,7 @@ export const en: Dictionary = {
     checkNow: 'Check payment',
     cancelOrder: 'Cancel order',
     cancelConfirm: 'Are you sure you want to cancel this order?',
+    legalNotice: 'By paying, you agree to our',
     expiredTitle: 'Order expired',
     expiredHint: (code: string) =>
       `Order ${code} was not paid in time. The stock has been released — please place a new order.`,
@@ -351,7 +355,6 @@ export const en: Dictionary = {
     deleteProductConfirm: (name: string) => `Delete product "${name}"? This cannot be undone.`,
 
     newProductTitle: 'Add product',
-    newProductSubtitle: 'Create a new digital product for the store.',
     editProductError: 'Could not load the product',
     productMissingTitle: 'Product not found',
     productMissingHint: 'This product may have been deleted.',
@@ -362,15 +365,11 @@ export const en: Dictionary = {
     formName: 'Product name *',
     formNamePlaceholder: 'Windows 11 Pro license key',
     formSlug: 'Slug',
-    formSlugHint: 'Leave empty to generate it from the name.',
     formSlugAuto: 'generated from name',
     formPrice: 'Price (USDT) *',
     formCategory: 'Category',
     formCategoryPlaceholder: 'Software',
-    formIcon: 'Icon',
-    formIconDefault: 'Default (Package)',
-    formImage: 'Image (URL)',
-    formImageHint: 'Optional — leave empty to use the icon.',
+    formImage: 'Product image',
     formShortDescription: 'Short description',
     formShortDescriptionPlaceholder: 'One sentence shown on the product card.',
     formDescription: 'Description',
@@ -380,6 +379,18 @@ export const en: Dictionary = {
     formSortOrder: 'Sort order',
     formSortOrderHint: 'Lower numbers appear first.',
     formActive: 'Visible in the store',
+    formActiveHint: 'Turn off to hide the product without deleting it.',
+    formImageChoose: 'Choose image',
+    formImageReplace: 'Replace',
+    formImageRemove: 'Remove',
+    formImageDropHint: 'Drop an image here, or',
+    formImageSize: (size: string) => `Compressed to ${size}`,
+    formImageTooLarge: 'Still too large after compression — please pick another image.',
+    formImageNotImage: 'That file is not an image.',
+    formImageReadFailed: 'Could not read the image file.',
+    previewTitle: 'Preview',
+    previewHint: 'Exactly what customers see. Display only, not clickable.',
+    previewUntitled: 'Untitled product',
     formSubmitCreate: 'Create product',
     formSubmitSave: 'Save changes',
     errNameRequired: 'Please enter a product name.',
@@ -468,8 +479,6 @@ export const en: Dictionary = {
     errVariantNameRequired: 'Please enter a variant name.',
     priceFrom: (price: string) => `From ${price}`,
     productVariantLabel: (product: string, variant: string) => `${product} — ${variant}`,
-    formPriceHint:
-      'Creates the "Mặc định" variant at this price. Add more variants on the edit page.',
     stockNoVariant: 'Create at least one variant before adding stock.',
     stockVariantPicker: 'Variant:',
     stockVariantSingle: (name: string) => `Variant: ${name}`,
@@ -492,13 +501,9 @@ export const en: Dictionary = {
 
     // ----- Automatic translation -----
     translationsTitle: 'Automatic translations',
-    translationsSubtitle:
-      'English and Chinese are translated from the Vietnamese original by Claude. Read-only.',
     translationsEmpty: 'No translation yet. Click "Translate automatically (EN + ZH)" to create one.',
     translateAction: 'Translate automatically (EN + ZH)',
     translateModel: (model: string) => `Model: ${model}`,
-    translateDisabledHint:
-      'The server has no ANTHROPIC_API_KEY configured, so automatic translation is unavailable.',
     translateHintSaves: 'The Vietnamese original is saved before translating.',
     translateDone: 'Translation finished.',
     translateFixForm: 'Please fix the errors in the form before translating.',
@@ -559,6 +564,22 @@ export const en: Dictionary = {
     topProductsTitle: 'Top products',
     topProductsSubtitle: 'Revenue over the last 30 days.',
     topProductsEmpty: 'No sales data yet.',
+
+    // ----- What customers view and search -----
+    insightsTitle: 'What customers view',
+    insightsSubtitle: (days: number) => `Views against units sold, last ${days} days`,
+    insightsEmpty: 'No views recorded yet.',
+    insightsColProduct: 'Product',
+    insightsColViews: 'Views',
+    insightsColSold: 'Sold',
+    insightsColConversion: 'Conversion',
+    searchesTitle: 'What customers search',
+    searchesSubtitle: (days: number) => `Search box terms, last ${days} days`,
+    searchesZeroTitle: 'Searched but not stocked',
+    searchesZeroEmpty: 'No searches came back empty.',
+    searchesTopTitle: 'Most searched',
+    searchesEmpty: 'No searches yet.',
+    searchesTimes: (n: number) => `${n}×`,
 
     customersTitle: 'Customers',
     customersSubtitle: 'Manage customer accounts and admin rights.',
@@ -679,6 +700,9 @@ export const en: Dictionary = {
       binanceKeyTitle: 'Binance Pay is on but the server key is missing',
       binanceKeyHint:
         'BINANCE_PAY_API_KEY is not set, so customers never see this method. Check the environment variable and restart the server.',
+      noSupportTitle: 'No support contact set',
+      noSupportHint:
+        'The store sends no automatic email, so this is the ONLY way a customer can recover a password. Leave it empty and a locked-out customer loses their account and every key they bought.',
       goSettings: 'Open settings',
       goProducts: 'Open products',
       goAddProduct: 'Add product',

@@ -401,6 +401,29 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
           )}
         </div>
 
+        {/*
+          Đang trả tiền cho CÁI GÌ. Trước đây trang này chỉ có mã đơn và số tiền,
+          nên khách bấm nhầm sản phẩm cũng không có cách nào nhận ra trước khi trả.
+        */}
+        <ul className="space-y-2 border-t border-neutral-100 pt-4 text-sm">
+          {order.items.map((item) => (
+            <li key={item.id} className="flex items-baseline justify-between gap-3">
+              <span className="min-w-0">
+                <span className="font-medium text-neutral-950">{item.productName}</span>
+                {item.variantName && (
+                  <span className="text-neutral-500"> · {item.variantName}</span>
+                )}
+                <span className="block text-xs text-neutral-500">
+                  {formatUsdt(item.unitPrice)} × {item.quantity}
+                </span>
+              </span>
+              <span className="shrink-0 tabular-nums text-neutral-950">
+                {formatUsdt(item.unitPrice * item.quantity)}
+              </span>
+            </li>
+          ))}
+        </ul>
+
         {methods !== null && methods.length > 1 && (
           <div className="space-y-2">
             <p className="text-center text-xs font-medium uppercase tracking-wide text-neutral-500">
@@ -564,6 +587,26 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
             {t.checkout.cancelOrder}
           </Button>
         </div>
+
+        {/*
+          Điều khoản đặt ở ĐÂY, ngay trước lúc trả tiền — chỗ duy nhất mà việc
+          đồng ý có ý nghĩa. Bán sản phẩm số thì tranh chấp "key không dùng được"
+          là chuyện thường ngày, và khi đó mọi bên cần quy về một văn bản.
+        */}
+        <p className="border-t border-neutral-100 pt-3 text-center text-xs leading-relaxed text-neutral-500">
+          {t.checkout.legalNotice}{' '}
+          <Link href="/legal/terms" className="underline underline-offset-2 hover:text-neutral-950">
+            {t.legal.termsTitle}
+          </Link>
+          {' · '}
+          <Link href="/legal/refund" className="underline underline-offset-2 hover:text-neutral-950">
+            {t.legal.refundTitle}
+          </Link>
+          {' · '}
+          <Link href="/legal/privacy" className="underline underline-offset-2 hover:text-neutral-950">
+            {t.legal.privacyTitle}
+          </Link>
+        </p>
       </Card>
     </div>
   );

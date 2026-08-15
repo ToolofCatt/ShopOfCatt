@@ -151,7 +151,6 @@ export function toProductDto(
     minPrice,
     maxPrice,
     image: product.image,
-    icon: product.icon,
     category: pickNullable(translated?.category, product.category),
     sortOrder: product.sortOrder,
     active: product.active,

@@ -82,6 +82,18 @@ export function ReadinessBanner({
       action: r.goSettings,
     });
   }
+  if (readiness.supportChannelsMissing) {
+    // Cửa hàng không gửi email tự động, nên đây là đường DUY NHẤT để khách lấy
+    // lại mật khẩu. Bỏ trống là khách mất tài khoản kèm mọi key đã mua.
+    issues.push({
+      key: 'no-support',
+      severity: 'warning',
+      title: r.noSupportTitle,
+      hint: r.noSupportHint,
+      href: '/admin/settings',
+      action: r.goSettings,
+    });
+  }
 
   if (issues.length === 0) return null;
 

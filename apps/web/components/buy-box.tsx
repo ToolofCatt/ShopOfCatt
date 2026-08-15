@@ -7,6 +7,8 @@ import {
   formatUsdt,
   type CouponPreviewDto,
   type CreateOrderResponse,
+  type PaymentMethod,
+  type PaymentMethodDto,
   type ProductDto,
   type ProductVariantDto,
 } from '@webcatt/shared';
@@ -54,6 +56,49 @@ export function BuyBox({ product }: { product: ProductDto }) {
   const [inputValue, setInputValue] = useState('1');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * Phương thức thanh toán ĐANG BẬT, đọc từ API công khai.
+   *
+   * Trước đây dòng dưới nút mua ghi cứng "Binance Pay — USDT" bất kể cửa hàng bật
+   * gì: bật mỗi USDT on-chain thì khách vẫn đọc thấy Binance Pay, mà bật cổng giả
+   * lập thì trang hứa một cổng thật không tồn tại. Hứa sai ở đúng chỗ khách quyết
+   * định trả tiền là mất niềm tin.
+   *
+   * `null` = đang tải; `[]` = cửa hàng chưa bật phương thức nào.
+   */
+  const [methods, setMethods] = useState<PaymentMethod[] | null>(null);
+  useEffect(() => {
+    let active = true;
+    apiFetch<PaymentMethodDto[]>('/payment-methods')
+      .then((list) => {
+        if (active) setMethods(list.map((entry) => entry.method));
+      })
+      .catch(() => {
+        // Không đọc được thì im lặng: chỉ ẩn dòng gợi ý, không chặn việc mua.
+        if (active) setMethods(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  /** Tên các phương thức, gộp BEP20/TRC20 thành một dòng "USDT (BEP20, TRC20)". */
+  const paymentLabel = useMemo(() => {
+    if (!methods || methods.length === 0) return null;
+    const parts: string[] = [];
+    if (methods.includes('binance_pay')) parts.push(t.product.payBinancePay);
+    const networks = [
+      methods.includes('crypto_bep20') ? 'BEP20' : null,
+      methods.includes('crypto_trc20') ? 'TRC20' : null,
+    ].filter(Boolean);
+    if (networks.length > 0) parts.push(t.product.payCrypto(networks.join(', ')));
+    if (methods.includes('mock')) parts.push(t.product.payMock);
+    return parts.join(' · ');
+  }, [methods, t.product]);
+
+  /** Chưa bật phương thức nào → đặt hàng chắc chắn lỗi 503, chặn ngay tại đây. */
+  const noPaymentMethod = methods !== null && methods.length === 0;
 
   // Mã giảm giá: giữ mã đã áp dụng, số tiền giảm luôn do máy chủ tính lại
   // mỗi khi đổi loại hoặc số lượng — không tự tính ở trình duyệt.
@@ -166,8 +211,8 @@ export function BuyBox({ product }: { product: ProductDto }) {
       <div>
         <p className="text-3xl font-semibold tabular-nums tracking-tight">{priceLabel}</p>
         <p className="mt-1 text-sm text-neutral-500">
-          {availableStock <= 0 ? t.product.outOfStock : t.product.inStockLong(availableStock)} ·{' '}
-          {t.product.sold(sold)}
+          {availableStock <= 0 ? t.product.outOfStock : t.product.inStockLong(availableStock)}
+          {sold > 0 && <> · {t.product.sold(sold)}</>}
         </p>
       </div>
 
@@ -288,7 +333,7 @@ export function BuyBox({ product }: { product: ProductDto }) {
         <Button
           className="w-full"
           loading={submitting}
-          disabled={outOfStock}
+          disabled={outOfStock || noPaymentMethod}
           onClick={() => void handleBuy()}
         >
           {outOfStock ? (
@@ -300,6 +345,9 @@ export function BuyBox({ product }: { product: ProductDto }) {
             </>
           )}
         </Button>
+        {noPaymentMethod && !outOfStock && (
+          <p className="text-sm text-neutral-500">{t.product.noPaymentMethod}</p>
+        )}
         {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
 
@@ -308,10 +356,12 @@ export function BuyBox({ product }: { product: ProductDto }) {
           <ShieldCheck className="h-4 w-4 shrink-0" strokeWidth={1.75} />
           {t.product.reassureAuto}
         </p>
-        <p className="flex items-center gap-2">
-          <Wallet className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-          {t.product.reassurePay}
-        </p>
+        {paymentLabel && (
+          <p className="flex items-center gap-2">
+            <Wallet className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+            {paymentLabel}
+          </p>
+        )}
       </div>
     </Card>
   );

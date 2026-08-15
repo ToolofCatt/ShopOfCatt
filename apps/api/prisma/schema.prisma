@@ -89,7 +89,6 @@ model Product {
   description      String?
   currency         String  @default("USDT")
   image            String?
-  icon             String?
   category         String?
   sortOrder        Int     @default(0)
   active           Boolean @default(true)
@@ -101,6 +100,41 @@ model Product {
   variants     ProductVariant[]
   translations ProductTranslation[]
   orderItems   OrderItem[]
+  viewsDaily   ProductViewDaily[]
+}
+
+/// Lượt xem trang sản phẩm, GỘP THEO NGÀY.
+///
+/// Không lưu từng lượt: bảng sự kiện phình vô hạn, mà thứ chủ shop cần chỉ là xu
+/// hướng theo ngày. Gộp sẵn thì số dòng bị chặn ở (số sản phẩm × số ngày).
+///
+/// Không lưu IP hay userId — chỉ cần con số, không cần biết ai xem.
+model ProductViewDaily {
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Ngày theo giờ máy chủ, không kèm giờ phút
+  day   DateTime @db.Date
+  views Int      @default(0)
+
+  @@id([productId, day])
+  @@index([day])
+}
+
+/// Từ khoá khách gõ ở ô tìm kiếm, GỘP THEO NGÀY.
+///
+/// `zeroResults` mới là con số đáng giá: nó nói cho chủ shop biết khách đang tìm
+/// thứ cửa hàng KHÔNG có — tức là nên nhập hàng gì tiếp.
+model SearchQueryDaily {
+  /// Đã chuẩn hoá: cắt khoảng trắng thừa, chữ thường, tối đa 60 ký tự
+  term String
+  day  DateTime @db.Date
+  /// Tổng số lần tìm bằng từ khoá này
+  count Int @default(0)
+  /// Trong đó bao nhiêu lần không ra kết quả nào
+  zeroResults Int @default(0)
+
+  @@id([term, day])
+  @@index([day])
 }
 
 /// Một "loại" của sản phẩm (ví dụ: gói 1 tháng / 1 năm) — có giá và kho riêng.

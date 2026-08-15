@@ -90,7 +90,6 @@ interface SeedVariant {
 interface SeedProduct {
   slug: string;
   name: string;
-  icon: string;
   category: string;
   sortOrder: number;
   shortDescription: string;
@@ -111,7 +110,6 @@ const PRODUCTS: SeedProduct[] = [
   {
     slug: 'key-windows-11-pro',
     name: 'Key bản quyền Windows 11 Pro',
-    icon: 'KeyRound',
     category: 'Phần mềm',
     sortOrder: 1,
     shortDescription:
@@ -127,7 +125,6 @@ const PRODUCTS: SeedProduct[] = [
   {
     slug: 'key-office-2021-pro-plus',
     name: 'Key Microsoft Office 2021 Pro Plus',
-    icon: 'AppWindow',
     category: 'Phần mềm',
     sortOrder: 2,
     shortDescription:
@@ -143,7 +140,6 @@ const PRODUCTS: SeedProduct[] = [
   {
     slug: 'gift-card-steam-10',
     name: 'Steam Gift Card 10$',
-    icon: 'Gift',
     category: 'Thẻ quà tặng',
     sortOrder: 3,
     shortDescription:
@@ -159,7 +155,6 @@ const PRODUCTS: SeedProduct[] = [
   {
     slug: 'key-game-aaa-steam',
     name: 'Key game AAA trên Steam (random)',
-    icon: 'Gamepad2',
     category: 'Game',
     sortOrder: 4,
     shortDescription:
@@ -175,7 +170,6 @@ const PRODUCTS: SeedProduct[] = [
   {
     slug: 'khoa-hoc-lap-trinh-web',
     name: 'Khóa học Lập trình Web Fullstack (mã kích hoạt)',
-    icon: 'GraduationCap',
     category: 'Khóa học',
     sortOrder: 5,
     shortDescription:
@@ -209,7 +203,6 @@ const PRODUCTS: SeedProduct[] = [
   {
     slug: 'key-antivirus-1-nam',
     name: 'Key diệt virus bản quyền 1 năm',
-    icon: 'Shield',
     category: 'Phần mềm',
     sortOrder: 6,
     shortDescription:
@@ -241,7 +234,6 @@ const PRODUCTS: SeedProduct[] = [
   {
     slug: 'ebook-bao-mat',
     name: 'Ebook: Làm chủ bảo mật cá nhân (mã tải)',
-    icon: 'BookOpen',
     category: 'Ebook',
     sortOrder: 7,
     shortDescription:
@@ -261,7 +253,6 @@ const PRODUCTS: SeedProduct[] = [
   {
     slug: 'canva-pro-1-nam',
     name: 'Canva Pro (mã kích hoạt)',
-    icon: 'Palette',
     category: 'Phần mềm',
     sortOrder: 8,
     shortDescription:
@@ -416,7 +407,6 @@ async function seedProducts(): Promise<void> {
     const data = {
       name: item.name,
       currency: 'USDT',
-      icon: item.icon,
       category: item.category,
       sortOrder: item.sortOrder,
       shortDescription: item.shortDescription,

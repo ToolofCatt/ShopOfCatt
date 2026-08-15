@@ -81,7 +81,6 @@ function productSnapshot(product: Product): Record<string, unknown> {
     shortDescription: product.shortDescription,
     description: product.description,
     image: product.image,
-    icon: product.icon,
     category: product.category,
     sortOrder: product.sortOrder,
     active: product.active,
@@ -296,7 +295,6 @@ export class AdminService {
         shortDescription: normalizeNullable(dto.shortDescription) ?? null,
         description: normalizeNullable(dto.description) ?? null,
         image: normalizeNullable(dto.image) ?? null,
-        icon: normalizeNullable(dto.icon) ?? null,
         category: normalizeNullable(dto.category) ?? null,
         sortOrder: dto.sortOrder ?? 0,
         active: dto.active ?? true,
@@ -354,7 +352,6 @@ export class AdminService {
       data.description = normalizeNullable(dto.description);
     }
     if (dto.image !== undefined) data.image = normalizeNullable(dto.image);
-    if (dto.icon !== undefined) data.icon = normalizeNullable(dto.icon);
     if (dto.category !== undefined) {
       data.category = normalizeNullable(dto.category);
     }

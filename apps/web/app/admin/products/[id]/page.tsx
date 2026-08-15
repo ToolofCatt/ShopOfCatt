@@ -95,7 +95,7 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div className="mx-auto max-w-6xl">
       <Link
         href="/admin/products"
         className="mb-4 inline-flex items-center gap-1.5 text-sm text-neutral-500 transition-colors hover:text-neutral-950"

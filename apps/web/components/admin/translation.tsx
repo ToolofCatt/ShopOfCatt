@@ -99,12 +99,9 @@ export function TranslationSection({ blocks, onTranslate, className }: Translati
 
   return (
     <div className={className}>
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
-          {t.admin.translationsTitle}
-        </h2>
-        <p className="text-sm text-neutral-500">{t.admin.translationsSubtitle}</p>
-      </div>
+      <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
+        {t.admin.translationsTitle}
+      </h2>
 
       <div className="mt-4 space-y-2">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -117,12 +114,11 @@ export function TranslationSection({ blocks, onTranslate, className }: Translati
             {!running && <Languages strokeWidth={1.75} className="h-4 w-4" />}
             {t.admin.translateAction}
           </Button>
-          {status !== null &&
-            (configured ? (
-              <span className="text-xs text-neutral-500">{t.admin.translateModel(status.model)}</span>
-            ) : (
-              <span className="text-sm text-neutral-500">{t.admin.translateDisabledHint}</span>
-            ))}
+          {status !== null && configured && (
+            <span className="text-xs text-neutral-500">
+              {t.admin.translateModel(status.model)}
+            </span>
+          )}
         </div>
         {configured && <p className="text-xs text-neutral-500">{t.admin.translateHintSaves}</p>}
         {done && !error && (

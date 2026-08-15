@@ -3,7 +3,7 @@ import type { Dictionary } from './vi';
 export const zh: Dictionary = {
   meta: {
     description:
-      '数字商品商店 —— 正版密钥、礼品卡、激活码。全天候自动发货，支持通过 Binance Pay 使用 USDT 付款。',
+      '数字商品商店 —— 正版密钥、礼品卡、激活码。全天候自动发货，支持使用 USDT 付款。',
   },
 
   common: {
@@ -62,7 +62,10 @@ export const zh: Dictionary = {
     total: '合计',
     buyNow: '立即购买',
     reassureAuto: '付款后立即自动发货',
-    reassurePay: 'Binance Pay — USDT',
+    payBinancePay: 'Binance Pay',
+    payCrypto: (networks: string) => `USDT 链上 (${networks})`,
+    payMock: '测试模式',
+    noPaymentMethod: '店铺暂不接受付款，请稍后再来。',
 
     /* ===== v2 —— 商品规格（前台） ===== */
     priceFrom: (price: string) => `${price} 起`,
@@ -91,6 +94,7 @@ export const zh: Dictionary = {
     checkNow: '查询付款',
     cancelOrder: '取消订单',
     cancelConfirm: '确定要取消这笔订单吗？',
+    legalNotice: '完成付款即表示您同意',
     expiredTitle: '订单已过期',
     expiredHint: (code: string) => `订单 ${code} 未在规定时间内付款，库存已释放，请重新下单。`,
     backHome: '返回首页',
@@ -344,7 +348,6 @@ export const zh: Dictionary = {
     deleteProductConfirm: (name: string) => `删除商品“${name}”？此操作无法撤销。`,
 
     newProductTitle: '添加商品',
-    newProductSubtitle: '为商店创建新的数字商品。',
     editProductError: '无法加载商品',
     productMissingTitle: '商品不存在',
     productMissingHint: '该商品可能已被删除。',
@@ -355,15 +358,11 @@ export const zh: Dictionary = {
     formName: '商品名称 *',
     formNamePlaceholder: 'Windows 11 Pro 正版密钥',
     formSlug: 'Slug',
-    formSlugHint: '留空将根据名称自动生成。',
     formSlugAuto: '根据名称自动生成',
     formPrice: '价格（USDT）*',
     formCategory: '分类',
     formCategoryPlaceholder: '软件',
-    formIcon: '图标',
-    formIconDefault: '默认（Package）',
-    formImage: '图片（URL）',
-    formImageHint: '可选 —— 留空则使用图标。',
+    formImage: '商品图片',
     formShortDescription: '简短描述',
     formShortDescriptionPlaceholder: '显示在商品卡片上的一句话介绍。',
     formDescription: '详细描述',
@@ -372,6 +371,18 @@ export const zh: Dictionary = {
     formSortOrder: '排序',
     formSortOrderHint: '数字越小越靠前。',
     formActive: '在商店中显示',
+    formActiveHint: '关闭可暂时隐藏商品而不删除。',
+    formImageChoose: '选择图片',
+    formImageReplace: '更换',
+    formImageRemove: '移除',
+    formImageDropHint: '将图片拖到此处，或',
+    formImageSize: (size: string) => `已压缩至 ${size}`,
+    formImageTooLarge: '压缩后仍然过大 — 请选择其他图片。',
+    formImageNotImage: '该文件不是图片。',
+    formImageReadFailed: '无法读取图片文件。',
+    previewTitle: '预览',
+    previewHint: '与客户所见完全一致。仅供查看，不可点击。',
+    previewUntitled: '未命名商品',
     formSubmitCreate: '创建商品',
     formSubmitSave: '保存修改',
     errNameRequired: '请输入商品名称。',
@@ -459,7 +470,6 @@ export const zh: Dictionary = {
     errVariantNameRequired: '请输入类型名称。',
     priceFrom: (price: string) => `${price} 起`,
     productVariantLabel: (product: string, variant: string) => `${product} —— ${variant}`,
-    formPriceHint: '将按此价格创建“Mặc định”类型。其他类型可在编辑页添加。',
     stockNoVariant: '请先创建至少一个类型，再添加库存。',
     stockVariantPicker: '类型：',
     stockVariantSingle: (name: string) => `类型：${name}`,
@@ -482,11 +492,9 @@ export const zh: Dictionary = {
 
     // ----- 自动翻译 -----
     translationsTitle: '自动翻译',
-    translationsSubtitle: '英文和中文由 Claude 从越南语原文翻译而来，仅供查看，不可直接编辑。',
     translationsEmpty: '尚无译文。点击“自动翻译（EN + ZH）”即可生成。',
     translateAction: '自动翻译（EN + ZH）',
     translateModel: (model: string) => `模型：${model}`,
-    translateDisabledHint: '服务器未配置 ANTHROPIC_API_KEY，暂时无法使用自动翻译。',
     translateHintSaves: '翻译前会先保存越南语原文。',
     translateDone: '翻译完成。',
     translateFixForm: '请先修正表单中的错误，然后再翻译。',
@@ -547,6 +555,22 @@ export const zh: Dictionary = {
     topProductsTitle: '热销商品',
     topProductsSubtitle: '最近 30 天的营业额。',
     topProductsEmpty: '暂无销售数据。',
+
+    // ----- 客户浏览与搜索 -----
+    insightsTitle: '客户浏览了什么',
+    insightsSubtitle: (days: number) => `浏览量与销量对比，最近 ${days} 天`,
+    insightsEmpty: '尚未记录任何浏览。',
+    insightsColProduct: '商品',
+    insightsColViews: '浏览',
+    insightsColSold: '售出',
+    insightsColConversion: '转化率',
+    searchesTitle: '客户搜索了什么',
+    searchesSubtitle: (days: number) => `搜索框关键词，最近 ${days} 天`,
+    searchesZeroTitle: '搜索了但店铺没有',
+    searchesZeroEmpty: '暂无无结果的搜索。',
+    searchesTopTitle: '搜索最多',
+    searchesEmpty: '暂无搜索记录。',
+    searchesTimes: (n: number) => `${n} 次`,
 
     customersTitle: '客户',
     customersSubtitle: '管理客户账户与管理员权限。',
@@ -662,6 +686,9 @@ export const zh: Dictionary = {
       binanceKeyTitle: '已开启币安支付，但服务器缺少密钥',
       binanceKeyHint:
         '未设置 BINANCE_PAY_API_KEY，顾客看不到该支付方式。请检查环境变量后重启服务器。',
+      noSupportTitle: '尚未设置联系方式',
+      noSupportHint:
+        '店铺不发送自动邮件，这是客户找回密码的唯一途径。留空则客户一旦忘记密码，账户和已购买的所有密钥都将无法找回。',
       goSettings: '打开设置',
       goProducts: '打开商品',
       goAddProduct: '添加商品',

@@ -26,47 +26,8 @@ import {
   Spinner,
 } from '@/components/ui';
 import { PageHeader } from '@/components/admin/page-header';
+import { ToggleRow } from '@/components/admin/toggle-row';
 import { formatAmount } from '@/components/admin/helpers';
-
-/** Một dòng bật/tắt phương thức thanh toán: checkbox + tên + mô tả ngắn. */
-function ToggleRow({
-  id,
-  checked,
-  disabled = false,
-  onChange,
-  label,
-  hint,
-}: {
-  id: string;
-  checked: boolean;
-  disabled?: boolean;
-  onChange: (checked: boolean) => void;
-  label: string;
-  hint: string;
-}) {
-  return (
-    <label
-      htmlFor={id}
-      className={cn(
-        'flex items-start gap-3 rounded-lg border border-neutral-200 p-3.5 transition-colors',
-        disabled ? 'opacity-60' : 'cursor-pointer hover:border-neutral-400',
-      )}
-    >
-      <input
-        id={id}
-        type="checkbox"
-        checked={checked}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.checked)}
-        className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-neutral-950 disabled:cursor-not-allowed"
-      />
-      <span className="min-w-0">
-        <span className="block text-sm font-medium text-neutral-950">{label}</span>
-        <span className="mt-0.5 block text-xs text-neutral-500">{hint}</span>
-      </span>
-    </label>
-  );
-}
 
 /** Một dòng "nhãn: giá trị" trong bảng trạng thái Binance. */
 function StatusRow({ label, value }: { label: string; value: ReactNode }) {

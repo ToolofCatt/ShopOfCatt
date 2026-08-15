@@ -44,7 +44,18 @@ export class ProductsService {
       this.prisma,
       collectVariantIds(products),
     );
-    return products.map((product) => toProductDto(product, counts, { locale }));
+    /*
+     * Hàng còn bán đứng trước hàng đã hết.
+     *
+     * Không xếp được ở tầng CSDL vì tồn kho là kết quả đếm dòng StockItem, không
+     * phải một cột. Trước đây trang chủ xếp thuần theo sortOrder/ngày tạo, nên ô
+     * đầu tiên khách nhìn thấy có thể là một sản phẩm HẾT HÀNG — bấm vào chỉ để
+     * thất vọng. Sort của JS ổn định nên thứ tự sortOrder/ngày tạo vẫn được giữ
+     * bên trong từng nhóm.
+     */
+    return products
+      .map((product) => toProductDto(product, counts, { locale }))
+      .sort((a, b) => Number(b.availableStock > 0) - Number(a.availableStock > 0));
   }
 
   async getBySlug(slug: string, locale: Locale): Promise<ProductDto> {

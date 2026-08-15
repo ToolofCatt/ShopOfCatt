@@ -345,7 +345,6 @@ export default function AdminProductsPage() {
                 >
                   <div className="flex items-start gap-3">
                     <ProductVisual
-                      icon={product.icon}
                       image={product.image}
                       name={product.name}
                       className={cn(
@@ -417,7 +416,6 @@ export default function AdminProductsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <ProductVisual
-                            icon={product.icon}
                             image={product.image}
                             name={product.name}
                             className={cn(

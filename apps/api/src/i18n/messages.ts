@@ -30,6 +30,9 @@ export const K = {
   tooManyLogins: 'auth.too_many_logins',
   tooManyRequests: 'auth.too_many_requests',
 
+  // --- thống kê hành vi khách ---
+  analyticsPayloadInvalid: 'analytics.payload_invalid',
+
   // --- mã giảm giá ---
   couponCodeRequired: 'coupon.code_required',
   couponCodeInvalid: 'coupon.code_invalid',
@@ -99,7 +102,7 @@ export const K = {
   adminShortDescriptionInvalid: 'admin.short_description_invalid',
   adminDescriptionInvalid: 'admin.description_invalid',
   adminImageInvalid: 'admin.image_invalid',
-  adminIconInvalid: 'admin.icon_invalid',
+  adminImageTooLarge: 'admin.image_too_large',
   adminCategoryInvalid: 'admin.category_invalid',
   adminSortOrderInt: 'admin.sort_order_int',
   adminActiveInvalid: 'admin.active_invalid',
@@ -462,10 +465,10 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     en: 'Invalid image URL',
     zh: '图片地址无效',
   },
-  [K.adminIconInvalid]: {
-    vi: 'Icon không hợp lệ',
-    en: 'Invalid icon',
-    zh: '图标无效',
+  [K.adminImageTooLarge]: {
+    vi: 'Ảnh quá lớn — hãy chọn ảnh nhỏ hơn',
+    en: 'Image is too large — please pick a smaller one',
+    zh: '图片过大 — 请选择更小的图片',
   },
   [K.adminCategoryInvalid]: {
     vi: 'Danh mục không hợp lệ',
@@ -770,6 +773,11 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Đăng nhập sai quá nhiều lần — vui lòng thử lại sau vài phút',
     en: 'Too many failed sign-in attempts — please try again in a few minutes',
     zh: '登录尝试次数过多 — 请几分钟后再试',
+  },
+  [K.analyticsPayloadInvalid]: {
+    vi: 'Dữ liệu thống kê không hợp lệ',
+    en: 'Invalid analytics payload',
+    zh: '统计数据无效',
   },
   [K.tooManyRequests]: {
     vi: 'Bạn thao tác quá nhanh — vui lòng thử lại sau',

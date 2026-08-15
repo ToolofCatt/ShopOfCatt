@@ -7,10 +7,11 @@ import { TRANSLATABLE_LOCALES, type ProductDto } from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
-import { cn } from '@/lib/cn';
 import { Button, Card, Field, Input, buttonVariants } from '@/components/ui';
-import { PRODUCT_ICON_NAMES, getProductIcon } from '@/components/icon-map';
-import { SELECT_CLASSES, TEXTAREA_CLASSES, localeLabel } from '@/components/admin/helpers';
+import { TEXTAREA_CLASSES, localeLabel } from '@/components/admin/helpers';
+import { ImagePicker } from '@/components/admin/image-picker';
+import { ProductPreview } from '@/components/admin/product-preview';
+import { ToggleRow } from '@/components/admin/toggle-row';
 import { TranslationSection, type TranslationBlock } from '@/components/admin/translation';
 
 interface ProductFieldErrors {
@@ -37,7 +38,6 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
   // Giá chỉ có ở chế độ tạo mới — nó sinh ra loại đầu tiên ("Mặc định").
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState(product?.category ?? '');
-  const [icon, setIcon] = useState(product?.icon ?? '');
   const [image, setImage] = useState(product?.image ?? '');
   const [shortDescription, setShortDescription] = useState(product?.shortDescription ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
@@ -47,8 +47,6 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
   const [fieldErrors, setFieldErrors] = useState<ProductFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const IconPreview = getProductIcon(icon || null);
 
   /** Kiểm tra biểu mẫu — trả về lỗi theo trường, hoặc null khi hợp lệ. */
   const validate = (): ProductFieldErrors | null => {
@@ -86,7 +84,6 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
       description: optional(description),
       image: optional(image),
       category: optional(category),
-      icon: icon ? icon : isEdit ? null : undefined,
     };
     // Giá chỉ gửi khi tạo mới: API dùng nó để tạo loại "Mặc định".
     if (!isEdit) body.price = Number(price);
@@ -172,129 +169,105 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
       }))
     : [];
 
-  // Chế độ tạo mới có thêm ô Giá, nên Danh mục đổi chỗ giữa hai hàng lưới.
-  const categoryField = (
-    <Field label={t.admin.formCategory} htmlFor="product-category">
-      <Input
-        id="product-category"
-        value={category}
-        placeholder={t.admin.formCategoryPlaceholder}
-        onChange={(event) => setCategory(event.target.value)}
-      />
-    </Field>
-  );
-
   return (
-    <>
-      <Card className="p-6">
-        <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4" noValidate>
-          <Field label={t.admin.formName} htmlFor="product-name" error={fieldErrors.name}>
-            <Input
-              id="product-name"
-              value={name}
-              invalid={Boolean(fieldErrors.name)}
-              placeholder={t.admin.formNamePlaceholder}
-              onChange={(event) => setName(event.target.value)}
-            />
-          </Field>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label={t.admin.formSlug}
-              htmlFor="product-slug"
-              hint={isEdit ? undefined : t.admin.formSlugHint}
-            >
+    <div className="space-y-6">
+      {/*
+        Biểu mẫu bên trái, xem trước bên phải. Cột phải dính theo màn hình để nó
+        vẫn trong tầm mắt khi cuộn xuống ô mô tả dài. Dưới `xl` thì xem trước
+        xuống dưới biểu mẫu thay vì bóp cả hai lại.
+      */}
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
+        <Card className="p-6">
+          <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4" noValidate>
+            <Field label={t.admin.formName} htmlFor="product-name" error={fieldErrors.name}>
               <Input
-                id="product-slug"
-                value={slug}
-                placeholder={isEdit ? 'my-product' : t.admin.formSlugAuto}
-                className="font-mono"
-                onChange={(event) => setSlug(event.target.value)}
+                id="product-name"
+                value={name}
+                invalid={Boolean(fieldErrors.name)}
+                placeholder={t.admin.formNamePlaceholder}
+                onChange={(event) => setName(event.target.value)}
               />
             </Field>
-            {isEdit ? (
-              categoryField
-            ) : (
-              <Field
-                label={t.admin.formPrice}
-                htmlFor="product-price"
-                error={fieldErrors.price}
-                hint={t.admin.formPriceHint}
-              >
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t.admin.formSlug} htmlFor="product-slug">
                 <Input
-                  id="product-price"
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  inputMode="decimal"
-                  value={price}
-                  invalid={Boolean(fieldErrors.price)}
-                  placeholder="9.99"
-                  onChange={(event) => setPrice(event.target.value)}
+                  id="product-slug"
+                  value={slug}
+                  placeholder={isEdit ? 'my-product' : t.admin.formSlugAuto}
+                  className="font-mono"
+                  onChange={(event) => setSlug(event.target.value)}
+                />
+              </Field>
+              {isEdit ? (
+                <Field label={t.admin.formCategory} htmlFor="product-category">
+                  <Input
+                    id="product-category"
+                    value={category}
+                    placeholder={t.admin.formCategoryPlaceholder}
+                    onChange={(event) => setCategory(event.target.value)}
+                  />
+                </Field>
+              ) : (
+                <Field
+                  label={t.admin.formPrice}
+                  htmlFor="product-price"
+                  error={fieldErrors.price}
+                >
+                  <Input
+                    id="product-price"
+                    type="number"
+                    min={0}
+                    step={0.01}
+                    inputMode="decimal"
+                    value={price}
+                    invalid={Boolean(fieldErrors.price)}
+                    placeholder="9.99"
+                    onChange={(event) => setPrice(event.target.value)}
+                  />
+                </Field>
+              )}
+            </div>
+
+            {!isEdit && (
+              <Field label={t.admin.formCategory} htmlFor="product-category">
+                <Input
+                  id="product-category"
+                  value={category}
+                  placeholder={t.admin.formCategoryPlaceholder}
+                  onChange={(event) => setCategory(event.target.value)}
                 />
               </Field>
             )}
-          </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {!isEdit && categoryField}
-            <Field label={t.admin.formIcon} htmlFor="product-icon">
-              <div className="flex items-center gap-3">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-neutral-100">
-                  <IconPreview strokeWidth={1.75} className="h-5 w-5 text-neutral-600" />
-                </span>
-                <select
-                  id="product-icon"
-                  value={icon}
-                  onChange={(event) => setIcon(event.target.value)}
-                  className={SELECT_CLASSES}
-                >
-                  <option value="">{t.admin.formIconDefault}</option>
-                  {PRODUCT_ICON_NAMES.map((iconName) => (
-                    <option key={iconName} value={iconName}>
-                      {iconName}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <Field label={t.admin.formImage} htmlFor="product-image">
+              <ImagePicker value={image} onChange={setImage} />
             </Field>
-          </div>
 
-          <Field label={t.admin.formImage} htmlFor="product-image" hint={t.admin.formImageHint}>
-            <Input
-              id="product-image"
-              type="url"
-              value={image}
-              placeholder="https://..."
-              onChange={(event) => setImage(event.target.value)}
-            />
-          </Field>
+            <Field label={t.admin.formShortDescription} htmlFor="product-short-description">
+              <Input
+                id="product-short-description"
+                value={shortDescription}
+                placeholder={t.admin.formShortDescriptionPlaceholder}
+                onChange={(event) => setShortDescription(event.target.value)}
+              />
+            </Field>
 
-          <Field label={t.admin.formShortDescription} htmlFor="product-short-description">
-            <Input
-              id="product-short-description"
-              value={shortDescription}
-              placeholder={t.admin.formShortDescriptionPlaceholder}
-              onChange={(event) => setShortDescription(event.target.value)}
-            />
-          </Field>
+            <Field
+              label={t.admin.formDescription}
+              htmlFor="product-description"
+              hint={t.admin.formDescriptionHint}
+            >
+              <textarea
+                id="product-description"
+                rows={8}
+                value={description}
+                placeholder={t.admin.formDescriptionPlaceholder}
+                onChange={(event) => setDescription(event.target.value)}
+                className={TEXTAREA_CLASSES}
+              />
+            </Field>
 
-          <Field
-            label={t.admin.formDescription}
-            htmlFor="product-description"
-            hint={t.admin.formDescriptionHint}
-          >
-            <textarea
-              id="product-description"
-              rows={8}
-              value={description}
-              placeholder={t.admin.formDescriptionPlaceholder}
-              onChange={(event) => setDescription(event.target.value)}
-              className={TEXTAREA_CLASSES}
-            />
-          </Field>
-
-          <div className="grid items-end gap-4 sm:grid-cols-2">
             <Field
               label={t.admin.formSortOrder}
               htmlFor="product-sort-order"
@@ -311,42 +284,50 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
                 onChange={(event) => setSortOrder(event.target.value)}
               />
             </Field>
-            <label
-              htmlFor="product-active"
-              className={cn(
-                'flex h-10 cursor-pointer select-none items-center gap-2.5 rounded-lg border border-neutral-300 px-3',
-                'text-sm font-medium text-neutral-800 transition-colors hover:border-neutral-500',
-              )}
-            >
-              <input
-                id="product-active"
-                type="checkbox"
-                checked={active}
-                onChange={(event) => setActive(event.target.checked)}
-                className="h-4 w-4 cursor-pointer accent-neutral-950"
-              />
-              {t.admin.formActive}
-            </label>
-          </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+            <ToggleRow
+              id="product-active"
+              checked={active}
+              onChange={setActive}
+              label={t.admin.formActive}
+              hint={t.admin.formActiveHint}
+            />
 
-          <div className="flex items-center gap-2 border-t border-neutral-100 pt-4">
-            <Button type="submit" loading={submitting}>
-              {isEdit ? t.admin.formSubmitSave : t.admin.formSubmitCreate}
-            </Button>
-            <Link href="/admin/products" className={buttonVariants({ variant: 'ghost' })}>
-              {t.common.cancel}
-            </Link>
-          </div>
-        </form>
-      </Card>
+            {error && <p className="text-sm text-red-600">{error}</p>}
 
+            <div className="flex items-center gap-2 border-t border-neutral-100 pt-4">
+              <Button type="submit" loading={submitting}>
+                {isEdit ? t.admin.formSubmitSave : t.admin.formSubmitCreate}
+              </Button>
+              <Link href="/admin/products" className={buttonVariants({ variant: 'ghost' })}>
+                {t.common.cancel}
+              </Link>
+            </div>
+          </form>
+        </Card>
+
+        <div className="xl:sticky xl:top-24">
+          <ProductPreview
+            input={{
+              name,
+              slug,
+              category,
+              shortDescription,
+              description,
+              image,
+              price,
+              variants: product?.variants ?? [],
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Bảng dịch giữ nguyên chiều ngang đầy đủ — nó có lưới 2 cột riêng bên trong. */}
       {product && (
         <Card className="p-6">
           <TranslationSection blocks={translationBlocks} onTranslate={handleTranslate} />
         </Card>
       )}
-    </>
+    </div>
   );
 }

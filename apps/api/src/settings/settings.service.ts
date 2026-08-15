@@ -129,6 +129,7 @@ export class SettingsService {
       binancePayKeyMissing: setting.binancePayEnabled && binancePayKey === '',
       mockActive: methods.some((entry) => entry.method === 'mock'),
       stockAvailable: await this.countAvailableStock(),
+      supportChannelsMissing: parseSupportChannels(setting.supportChannels).length === 0,
     };
   }
 

@@ -11,6 +11,17 @@ async function bootstrap(): Promise<void> {
     rawBody: true,
   });
 
+  /*
+   * Nâng giới hạn thân request: ảnh sản phẩm gửi lên dạng data URI (trình duyệt
+   * đã nén trước), mà mặc định của express chỉ là 100 kb — không ảnh nào lọt.
+   *
+   * PHẢI dùng `useBodyParser`, KHÔNG được `app.use(json({ limit }))`. App tạo với
+   * `rawBody: true` ở trên, và Nest cài một hàm `verify` riêng để giữ lại thân
+   * request thô. Webhook Binance xác minh chữ ký RSA TRÊN THÂN THÔ đó — thay bộ
+   * phân tích bằng tay là mọi webhook thật đều bị coi là chữ ký sai.
+   */
+  app.useBodyParser('json', { limit: '2mb' });
+
   const config = app.get(ConfigService);
 
   /*

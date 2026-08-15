@@ -8,7 +8,7 @@ import type { AuditAction, PaymentMethod } from '@webcatt/shared';
 export const vi = {
   meta: {
     description:
-      'Cửa hàng sản phẩm số — key bản quyền, thẻ quà tặng, mã kích hoạt. Giao hàng tự động 24/7, thanh toán USDT qua Binance Pay.',
+      'Cửa hàng sản phẩm số — key bản quyền, thẻ quà tặng, mã kích hoạt. Giao hàng tự động 24/7, thanh toán bằng USDT.',
   },
 
   common: {
@@ -67,7 +67,10 @@ export const vi = {
     total: 'Tổng cộng',
     buyNow: 'Mua ngay',
     reassureAuto: 'Giao tự động ngay sau khi thanh toán',
-    reassurePay: 'Binance Pay — USDT',
+    payBinancePay: 'Binance Pay',
+    payCrypto: (networks: string) => `USDT on-chain (${networks})`,
+    payMock: 'Chế độ thử nghiệm',
+    noPaymentMethod: 'Cửa hàng tạm chưa nhận thanh toán. Vui lòng quay lại sau.',
 
     /* ===== v2 — loại sản phẩm (storefront) ===== */
     priceFrom: (price: string) => `Từ ${price}`,
@@ -97,6 +100,7 @@ export const vi = {
     checkNow: 'Kiểm tra thanh toán',
     cancelOrder: 'Hủy đơn',
     cancelConfirm: 'Bạn có chắc chắn muốn hủy đơn hàng này?',
+    legalNotice: 'Khi thanh toán, bạn đồng ý với',
     expiredTitle: 'Đơn hàng đã hết hạn',
     expiredHint: (code: string) =>
       `Đơn ${code} chưa được thanh toán trong thời gian quy định. Kho hàng đã được hoàn lại — vui lòng đặt đơn mới.`,
@@ -356,7 +360,6 @@ export const vi = {
       `Xóa sản phẩm "${name}"? Hành động không thể hoàn tác.`,
 
     newProductTitle: 'Thêm sản phẩm',
-    newProductSubtitle: 'Tạo sản phẩm số mới cho cửa hàng.',
     editProductError: 'Không tải được sản phẩm',
     productMissingTitle: 'Sản phẩm không tồn tại',
     productMissingHint: 'Sản phẩm có thể đã bị xóa.',
@@ -367,15 +370,11 @@ export const vi = {
     formName: 'Tên sản phẩm *',
     formNamePlaceholder: 'Key bản quyền Windows 11 Pro',
     formSlug: 'Slug',
-    formSlugHint: 'Bỏ trống để tự tạo từ tên.',
     formSlugAuto: 'tự tạo từ tên',
     formPrice: 'Giá (USDT) *',
     formCategory: 'Danh mục',
     formCategoryPlaceholder: 'Phần mềm',
-    formIcon: 'Icon',
-    formIconDefault: 'Mặc định (Package)',
-    formImage: 'Ảnh (URL)',
-    formImageHint: 'Tùy chọn — bỏ trống để dùng icon.',
+    formImage: 'Ảnh sản phẩm',
     formShortDescription: 'Mô tả ngắn',
     formShortDescriptionPlaceholder: 'Một câu giới thiệu hiển thị trên thẻ sản phẩm.',
     formDescription: 'Mô tả',
@@ -386,6 +385,18 @@ export const vi = {
     formSortOrder: 'Thứ tự hiển thị',
     formSortOrderHint: 'Số nhỏ hiển thị trước.',
     formActive: 'Hiển thị trên cửa hàng',
+    formActiveHint: 'Tắt để tạm ẩn sản phẩm mà không xoá.',
+    formImageChoose: 'Chọn ảnh',
+    formImageReplace: 'Đổi ảnh',
+    formImageRemove: 'Xoá',
+    formImageDropHint: 'Kéo ảnh vào đây, hoặc',
+    formImageSize: (size: string) => `Đã nén còn ${size}`,
+    formImageTooLarge: 'Ảnh quá lớn kể cả sau khi nén — hãy chọn ảnh khác.',
+    formImageNotImage: 'Tệp này không phải ảnh.',
+    formImageReadFailed: 'Không đọc được tệp ảnh.',
+    previewTitle: 'Xem trước',
+    previewHint: 'Đúng như khách sẽ thấy. Chỉ để xem, không bấm được.',
+    previewUntitled: 'Sản phẩm chưa đặt tên',
     formSubmitCreate: 'Tạo sản phẩm',
     formSubmitSave: 'Lưu thay đổi',
     errNameRequired: 'Vui lòng nhập tên sản phẩm.',
@@ -475,7 +486,6 @@ export const vi = {
     errVariantNameRequired: 'Vui lòng nhập tên loại.',
     priceFrom: (price: string) => `Từ ${price}`,
     productVariantLabel: (product: string, variant: string) => `${product} — ${variant}`,
-    formPriceHint: 'Tạo loại "Mặc định" với mức giá này. Thêm loại khác ở trang sửa sản phẩm.',
     stockNoVariant: 'Hãy tạo ít nhất một loại trước khi thêm kho.',
     stockVariantPicker: 'Loại:',
     stockVariantSingle: (name: string) => `Loại: ${name}`,
@@ -499,13 +509,9 @@ export const vi = {
 
     // ----- Dịch tự động -----
     translationsTitle: 'Bản dịch tự động',
-    translationsSubtitle:
-      'Bản tiếng Anh và tiếng Trung do Claude dịch từ bản tiếng Việt. Chỉ xem, không sửa trực tiếp.',
     translationsEmpty: 'Chưa có bản dịch. Bấm "Dịch tự động (EN + ZH)" để tạo.',
     translateAction: 'Dịch tự động (EN + ZH)',
     translateModel: (model: string) => `Mô hình: ${model}`,
-    translateDisabledHint:
-      'Máy chủ chưa cấu hình ANTHROPIC_API_KEY nên chưa dùng được dịch tự động.',
     translateHintSaves: 'Bản tiếng Việt sẽ được lưu trước khi dịch.',
     translateDone: 'Đã dịch xong.',
     translateFixForm: 'Vui lòng sửa các lỗi trong biểu mẫu trước khi dịch.',
@@ -566,6 +572,22 @@ export const vi = {
     topProductsTitle: 'Top sản phẩm',
     topProductsSubtitle: 'Doanh thu 30 ngày gần nhất.',
     topProductsEmpty: 'Chưa có dữ liệu bán hàng.',
+
+    // ----- Khách xem gì, tìm gì -----
+    insightsTitle: 'Khách xem gì',
+    insightsSubtitle: (days: number) => `Lượt xem so với số đã bán, ${days} ngày gần nhất`,
+    insightsEmpty: 'Chưa ghi nhận lượt xem nào.',
+    insightsColProduct: 'Sản phẩm',
+    insightsColViews: 'Xem',
+    insightsColSold: 'Bán',
+    insightsColConversion: 'Chuyển đổi',
+    searchesTitle: 'Khách tìm gì',
+    searchesSubtitle: (days: number) => `Từ khoá ở ô tìm kiếm, ${days} ngày gần nhất`,
+    searchesZeroTitle: 'Tìm mà cửa hàng không có',
+    searchesZeroEmpty: 'Chưa có từ khoá nào không ra kết quả.',
+    searchesTopTitle: 'Tìm nhiều nhất',
+    searchesEmpty: 'Chưa có lượt tìm kiếm nào.',
+    searchesTimes: (n: number) => `${n} lần`,
 
     customersTitle: 'Khách hàng',
     customersSubtitle: 'Quản lý tài khoản khách và quyền quản trị.',
@@ -688,6 +710,9 @@ export const vi = {
       binanceKeyTitle: 'Binance Pay bật nhưng máy chủ thiếu khoá',
       binanceKeyHint:
         'Thiếu BINANCE_PAY_API_KEY nên khách không thấy phương thức này. Kiểm tra biến môi trường rồi khởi động lại máy chủ.',
+      noSupportTitle: 'Chưa có kênh liên hệ hỗ trợ',
+      noSupportHint:
+        'Cửa hàng không gửi email tự động, nên đây là cách DUY NHẤT để khách lấy lại mật khẩu. Bỏ trống là khách mất mật khẩu sẽ mất luôn tài khoản và mọi key đã mua.',
       goSettings: 'Mở cài đặt',
       goProducts: 'Mở sản phẩm',
       goAddProduct: 'Thêm sản phẩm',

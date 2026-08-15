@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AnalyticsModule } from '../analytics/analytics.module';
 import { AnnouncementModule } from '../announcement/announcement.module';
 import { AuditModule } from '../audit/audit.module';
 import { AuthModule } from '../auth/auth.module';
@@ -20,6 +21,7 @@ import { AdminService } from './admin.service';
     SettingsModule,
     CouponsModule,
     LegalModule,
+    AnalyticsModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

@@ -34,6 +34,7 @@ import { PageHeader } from '@/components/admin/page-header';
 import { StatCard } from '@/components/admin/stat-card';
 import { RevenueChart } from '@/components/admin/revenue-chart';
 import { ReadinessBanner } from '@/components/admin/readiness-banner';
+import { InsightsPanels } from '@/components/admin/insights';
 import { formatAmount } from '@/components/admin/helpers';
 
 /** Số đơn gần đây hiển thị trên trang tổng quan. */
@@ -396,6 +397,8 @@ export default function AdminDashboardPage() {
       <p className="mt-4 text-xs text-neutral-400">
         {t.admin.lowStockHint(LOW_STOCK_THRESHOLD)}
       </p>
+
+      <InsightsPanels />
     </>
   );
 }
