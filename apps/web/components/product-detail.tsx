@@ -59,7 +59,7 @@ export function ProductDetail({ product }: { product: ProductDto }) {
    * cả khối ảnh biến mất, thay vì để lại một ô xám cao gần 400px.
    */
   const gallery = useMemo(
-    () => [product.image, ...product.images.map((item) => item.data)].filter(
+    () => [product.image, ...product.images.map((item) => item.url)].filter(
       (source): source is string => Boolean(source),
     ),
     [product.image, product.images],

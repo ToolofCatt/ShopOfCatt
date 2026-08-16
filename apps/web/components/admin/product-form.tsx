@@ -15,6 +15,7 @@ import { Button, Card, Field, Input, buttonVariants } from '@/components/ui';
 import { TEXTAREA_CLASSES, localeLabel } from '@/components/admin/helpers';
 import { GalleryPicker } from '@/components/admin/gallery-picker';
 import { ImagePicker } from '@/components/admin/image-picker';
+import type { CompressedPair } from '@/lib/image-compress';
 import { ProductPreview } from '@/components/admin/product-preview';
 import { ToggleRow } from '@/components/admin/toggle-row';
 import { TranslationSection, type TranslationBlock } from '@/components/admin/translation';
@@ -43,8 +44,18 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
   // Giá chỉ có ở chế độ tạo mới — nó sinh ra loại đầu tiên ("Mặc định").
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState(product?.category ?? '');
-  const [image, setImage] = useState(product?.image ?? '');
-  const [thumbnail, setThumbnail] = useState(product?.thumbnail ?? '');
+  /*
+   * Ảnh bìa: `null` = chủ shop CHƯA đụng vào, khác null = vừa chọn ảnh mới (hoặc
+   * vừa xoá, khi cả hai chuỗi rỗng).
+   *
+   * Không giữ ảnh trong một state rồi gửi nguyên si như trước được nữa:
+   * `product.image` bây giờ là ĐỊA CHỈ ảnh (`/api/images/...`), gửi ngược lên là
+   * ghi đè cột base64 bằng chính cái địa chỉ đó — ảnh biến mất vĩnh viễn và
+   * endpoint phục vụ ảnh quay ra tự chuyển hướng về chính nó.
+   */
+  const [imagePick, setImagePick] = useState<CompressedPair | null>(null);
+  /** Thứ đang hiển thị: ảnh vừa chọn, hoặc địa chỉ ảnh đã lưu. */
+  const image = imagePick ? imagePick.image : (product?.image ?? '');
   const [shortDescription, setShortDescription] = useState(product?.shortDescription ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
   const [sortOrder, setSortOrder] = useState(product ? String(product.sortOrder) : '0');
@@ -97,8 +108,14 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
       active,
       shortDescription: optional(shortDescription),
       description: optional(description),
-      image: optional(image),
-      thumbnail: optional(thumbnail),
+      // Chỉ gửi ảnh khi chủ shop thực sự đổi. Bỏ qua nhánh này là mọi lần bấm
+      // Lưu đều ghi đè cột ảnh bằng địa chỉ đang hiển thị.
+      ...(imagePick
+        ? {
+            image: optional(imagePick.image),
+            thumbnail: optional(imagePick.thumbnail),
+          }
+        : {}),
       category: optional(category),
     };
     // Giá chỉ gửi khi tạo mới: API dùng nó để tạo loại "Mặc định".
@@ -310,10 +327,8 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
             <Field label={t.admin.formImage} htmlFor="product-image">
               <ImagePicker
                 value={image}
-                onChange={(pair) => {
-                  setImage(pair.image);
-                  setThumbnail(pair.thumbnail);
-                }}
+                bytes={imagePick ? null : product?.imageBytes ?? null}
+                onChange={setImagePick}
               />
             </Field>
 
@@ -406,7 +421,7 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
               shortDescription,
               description,
               image,
-              thumbnail,
+              thumbnail: imagePick ? imagePick.thumbnail : (product?.thumbnail ?? ''),
               images,
               price,
               variants: product?.variants ?? [],

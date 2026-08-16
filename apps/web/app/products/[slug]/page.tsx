@@ -36,8 +36,12 @@ export async function generateMetadata({
         title: product.name,
         description,
         url: `/products/${product.slug}`,
-        // Data URI không dùng được cho thẻ chia sẻ: bot mạng xã hội chỉ tải
-        // được ảnh qua URL thật, nên bỏ hẳn thay vì gửi một chuỗi chúng không đọc nổi.
+        /*
+         * Giờ `product.image` là URL thật nên thẻ chia sẻ mới dùng được — trước
+         * đây nó là data URI và bot mạng xã hội không đọc nổi, phải bỏ hẳn.
+         * Vẫn kiểm tiền tố http để phòng cấu hình thiếu API_PUBLIC_URL: khi đó
+         * địa chỉ sinh ra là đường dẫn tương đối, bot bên ngoài không mở được.
+         */
         ...(product.image?.startsWith('http') ? { images: [product.image] } : {}),
       },
       alternates: { canonical: `/products/${product.slug}` },

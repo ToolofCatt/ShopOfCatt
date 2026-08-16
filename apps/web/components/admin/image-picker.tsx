@@ -8,6 +8,7 @@ import { Button, Spinner } from '@/components/ui';
 import {
   ImageTooLargeError,
   compressImagePair,
+  formatBytes,
   formatDataUrlSize,
   type CompressedPair,
 } from '@/lib/image-compress';
@@ -23,10 +24,20 @@ import {
  */
 export function ImagePicker({
   value,
+  bytes,
   onChange,
 }: {
-  /** Data URI bản LỚN hiện tại, hoặc chuỗi rỗng khi chưa có ảnh. */
+  /**
+   * Thứ để hiển thị: ĐỊA CHỈ ảnh đã lưu, hoặc data URI của ảnh vừa chọn. Cả hai
+   * đều dùng thẳng làm `src` được.
+   */
   value: string;
+  /**
+   * Cỡ ảnh đã lưu (byte) do máy chủ trả về. `null` khi ảnh là bản vừa chọn —
+   * lúc đó tự đo từ chính data URI. Cần hai đường vì địa chỉ ảnh không nói lên
+   * dung lượng, mà tải về chỉ để đếm byte thì phí.
+   */
+  bytes: number | null;
   /**
    * Trả về cả hai bản cùng lúc — bản nhỏ phải sinh từ đúng tệp vừa chọn.
    * Xoá ảnh thì cả hai là chuỗi rỗng.
@@ -83,7 +94,9 @@ export function ImagePicker({
           />
           <div className="min-w-0 space-y-2">
             <p className="text-xs text-neutral-500">
-              {t.admin.formImageSize(formatDataUrlSize(value))}
+              {t.admin.formImageSize(
+                bytes === null ? formatDataUrlSize(value) : formatBytes(bytes),
+              )}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button

@@ -190,6 +190,12 @@ export async function compressImagePair(file: File): Promise<CompressedPair> {
   return { image, thumbnail };
 }
 
+/** "142 KB" từ số byte máy chủ trả về. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  return `${Math.round(bytes / 1024)} KB`;
+}
+
 /** "142 KB" — hiện cho chủ shop biết ảnh chiếm bao nhiêu sau khi nén. */
 export function formatDataUrlSize(dataUrl: string): string {
   // Data URI là base64: 4 ký tự mã hoá 3 byte, trừ phần tiền tố "data:...;base64,".

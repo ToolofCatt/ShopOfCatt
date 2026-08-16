@@ -88,10 +88,18 @@ model Product {
   shortDescription String?
   description      String?
   currency         String  @default("USDT")
-  /// Ảnh bìa, bản lớn. Truy vấn danh sách cố ý KHÔNG select cột này.
+  /// Ảnh bìa, bản lớn. KHÔNG truy vấn nào ngoài endpoint phục vụ ảnh được select
+  /// cột này — nó là base64 vài trăm KB.
   image            String?
-  /// Bản thu nhỏ (~400px) của ảnh bìa, dùng cho thẻ và danh sách quản trị.
+  /// Bản thu nhỏ (~400px) của ảnh bìa. Cũng chỉ endpoint phục vụ ảnh mới đọc.
   thumbnail        String?
+  /// Cỡ ảnh sau giải mã, tính bằng byte. `null` = chưa có ảnh.
+  ///
+  /// Tồn tại để biết CÓ ảnh hay không mà không phải select cột base64: truy vấn
+  /// danh sách chỉ cần dựng địa chỉ ảnh, và dựng được thì phải biết ảnh có tồn
+  /// tại. Kèm theo là số để trang quản trị hiện dung lượng.
+  imageBytes       Int?
+  thumbnailBytes   Int?
   category         String?
   sortOrder        Int     @default(0)
   active           Boolean @default(true)
@@ -116,8 +124,11 @@ model ProductImage {
   id        String  @id @default(cuid())
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-  /// Data URI đã nén ở trình duyệt trước khi gửi lên.
+  /// Data URI đã nén ở trình duyệt trước khi gửi lên. Chỉ endpoint phục vụ ảnh
+  /// mới được select cột này.
   data      String
+  /// Cỡ ảnh sau giải mã, tính bằng byte — để khỏi phải đọc `data` chỉ vì cần số.
+  bytes     Int     @default(0)
   sortOrder Int     @default(0)
 
   createdAt DateTime @default(now())

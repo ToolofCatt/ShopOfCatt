@@ -3,6 +3,8 @@ import type { ProductDto } from '@webcatt/shared';
 import { FulfillmentService } from '../orders/fulfillment.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
+  PRODUCT_IMAGE_META_SELECT,
+  PRODUCT_SCALARS,
   VARIANT_ORDER_BY,
   collectVariantIds,
   getVariantStockCountMap,
@@ -19,10 +21,10 @@ export class ProductsService {
   ) {}
 
   /**
-   * Include dùng chung cho endpoint công khai: chỉ các loại đang bán,
-   * kèm bản dịch đúng ngôn ngữ (với `vi` sẽ không có dòng nào → giữ bản gốc).
+   * Loại đang bán + bản dịch đúng ngôn ngữ, dùng chung cho hai truy vấn dưới
+   * (với `vi` sẽ không có dòng dịch nào → giữ bản gốc).
    */
-  private publicInclude(locale: Locale) {
+  private publicRelations(locale: Locale) {
     return {
       variants: {
         where: { active: true },
@@ -30,41 +32,24 @@ export class ProductsService {
         include: { translations: { where: { locale } } },
       },
       translations: { where: { locale } },
-      images: { orderBy: { sortOrder: 'asc' as const } },
+    };
+  }
+
+  /**
+   * Trang chi tiết: kèm phần MÔ TẢ của ảnh phụ (id, cỡ, thứ tự) — không kèm dữ
+   * liệu ảnh. Trình duyệt tự tải ảnh qua `/api/images/...` và cache lại.
+   */
+  private publicDetailSelect(locale: Locale) {
+    return {
+      ...PRODUCT_SCALARS,
+      ...this.publicRelations(locale),
+      images: { select: PRODUCT_IMAGE_META_SELECT, orderBy: { sortOrder: 'asc' as const } },
     };
   }
 
-  /**
-   * Danh sách sản phẩm: liệt kê từng cột và **cố ý bỏ `image`** (ảnh bìa bản
-   * lớn) cùng quan hệ `images`.
-   *
-   * Trước đây chỗ này dùng `include`, mà `include` kéo về MỌI cột của Product.
-   * Ảnh lưu base64 ngay trong CSDL, mỗi tấm tới ~375 KB, nên trang chủ 20 sản
-   * phẩm là vài MB JSON — trong khi ô ảnh trên thẻ chỉ rộng ~250px và đã có
-   * `thumbnail`. Thêm cột mới vào Product thì nhớ thêm vào đây, nếu không nó sẽ
-   * vắng mặt ở trang chủ.
-   */
+  /** Danh sách: không cần ảnh phụ, thẻ sản phẩm chỉ dùng ảnh nhỏ. */
   private publicListSelect(locale: Locale) {
-    return {
-      id: true,
-      slug: true,
-      name: true,
-      shortDescription: true,
-      description: true,
-      currency: true,
-      thumbnail: true,
-      category: true,
-      sortOrder: true,
-      active: true,
-      createdAt: true,
-      updatedAt: true,
-      variants: {
-        where: { active: true },
-        orderBy: VARIANT_ORDER_BY,
-        include: { translations: { where: { locale } } },
-      },
-      translations: { where: { locale } },
-    };
+    return { ...PRODUCT_SCALARS, ...this.publicRelations(locale) };
   }
 
   async list(locale: Locale): Promise<ProductDto[]> {
@@ -96,7 +81,7 @@ export class ProductsService {
     await this.fulfillment.releaseExpiredOrders();
     const product = await this.prisma.product.findFirst({
       where: { slug, active: true },
-      include: this.publicInclude(locale),
+      select: this.publicDetailSelect(locale),
     });
     if (!product) {
       throw new NotFoundException(K.productNotFound);

@@ -9,7 +9,7 @@ import { Button, Spinner } from '@/components/ui';
 import {
   ImageTooLargeError,
   compressImage,
-  formatDataUrlSize,
+  formatBytes,
 } from '@/lib/image-compress';
 
 /**
@@ -99,13 +99,13 @@ export function GalleryPicker({
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={image.data}
+                src={image.url}
                 alt=""
                 className="h-28 w-full bg-neutral-100 object-contain"
               />
               <div className="flex items-center justify-between gap-1 border-t border-neutral-200 px-1.5 py-1.5">
                 <span className="truncate text-[11px] text-neutral-500">
-                  {formatDataUrlSize(image.data)}
+                  {formatBytes(image.bytes)}
                 </span>
                 <div className="flex shrink-0 items-center gap-0.5">
                   <button

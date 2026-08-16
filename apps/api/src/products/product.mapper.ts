@@ -1,7 +1,5 @@
 import type {
   Prisma,
-  Product,
-  ProductImage,
   ProductTranslation,
   ProductVariant,
   ProductVariantTranslation,
@@ -15,8 +13,44 @@ import {
   type TranslatableLocale,
   type VariantTranslations,
 } from '@webcatt/shared';
+import { galleryImageUrl, productImageUrl } from '../images/image-url';
 import type { Locale } from '../i18n/locale';
 import type { PrismaService } from '../prisma/prisma.service';
+
+/**
+ * Các cột được phép đọc của `Product` — cố ý KHÔNG có `image` và `thumbnail`.
+ *
+ * Hai cột đó là base64 vài trăm KB. Chỉ endpoint phục vụ ảnh mới được chạm vào,
+ * và mọi truy vấn khác đi qua hằng số này nên không ai select nhầm được. Đây là
+ * lý do `ProductWithVariants` suy ra TỪ chính hằng số này: quên một cột thì
+ * trình biên dịch báo ngay, thêm cột base64 vào cũng vậy.
+ */
+export const PRODUCT_SCALARS = {
+  id: true,
+  slug: true,
+  name: true,
+  shortDescription: true,
+  description: true,
+  currency: true,
+  imageBytes: true,
+  thumbnailBytes: true,
+  category: true,
+  sortOrder: true,
+  active: true,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.ProductSelect;
+
+/** Ảnh phụ: chỉ lấy phần mô tả, không lấy `data`. */
+export const PRODUCT_IMAGE_META_SELECT = {
+  id: true,
+  bytes: true,
+  sortOrder: true,
+} satisfies Prisma.ProductImageSelect;
+
+export type ProductImageMeta = Prisma.ProductImageGetPayload<{
+  select: typeof PRODUCT_IMAGE_META_SELECT;
+}>;
 
 export interface StockCounts {
   available: number;
@@ -32,14 +66,11 @@ export type VariantWithTranslations = ProductVariant & {
   translations?: ProductVariantTranslation[];
 };
 
-/**
- * `image` để tuỳ chọn có chủ ý: truy vấn danh sách sản phẩm dùng `select` và cố
- * ý BỎ cột ảnh lớn ra ngoài cho nhẹ trang chủ, nên ở đó nó vắng mặt. Khai báo
- * bắt buộc thì `publicListSelect` sẽ không gán được vào kiểu này.
- */
-export type ProductWithVariants = Omit<Product, 'image'> & {
-  image?: string | null;
-  images?: ProductImage[];
+export type ProductWithVariants = Prisma.ProductGetPayload<{
+  select: typeof PRODUCT_SCALARS;
+}> & {
+  /** Vắng mặt ở truy vấn danh sách — chỉ trang chi tiết mới cần ảnh phụ. */
+  images?: ProductImageMeta[];
   variants: VariantWithTranslations[];
   translations?: ProductTranslation[];
 };
@@ -102,8 +133,13 @@ function toVariantTranslations(
   return map;
 }
 
-export function toProductImageDto(image: ProductImage): ProductImageDto {
-  return { id: image.id, data: image.data, sortOrder: image.sortOrder };
+export function toProductImageDto(image: ProductImageMeta): ProductImageDto {
+  return {
+    id: image.id,
+    url: galleryImageUrl(image.id),
+    bytes: image.bytes,
+    sortOrder: image.sortOrder,
+  };
 }
 
 export function toProductVariantDto(
@@ -163,8 +199,17 @@ export function toProductDto(
     currency: product.currency,
     minPrice,
     maxPrice,
-    image: product.image ?? null,
-    thumbnail: product.thumbnail,
+    // Có ảnh hay không đọc qua cột số byte, không cần chạm vào cột base64.
+    image:
+      product.imageBytes === null
+        ? null
+        : productImageUrl(product.id, 'cover', product.updatedAt),
+    thumbnail:
+      product.thumbnailBytes === null
+        ? null
+        : productImageUrl(product.id, 'thumbnail', product.updatedAt),
+    imageBytes: product.imageBytes,
+    thumbnailBytes: product.thumbnailBytes,
     images: (product.images ?? [])
       .slice()
       .sort((a, b) => a.sortOrder - b.sortOrder || (a.id < b.id ? -1 : 1))

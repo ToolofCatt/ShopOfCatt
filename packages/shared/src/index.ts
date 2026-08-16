@@ -99,8 +99,18 @@ export const PRODUCT_IMAGE_MAX_COUNT = 6;
 /** Một ảnh phụ trong bộ sưu tập của sản phẩm (không gồm ảnh bìa). */
 export interface ProductImageDto {
   id: string;
-  /** Data URI đã nén sẵn ở trình duyệt. */
-  data: string;
+  /**
+   * Địa chỉ tuyệt đối tới endpoint phục vụ ảnh, dùng thẳng làm `src`.
+   *
+   * Trước đây trường này là data URI nhúng thẳng. Ảnh base64 xuất hiện HAI lần
+   * trong HTML (một ở markup, một trong gói dữ liệu Next dùng để hydrate) nên
+   * một trang chi tiết ba ảnh thật nặng gần 1 MB — và không cache được vì trang
+   * render động. Qua endpoint riêng thì HTML chỉ còn vài chục byte địa chỉ, còn
+   * ảnh được trình duyệt cache lại.
+   */
+  url: string;
+  /** Cỡ ảnh sau giải mã (byte) — trang quản trị hiện cho chủ shop biết. */
+  bytes: number;
   sortOrder: number;
 }
 
@@ -128,13 +138,15 @@ export interface ProductDto {
   minPrice: number;
   maxPrice: number;
   /**
-   * Ảnh bìa, kích thước lớn. **`null` ở endpoint danh sách** — truy vấn đó cố ý
-   * không kéo cột này về cho nhẹ trang. Chỗ nào chỉ cần ảnh nhỏ thì dùng
-   * `thumbnail ?? image`.
+   * Địa chỉ ảnh bìa (bản lớn), hoặc `null` khi chưa có ảnh. Dùng thẳng làm `src`.
+   * KHÔNG còn là data URI — xem chú thích ở `ProductImageDto.url`.
    */
   image: string | null;
-  /** Bản thu nhỏ của ảnh bìa. Có mặt ở cả danh sách lẫn chi tiết. */
+  /** Địa chỉ bản thu nhỏ, cho thẻ sản phẩm và danh sách quản trị. */
   thumbnail: string | null;
+  /** Cỡ ảnh bìa / ảnh nhỏ (byte). `null` = chưa có. */
+  imageBytes: number | null;
+  thumbnailBytes: number | null;
   /** Ảnh phụ, KHÔNG gồm ảnh bìa. Rỗng ở endpoint danh sách. */
   images: ProductImageDto[];
   category: string | null;

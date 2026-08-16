@@ -9,6 +9,7 @@ import { BinanceExchangeModule } from './binance-exchange/binance-exchange.modul
 import { CouponsModule } from './coupons/coupons.module';
 import { CustomersModule } from './customers/customers.module';
 import { HealthModule } from './health/health.module';
+import { ImagesModule } from './images/images.module';
 import { LegalModule } from './legal/legal.module';
 import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
@@ -27,6 +28,7 @@ import { TranslationModule } from './translation/translation.module';
     HealthModule,
     AuthModule,
     ProductsModule,
+    ImagesModule,
     AnnouncementModule,
     TranslationModule,
     LegalModule,

@@ -60,6 +60,10 @@ function toPreviewProduct(input: ProductPreviewInput, fallbackName: string): Pro
     maxPrice: prices.length > 0 ? Math.max(...prices) : 0,
     image: input.image || null,
     thumbnail: input.thumbnail || null,
+    // Khung xem trước không quan tâm cỡ ảnh; chỉ cần khác null khi có ảnh để
+    // các nhánh "có ảnh hay chưa" chạy giống hệt trang thật.
+    imageBytes: input.image ? input.image.length : null,
+    thumbnailBytes: input.thumbnail ? input.thumbnail.length : null,
     images: input.images,
     category: input.category.trim() || null,
     sortOrder: 0,

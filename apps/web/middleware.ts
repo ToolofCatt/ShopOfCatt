@@ -40,8 +40,14 @@ function buildCsp(nonce: string): string {
     // Tailwind + Next chèn style nội tuyến và không nhận nonce cho style →
     // 'unsafe-inline' ở đây là bắt buộc. Style nội tuyến không chạy được mã.
     "style-src 'self' 'unsafe-inline'",
-    // Ảnh sản phẩm có thể là URL ngoài do admin nhập
-    "img-src 'self' data: https:",
+    /*
+     * `data:` cho ảnh vừa chọn trong trang quản trị (xem trước trước khi lưu);
+     * `https:` cho ảnh ngoài chủ shop từng dán vào.
+     * `apiOrigin` là bắt buộc ở môi trường dev: web chạy cổng 3000 còn ảnh phục
+     * vụ từ API cổng 3001, khác origin nên 'self' không phủ tới. Ở production
+     * hai bên cùng tên miền nên phần này rỗng.
+     */
+    `img-src 'self' data: https:${apiOrigin ? ` ${apiOrigin}` : ''}`,
     "font-src 'self' data:",
     `connect-src 'self'${apiOrigin ? ` ${apiOrigin}` : ''}`,
     // QR Binance Pay hiển thị bằng <img>, không nhúng iframe

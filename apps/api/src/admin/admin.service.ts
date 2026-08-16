@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type Product, type User } from '@prisma/client';
+import { Prisma, type User } from '@prisma/client';
 import {
   LOW_STOCK_THRESHOLD,
   PRODUCT_IMAGE_MAX_COUNT,
@@ -27,6 +27,8 @@ import { toOrderDetailDto, toOrderSummaryDto } from '../orders/order.mapper';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import {
+  PRODUCT_IMAGE_META_SELECT,
+  PRODUCT_SCALARS,
   VARIANT_ORDER_BY,
   collectVariantIds,
   getVariantStockCountMap,
@@ -66,22 +68,24 @@ const TRANSLATABLE_FIELDS = [
 ] as const;
 
 /**
- * Include cho DANH SÁCH quản trị (luôn xem được mọi loại + mọi bản dịch) — cố ý KHÔNG kèm `images`.
+ * DANH SÁCH quản trị: mọi loại + mọi bản dịch, cố ý KHÔNG kèm ảnh phụ.
  *
- * Danh sách có thể hàng chục sản phẩm, mỗi sản phẩm tới 5 ảnh phụ base64. Kèm
- * vào đây là mỗi lần mở trang Sản phẩm kéo về vài chục MB. Ảnh phụ chỉ cần ở
- * trang sửa một sản phẩm, nên nằm ở `ADMIN_PRODUCT_DETAIL_INCLUDE`.
+ * `select` chứ không `include`, và đi qua `PRODUCT_SCALARS` để chắc chắn không
+ * chạm vào hai cột base64 `image`/`thumbnail`. Danh sách có thể hàng chục sản
+ * phẩm, mỗi sản phẩm tới 6 tấm ảnh — kéo hết về đây là mỗi lần mở trang Sản
+ * phẩm tốn vài chục MB, trong khi giao diện chỉ cần một ô ảnh nhỏ.
  */
-const ADMIN_PRODUCT_INCLUDE = {
+const ADMIN_PRODUCT_SELECT = {
+  ...PRODUCT_SCALARS,
   variants: { orderBy: VARIANT_ORDER_BY, include: { translations: true } },
   translations: true,
-} satisfies Prisma.ProductInclude;
+} satisfies Prisma.ProductSelect;
 
-/** Include cho MỘT sản phẩm (trang sửa): thêm ảnh phụ theo đúng thứ tự. */
-const ADMIN_PRODUCT_DETAIL_INCLUDE = {
-  ...ADMIN_PRODUCT_INCLUDE,
-  images: { orderBy: { sortOrder: 'asc' } },
-} satisfies Prisma.ProductInclude;
+/** MỘT sản phẩm (trang sửa): thêm phần mô tả ảnh phụ theo đúng thứ tự. */
+const ADMIN_PRODUCT_DETAIL_SELECT = {
+  ...ADMIN_PRODUCT_SELECT,
+  images: { select: PRODUCT_IMAGE_META_SELECT, orderBy: { sortOrder: 'asc' } },
+} satisfies Prisma.ProductSelect;
 
 /**
  * Chuẩn hóa chuỗi nullable: trim, chuỗi rỗng → null.
@@ -102,25 +106,36 @@ function normalizeNullable(
 }
 
 /**
- * Ảnh chỉ ghi ĐỘ DÀI, không ghi nội dung.
+ * Cỡ ảnh sau giải mã, tính từ data URI. `null` khi không có ảnh.
  *
- * Data URI dài tới ~375 KB, mà `diffChanges` lưu cả giá trị cũ lẫn mới: đổi ảnh
- * một lần là một dòng nhật ký gần 1 MB, và dòng đó nằm trong cả 14 bản sao lưu.
- * Độ dài vẫn đủ để biết "ảnh có đổi", vốn là tất cả những gì nhật ký cần.
+ * Cột `bytes`/`imageBytes` tồn tại để mọi truy vấn khác biết "có ảnh không" và
+ * "nặng bao nhiêu" mà không phải đọc cột base64 — nên nó phải được tính đúng
+ * ngay tại chỗ ghi.
  */
-function imageDigest(value: string | null): string | null {
-  return value === null ? null : `ảnh ${value.length} ký tự`;
+function dataUriBytes(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const comma = value.indexOf(',');
+  const payload = comma === -1 ? value : value.slice(comma + 1);
+  return Buffer.byteLength(payload, 'base64');
 }
 
-/** Ảnh chụp phẳng các trường vô hướng của sản phẩm — để diff cho nhật ký. */
-function productSnapshot(product: Product): Record<string, unknown> {
+type ProductScalars = Prisma.ProductGetPayload<{ select: typeof PRODUCT_SCALARS }>;
+
+/**
+ * Ảnh chụp phẳng các trường vô hướng của sản phẩm — để diff cho nhật ký.
+ *
+ * Ảnh ghi bằng SỐ BYTE, không ghi nội dung: data URI dài tới ~375 KB mà
+ * `diffChanges` lưu cả giá trị cũ lẫn mới, nên đổi ảnh một lần là một dòng nhật
+ * ký gần 1 MB — nằm trong cả 14 bản sao lưu. Số byte vẫn đủ để biết ảnh có đổi.
+ */
+function productSnapshot(product: ProductScalars): Record<string, unknown> {
   return {
     name: product.name,
     slug: product.slug,
     shortDescription: product.shortDescription,
     description: product.description,
-    image: imageDigest(product.image),
-    thumbnail: imageDigest(product.thumbnail),
+    imageBytes: product.imageBytes,
+    thumbnailBytes: product.thumbnailBytes,
     category: product.category,
     sortOrder: product.sortOrder,
     active: product.active,
@@ -302,7 +317,7 @@ export class AdminService {
   async listProducts(): Promise<ProductDto[]> {
     const products = await this.prisma.product.findMany({
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
-      include: ADMIN_PRODUCT_INCLUDE,
+      select: ADMIN_PRODUCT_SELECT,
     });
     const counts = await getVariantStockCountMap(
       this.prisma,
@@ -336,6 +351,8 @@ export class AdminService {
         description: normalizeNullable(dto.description) ?? null,
         image: normalizeNullable(dto.image) ?? null,
         thumbnail: normalizeNullable(dto.thumbnail) ?? null,
+        imageBytes: dataUriBytes(normalizeNullable(dto.image)),
+        thumbnailBytes: dataUriBytes(normalizeNullable(dto.thumbnail)),
         category: normalizeNullable(dto.category) ?? null,
         sortOrder: dto.sortOrder ?? 0,
         active: dto.active ?? true,
@@ -366,7 +383,10 @@ export class AdminService {
     id: string,
     dto: UpdateProductDto,
   ): Promise<ProductDto> {
-    const product = await this.prisma.product.findUnique({ where: { id } });
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      select: PRODUCT_SCALARS,
+    });
     if (!product) {
       throw new NotFoundException(K.productNotFound);
     }
@@ -392,9 +412,17 @@ export class AdminService {
     if (dto.description !== undefined) {
       data.description = normalizeNullable(dto.description);
     }
-    if (dto.image !== undefined) data.image = normalizeNullable(dto.image);
+    // Ảnh và số byte của nó luôn đi cùng nhau — lệch một nhịp là danh sách
+    // dựng địa chỉ ảnh cho một sản phẩm không có ảnh (hoặc ngược lại).
+    if (dto.image !== undefined) {
+      const value = normalizeNullable(dto.image);
+      data.image = value;
+      data.imageBytes = dataUriBytes(value);
+    }
     if (dto.thumbnail !== undefined) {
-      data.thumbnail = normalizeNullable(dto.thumbnail);
+      const value = normalizeNullable(dto.thumbnail);
+      data.thumbnail = value;
+      data.thumbnailBytes = dataUriBytes(value);
     }
     if (dto.category !== undefined) {
       data.category = normalizeNullable(dto.category);
@@ -402,7 +430,11 @@ export class AdminService {
     if (dto.sortOrder !== undefined) data.sortOrder = dto.sortOrder;
     if (dto.active !== undefined) data.active = dto.active;
 
-    const updated = await this.prisma.product.update({ where: { id }, data });
+    const updated = await this.prisma.product.update({
+      where: { id },
+      data,
+      select: PRODUCT_SCALARS,
+    });
 
     // Chỉ dịch lại khi nội dung có bản dịch thực sự thay đổi — bật/tắt hiển thị
     // hay đổi thứ tự không cần gọi Claude API.
@@ -488,6 +520,7 @@ export class AdminService {
       data: {
         productId,
         data: dto.data,
+        bytes: dataUriBytes(dto.data) ?? 0,
         sortOrder: (product.images[0]?.sortOrder ?? -1) + 1,
       },
       select: { id: true },
@@ -497,7 +530,7 @@ export class AdminService {
       actor,
       'product.image.add',
       { type: 'product', id: productId },
-      { name: product.name, imageId: created.id, length: dto.data.length },
+      { name: product.name, imageId: created.id, bytes: dataUriBytes(dto.data) },
     );
     return this.loadProduct(productId);
   }
@@ -1069,7 +1102,7 @@ export class AdminService {
   async loadProduct(id: string): Promise<ProductDto> {
     const product = await this.prisma.product.findUnique({
       where: { id },
-      include: ADMIN_PRODUCT_DETAIL_INCLUDE,
+      select: ADMIN_PRODUCT_DETAIL_SELECT,
     });
     if (!product) {
       throw new NotFoundException(K.productNotFound);
