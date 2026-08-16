@@ -102,7 +102,7 @@ export function ProductDetail({ product }: { product: ProductDto }) {
         NGAY, không phải cuộn qua hết mô tả dài mới tới. Từ @3xl trở lên, các ô
         được đặt lại vào lưới hai cột nên bố cục máy tính giữ nguyên như cũ.
       */}
-      <div className="mt-6 grid gap-x-8 gap-y-6 @3xl:grid-cols-[1fr_380px] @3xl:items-start">
+      <div className="mt-6 grid gap-x-8 gap-y-6 @3xl:grid-cols-[1fr_380px] @3xl:grid-rows-[auto_1fr] @3xl:items-start">
         <div className="@3xl:col-start-1 @3xl:row-start-1">
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{product.name}</h1>
           {product.shortDescription && (
@@ -158,7 +158,16 @@ export function ProductDetail({ product }: { product: ProductDto }) {
           )}
         </div>
 
-        <div className="@3xl:col-start-2 @3xl:row-start-1 @3xl:sticky @3xl:top-24">
+        {/*
+          Hộp mua hàng trải HAI hàng, và hàng thứ hai là `1fr`.
+
+          Trước đây nó chỉ nằm ở hàng 1, nên chiều cao hàng 1 = chiều cao hộp mua
+          hàng (~700px) và phần mô tả ở hàng 2 bị đẩy xuống tận đáy hộp đó — nhìn
+          như bị bỏ quên, nhất là khi ảnh sản phẩm thấp. Cho hộp trải hai hàng và
+          dồn toàn bộ khoảng dư vào hàng 2 (`1fr`) thì mô tả nằm ngay dưới ảnh,
+          còn hộp mua hàng vẫn cao như cũ.
+        */}
+        <div className="@3xl:col-start-2 @3xl:row-start-1 @3xl:row-span-2 @3xl:sticky @3xl:top-24">
           <BuyBox product={product} />
         </div>
 
