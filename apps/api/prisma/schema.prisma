@@ -88,7 +88,10 @@ model Product {
   shortDescription String?
   description      String?
   currency         String  @default("USDT")
+  /// Ảnh bìa, bản lớn. Truy vấn danh sách cố ý KHÔNG select cột này.
   image            String?
+  /// Bản thu nhỏ (~400px) của ảnh bìa, dùng cho thẻ và danh sách quản trị.
+  thumbnail        String?
   category         String?
   sortOrder        Int     @default(0)
   active           Boolean @default(true)
@@ -101,6 +104,25 @@ model Product {
   translations ProductTranslation[]
   orderItems   OrderItem[]
   viewsDaily   ProductViewDaily[]
+  images       ProductImage[]
+}
+
+/// Ảnh phụ của sản phẩm (ảnh bìa vẫn nằm ở cột `Product.image`).
+///
+/// Để riêng một bảng chứ không nhét mảng vào cột của `Product`: truy vấn danh
+/// sách sản phẩm chạy ở mọi lần mở trang chủ, mà cột nằm trong `Product` là lần
+/// nào cũng kéo cả đống base64 về dù thẻ sản phẩm chỉ cần một ảnh nhỏ.
+model ProductImage {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Data URI đã nén ở trình duyệt trước khi gửi lên.
+  data      String
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([productId, sortOrder])
 }
 
 /// Lượt xem trang sản phẩm, GỘP THEO NGÀY.

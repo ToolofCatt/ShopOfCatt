@@ -1,6 +1,6 @@
 'use client';
 
-import type { ProductDto, ProductVariantDto } from '@webcatt/shared';
+import type { ProductDto, ProductImageDto, ProductVariantDto } from '@webcatt/shared';
 import { ProductCard } from '@/components/product-card';
 import { ProductDetail } from '@/components/product-detail';
 import { useI18n } from '@/lib/i18n/client';
@@ -19,6 +19,9 @@ export interface ProductPreviewInput {
   shortDescription: string;
   description: string;
   image: string;
+  thumbnail: string;
+  /** Ảnh phụ đã lưu (chỉ có ở chế độ sửa). */
+  images: ProductImageDto[];
   /** Chỉ có ở chế độ tạo mới: giá của loại "Mặc định" sắp được tạo. */
   price: string;
   /** Chế độ sửa: các loại có thật; chế độ tạo mới thì rỗng. */
@@ -56,6 +59,8 @@ function toPreviewProduct(input: ProductPreviewInput, fallbackName: string): Pro
     minPrice: prices.length > 0 ? Math.min(...prices) : 0,
     maxPrice: prices.length > 0 ? Math.max(...prices) : 0,
     image: input.image || null,
+    thumbnail: input.thumbnail || null,
+    images: input.images,
     category: input.category.trim() || null,
     sortOrder: 0,
     active: true,

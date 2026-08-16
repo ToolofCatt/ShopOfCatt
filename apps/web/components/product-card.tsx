@@ -22,7 +22,8 @@ export function ProductCard({ product }: { product: ProductDto }) {
       className="group flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-neutral-400"
     >
       <ProductVisual
-        image={product.image}
+        // Danh sách chỉ có ảnh nhỏ: truy vấn list không kéo cột ảnh lớn về.
+        image={product.thumbnail ?? product.image}
         name={product.name}
         className={cn('aspect-[4/3] w-full', outOfStock && 'opacity-50 grayscale')}
         iconClassName="h-10 w-10"

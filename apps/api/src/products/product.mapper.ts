@@ -1,6 +1,7 @@
 import type {
   Prisma,
   Product,
+  ProductImage,
   ProductTranslation,
   ProductVariant,
   ProductVariantTranslation,
@@ -8,6 +9,7 @@ import type {
 import {
   TRANSLATABLE_LOCALES,
   type ProductDto,
+  type ProductImageDto,
   type ProductTranslations,
   type ProductVariantDto,
   type TranslatableLocale,
@@ -30,7 +32,14 @@ export type VariantWithTranslations = ProductVariant & {
   translations?: ProductVariantTranslation[];
 };
 
-export type ProductWithVariants = Product & {
+/**
+ * `image` để tuỳ chọn có chủ ý: truy vấn danh sách sản phẩm dùng `select` và cố
+ * ý BỎ cột ảnh lớn ra ngoài cho nhẹ trang chủ, nên ở đó nó vắng mặt. Khai báo
+ * bắt buộc thì `publicListSelect` sẽ không gán được vào kiểu này.
+ */
+export type ProductWithVariants = Omit<Product, 'image'> & {
+  image?: string | null;
+  images?: ProductImage[];
   variants: VariantWithTranslations[];
   translations?: ProductTranslation[];
 };
@@ -93,6 +102,10 @@ function toVariantTranslations(
   return map;
 }
 
+export function toProductImageDto(image: ProductImage): ProductImageDto {
+  return { id: image.id, data: image.data, sortOrder: image.sortOrder };
+}
+
 export function toProductVariantDto(
   variant: VariantWithTranslations,
   counts: StockCounts = EMPTY_COUNTS,
@@ -150,7 +163,12 @@ export function toProductDto(
     currency: product.currency,
     minPrice,
     maxPrice,
-    image: product.image,
+    image: product.image ?? null,
+    thumbnail: product.thumbnail,
+    images: (product.images ?? [])
+      .slice()
+      .sort((a, b) => a.sortOrder - b.sortOrder || (a.id < b.id ? -1 : 1))
+      .map(toProductImageDto),
     category: pickNullable(translated?.category, product.category),
     sortOrder: product.sortOrder,
     active: product.active,

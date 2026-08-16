@@ -103,6 +103,12 @@ export const K = {
   adminDescriptionInvalid: 'admin.description_invalid',
   adminImageInvalid: 'admin.image_invalid',
   adminImageTooLarge: 'admin.image_too_large',
+  adminThumbnailInvalid: 'admin.thumbnail_invalid',
+  adminThumbnailTooLarge: 'admin.thumbnail_too_large',
+  adminImageDataRequired: 'admin.image_data_required',
+  adminImageTooMany: 'admin.image_too_many',
+  adminImageNotFound: 'admin.image_not_found',
+  adminImageOrderMismatch: 'admin.image_order_mismatch',
   adminCategoryInvalid: 'admin.category_invalid',
   adminSortOrderInt: 'admin.sort_order_int',
   adminActiveInvalid: 'admin.active_invalid',
@@ -469,6 +475,38 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Ảnh quá lớn — hãy chọn ảnh nhỏ hơn',
     en: 'Image is too large — please pick a smaller one',
     zh: '图片过大 — 请选择更小的图片',
+  },
+  [K.adminThumbnailInvalid]: {
+    vi: 'Ảnh thu nhỏ không hợp lệ',
+    en: 'Invalid thumbnail',
+    zh: '缩略图无效',
+  },
+  [K.adminThumbnailTooLarge]: {
+    vi: 'Ảnh thu nhỏ quá lớn',
+    en: 'Thumbnail is too large',
+    zh: '缩略图过大',
+  },
+  [K.adminImageDataRequired]: {
+    vi: 'Thiếu dữ liệu ảnh',
+    en: 'Image data is required',
+    zh: '缺少图片数据',
+  },
+  [K.adminImageTooMany]: {
+    vi: ({ max }: MessageParams) =>
+      `Mỗi sản phẩm chỉ được tối đa ${max} ảnh (tính cả ảnh bìa)`,
+    en: ({ max }: MessageParams) =>
+      `A product can have at most ${max} images, cover included`,
+    zh: ({ max }: MessageParams) => `每个商品最多 ${max} 张图片（含封面）`,
+  },
+  [K.adminImageNotFound]: {
+    vi: 'Không tìm thấy ảnh',
+    en: 'Image not found',
+    zh: '未找到图片',
+  },
+  [K.adminImageOrderMismatch]: {
+    vi: 'Danh sách sắp xếp không khớp với ảnh hiện có',
+    en: 'The ordering list does not match the current images',
+    zh: '排序列表与现有图片不匹配',
   },
   [K.adminCategoryInvalid]: {
     vi: 'Danh mục không hợp lệ',

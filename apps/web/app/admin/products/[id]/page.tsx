@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { use, useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, PackageX, ServerCrash } from 'lucide-react';
 import type { ProductDto } from '@webcatt/shared';
-import { apiErrorMessage, apiFetch } from '@/lib/api';
+import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import { Badge, Button, EmptyState, Spinner, buttonVariants } from '@/components/ui';
@@ -23,10 +23,23 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // The admin API exposes products as a list — load it and pick the edited one.
+  /*
+   * Endpoint riêng cho MỘT sản phẩm.
+   *
+   * Trước đây trang này gọi `GET /admin/products` rồi tự tìm theo id: kéo cả
+   * kho sản phẩm về chỉ để dùng một cái. Quan trọng hơn, endpoint danh sách cố
+   * ý KHÔNG trả ảnh phụ (mỗi sản phẩm tới 5 tấm base64), nên trình quản lý ảnh
+   * sẽ không bao giờ nhận được dữ liệu qua đường đó.
+   */
   const loadProduct = useCallback(async () => {
-    const products = await apiFetch<ProductDto[]>('/admin/products', { token });
-    return products.find((item) => item.id === id) ?? null;
+    try {
+      return await apiFetch<ProductDto>(`/admin/products/${id}`, { token });
+    } catch (err) {
+      // 404 = sản phẩm đã bị xoá ở nơi khác → hiện màn hình "không tìm thấy"
+      // chứ không phải màn hình lỗi kết nối.
+      if (err instanceof ApiError && err.status === 404) return null;
+      throw err;
+    }
   }, [id, token]);
 
   useEffect(() => {

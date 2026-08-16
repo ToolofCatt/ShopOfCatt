@@ -345,7 +345,7 @@ export default function AdminProductsPage() {
                 >
                   <div className="flex items-start gap-3">
                     <ProductVisual
-                      image={product.image}
+                      image={product.thumbnail ?? product.image}
                       name={product.name}
                       className={cn(
                         'h-14 w-14 shrink-0 rounded-lg',
@@ -416,7 +416,7 @@ export default function AdminProductsPage() {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <ProductVisual
-                            image={product.image}
+                            image={product.thumbnail ?? product.image}
                             name={product.name}
                             className={cn(
                               'h-10 w-10 shrink-0',

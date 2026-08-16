@@ -50,6 +50,7 @@ export const en: Dictionary = {
   product: {
     breadcrumbHome: 'Home',
     descriptionTitle: 'Product description',
+    viewImage: (n: number) => `View image ${n}`,
     noDescription: 'No description for this product yet.',
     outOfStock: 'Out of stock',
     inStockShort: (n: number) => `${n} left`,
@@ -382,6 +383,15 @@ export const en: Dictionary = {
     formImageReplace: 'Replace',
     formImageRemove: 'Remove',
     formImageDropHint: 'Drop an image here, or',
+    formGallery: 'More images',
+    formGalleryHint:
+      'Shown under the cover image on the product page. Adding or removing saves right away — no need to press Save.',
+    formGalleryChoose: 'Add images',
+    formGalleryRemaining: (n: number) => `${n} more image(s) allowed`,
+    formGalleryFull: (max: number) =>
+      `Limit of ${max} images reached — remove one to add another`,
+    formGalleryMoveLeft: 'Move earlier',
+    formGalleryMoveRight: 'Move later',
     formImageSize: (size: string) => `Compressed to ${size}`,
     formImageTooLarge: 'Still too large after compression — please pick another image.',
     formImageNotImage: 'That file is not an image.',
@@ -640,6 +650,9 @@ export const en: Dictionary = {
       'product.update': 'Update product',
       'product.delete': 'Delete product',
       'product.translate': 'Translate product',
+      'product.image.add': 'Add product image',
+      'product.image.delete': 'Delete product image',
+      'product.image.reorder': 'Reorder product images',
       'variant.create': 'Create variant',
       'variant.update': 'Update variant',
       'variant.delete': 'Delete variant',

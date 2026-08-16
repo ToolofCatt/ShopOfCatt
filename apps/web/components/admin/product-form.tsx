@@ -3,12 +3,17 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
-import { TRANSLATABLE_LOCALES, type ProductDto } from '@webcatt/shared';
+import {
+  TRANSLATABLE_LOCALES,
+  type ProductDto,
+  type ProductImageDto,
+} from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import { Button, Card, Field, Input, buttonVariants } from '@/components/ui';
 import { TEXTAREA_CLASSES, localeLabel } from '@/components/admin/helpers';
+import { GalleryPicker } from '@/components/admin/gallery-picker';
 import { ImagePicker } from '@/components/admin/image-picker';
 import { ProductPreview } from '@/components/admin/product-preview';
 import { ToggleRow } from '@/components/admin/toggle-row';
@@ -39,10 +44,20 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState(product?.category ?? '');
   const [image, setImage] = useState(product?.image ?? '');
+  const [thumbnail, setThumbnail] = useState(product?.thumbnail ?? '');
   const [shortDescription, setShortDescription] = useState(product?.shortDescription ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
   const [sortOrder, setSortOrder] = useState(product ? String(product.sortOrder) : '0');
   const [active, setActive] = useState(product?.active ?? true);
+
+  /*
+   * Ảnh phụ KHÔNG nằm trong biểu mẫu: mỗi thao tác gọi thẳng API và nhận về sản
+   * phẩm mới nhất. Vì thế bấm Huỷ cũng không hoàn tác được ảnh đã thêm — đúng
+   * như vậy, ảnh đã nằm trong CSDL rồi.
+   */
+  const [images, setImages] = useState<ProductImageDto[]>(product?.images ?? []);
+  const [galleryBusy, setGalleryBusy] = useState(false);
+  const [galleryError, setGalleryError] = useState<string | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<ProductFieldErrors>({});
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +98,7 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
       shortDescription: optional(shortDescription),
       description: optional(description),
       image: optional(image),
+      thumbnail: optional(thumbnail),
       category: optional(category),
     };
     // Giá chỉ gửi khi tạo mới: API dùng nó để tạo loại "Mặc định".
@@ -93,6 +109,57 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
       if (body[key] === undefined) delete body[key];
     }
     return body;
+  };
+
+  /**
+   * Chạy một thao tác ảnh phụ. Trả về false khi hỏng để bên gọi dừng vòng lặp
+   * nhiều tệp — ném lỗi ra ngoài thì GalleryPicker lại hiện thông báo "không
+   * đọc được tệp", sai hẳn nguyên nhân.
+   */
+  const runGallery = async (action: () => Promise<ProductDto>): Promise<boolean> => {
+    setGalleryBusy(true);
+    setGalleryError(null);
+    try {
+      const updated = await action();
+      setImages(updated.images);
+      onProductUpdated?.(updated);
+      return true;
+    } catch (err) {
+      setGalleryError(apiErrorMessage(err, t.common.connectionError));
+      return false;
+    } finally {
+      setGalleryBusy(false);
+    }
+  };
+
+  const handleAddImage = (data: string) =>
+    runGallery(() =>
+      apiFetch<ProductDto>(`/admin/products/${product?.id}/images`, {
+        method: 'POST',
+        body: { data },
+        token,
+      }),
+    );
+
+  const handleRemoveImage = async (imageId: string) => {
+    await runGallery(() =>
+      apiFetch<ProductDto>(`/admin/images/${imageId}`, { method: 'DELETE', token }),
+    );
+  };
+
+  const handleMoveImage = async (imageId: string, direction: -1 | 1) => {
+    const from = images.findIndex((item) => item.id === imageId);
+    const to = from + direction;
+    if (from === -1 || to < 0 || to >= images.length) return;
+    const ids = images.map((item) => item.id);
+    [ids[from], ids[to]] = [ids[to], ids[from]];
+    await runGallery(() =>
+      apiFetch<ProductDto>(`/admin/products/${product?.id}/images/order`, {
+        method: 'PATCH',
+        body: { ids },
+        token,
+      }),
+    );
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -241,8 +308,32 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
             )}
 
             <Field label={t.admin.formImage} htmlFor="product-image">
-              <ImagePicker value={image} onChange={setImage} />
+              <ImagePicker
+                value={image}
+                onChange={(pair) => {
+                  setImage(pair.image);
+                  setThumbnail(pair.thumbnail);
+                }}
+              />
             </Field>
+
+            {isEdit && product && (
+              <Field
+                label={t.admin.formGallery}
+                htmlFor="product-gallery"
+                hint={t.admin.formGalleryHint}
+                error={galleryError ?? undefined}
+              >
+                <GalleryPicker
+                  images={images}
+                  coverCount={image ? 1 : 0}
+                  busy={galleryBusy}
+                  onAdd={handleAddImage}
+                  onRemove={handleRemoveImage}
+                  onMove={handleMoveImage}
+                />
+              </Field>
+            )}
 
             <Field label={t.admin.formShortDescription} htmlFor="product-short-description">
               <Input
@@ -315,6 +406,8 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
               shortDescription,
               description,
               image,
+              thumbnail,
+              images,
               price,
               variants: product?.variants ?? [],
             }}

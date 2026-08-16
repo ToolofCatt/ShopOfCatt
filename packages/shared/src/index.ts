@@ -77,6 +77,33 @@ export type VariantTranslations = Partial<
  */
 export const PRODUCT_IMAGE_MAX_LENGTH = 500_000;
 
+/**
+ * Ảnh nhỏ (~400px) dùng cho thẻ ngoài trang chủ và các danh sách quản trị.
+ *
+ * Truy vấn danh sách sản phẩm KHÔNG kéo cột ảnh lớn về (xem `publicListSelect`
+ * trong `products.service.ts`). Trước khi có cột này, trang chủ 20 sản phẩm là
+ * 20 tấm ảnh 1200px nhúng thẳng vào JSON — vài MB cho một trang mà ô hiển thị
+ * chỉ rộng ~250px.
+ */
+export const PRODUCT_THUMBNAIL_MAX_LENGTH = 120_000;
+
+/**
+ * Số ảnh tối đa một sản phẩm: 1 ảnh bìa + 5 ảnh phụ.
+ *
+ * Chặn cứng vì ảnh lưu base64 trong CSDL và `backup.sh` giữ 14 bản dump: 50 sản
+ * phẩm × 6 ảnh × ~120 KB ≈ 36 MB mỗi bản, ≈ 500 MB cho cả 14 bản. Nới số này là
+ * nới luôn dung lượng sao lưu theo cấp số nhân.
+ */
+export const PRODUCT_IMAGE_MAX_COUNT = 6;
+
+/** Một ảnh phụ trong bộ sưu tập của sản phẩm (không gồm ảnh bìa). */
+export interface ProductImageDto {
+  id: string;
+  /** Data URI đã nén sẵn ở trình duyệt. */
+  data: string;
+  sortOrder: number;
+}
+
 /** Một "loại" của sản phẩm — có giá và kho riêng. */
 export interface ProductVariantDto {
   id: string;
@@ -100,7 +127,16 @@ export interface ProductDto {
   /** Giá thấp nhất / cao nhất trong các loại đang bán. */
   minPrice: number;
   maxPrice: number;
+  /**
+   * Ảnh bìa, kích thước lớn. **`null` ở endpoint danh sách** — truy vấn đó cố ý
+   * không kéo cột này về cho nhẹ trang. Chỗ nào chỉ cần ảnh nhỏ thì dùng
+   * `thumbnail ?? image`.
+   */
   image: string | null;
+  /** Bản thu nhỏ của ảnh bìa. Có mặt ở cả danh sách lẫn chi tiết. */
+  thumbnail: string | null;
+  /** Ảnh phụ, KHÔNG gồm ảnh bìa. Rỗng ở endpoint danh sách. */
+  images: ProductImageDto[];
   category: string | null;
   sortOrder: number;
   active: boolean;
@@ -472,6 +508,9 @@ export const AUDIT_ACTIONS = [
   'product.update',
   'product.delete',
   'product.translate',
+  'product.image.add',
+  'product.image.delete',
+  'product.image.reorder',
   'variant.create',
   'variant.update',
   'variant.delete',

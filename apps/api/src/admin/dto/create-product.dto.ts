@@ -8,7 +8,10 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { PRODUCT_IMAGE_MAX_LENGTH } from '@webcatt/shared';
+import {
+  PRODUCT_IMAGE_MAX_LENGTH,
+  PRODUCT_THUMBNAIL_MAX_LENGTH,
+} from '@webcatt/shared';
 import { K } from '../../i18n/messages';
 
 export class CreateProductDto {
@@ -46,6 +49,15 @@ export class CreateProductDto {
   @IsString({ message: K.adminImageInvalid })
   @MaxLength(PRODUCT_IMAGE_MAX_LENGTH, { message: K.adminImageTooLarge })
   image?: string;
+
+  /**
+   * Bản thu nhỏ của ảnh bìa (~400px), do trình duyệt sinh cùng lúc với ảnh lớn.
+   * Truy vấn danh sách chỉ kéo cột này về, nên nó phải nhỏ thật.
+   */
+  @IsOptional()
+  @IsString({ message: K.adminThumbnailInvalid })
+  @MaxLength(PRODUCT_THUMBNAIL_MAX_LENGTH, { message: K.adminThumbnailTooLarge })
+  thumbnail?: string;
 
   @IsOptional()
   @IsString({ message: K.adminCategoryInvalid })

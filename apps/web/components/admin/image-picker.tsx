@@ -7,8 +7,9 @@ import { cn } from '@/lib/cn';
 import { Button, Spinner } from '@/components/ui';
 import {
   ImageTooLargeError,
-  compressImage,
+  compressImagePair,
   formatDataUrlSize,
+  type CompressedPair,
 } from '@/lib/image-compress';
 
 /**
@@ -24,9 +25,13 @@ export function ImagePicker({
   value,
   onChange,
 }: {
-  /** Data URI hiện tại, hoặc chuỗi rỗng khi chưa có ảnh. */
+  /** Data URI bản LỚN hiện tại, hoặc chuỗi rỗng khi chưa có ảnh. */
   value: string;
-  onChange: (dataUrl: string) => void;
+  /**
+   * Trả về cả hai bản cùng lúc — bản nhỏ phải sinh từ đúng tệp vừa chọn.
+   * Xoá ảnh thì cả hai là chuỗi rỗng.
+   */
+  onChange: (pair: CompressedPair) => void;
 }) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -43,7 +48,7 @@ export function ImagePicker({
     setBusy(true);
     setError(null);
     try {
-      onChange(await compressImage(file));
+      onChange(await compressImagePair(file));
     } catch (err) {
       setError(
         err instanceof ImageTooLargeError
@@ -89,7 +94,11 @@ export function ImagePicker({
               >
                 {t.admin.formImageReplace}
               </Button>
-              <Button size="sm" variant="danger" onClick={() => onChange('')}>
+              <Button
+                size="sm"
+                variant="danger"
+                onClick={() => onChange({ image: '', thumbnail: '' })}
+              >
                 <Trash2 className="h-3.5 w-3.5" strokeWidth={1.75} />
                 {t.admin.formImageRemove}
               </Button>

@@ -7,6 +7,7 @@ import {
 import { Prisma, type Product, type User } from '@prisma/client';
 import {
   LOW_STOCK_THRESHOLD,
+  PRODUCT_IMAGE_MAX_COUNT,
   type AddStockResponse,
   type AdminOrderDetailDto,
   type AdminStatsDto,
@@ -35,6 +36,10 @@ import {
 import { TranslationService } from '../translation/translation.service';
 import { buildOrdersCsv } from './orders-csv';
 import { AddStockDto } from './dto/add-stock.dto';
+import {
+  AddProductImageDto,
+  ReorderProductImagesDto,
+} from './dto/product-image.dto';
 import { CreateProductDto } from './dto/create-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { OrdersQueryDto } from './dto/orders-query.dto';
@@ -42,7 +47,7 @@ import { StockQueryDto } from './dto/stock-query.dto';
 import type { SeriesDays } from './dto/stats-series-query.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
-import { K } from '../i18n/messages';
+import { K, withParams } from '../i18n/messages';
 
 const DEFAULT_ORDERS_PAGE_SIZE = 20;
 /** Trần số dòng khi xuất CSV — một cú bấm không được kéo sập tiến trình. */
@@ -60,17 +65,51 @@ const TRANSLATABLE_FIELDS = [
   'category',
 ] as const;
 
-/** Trang quản trị luôn xem được mọi loại + mọi bản dịch. */
+/**
+ * Include cho DANH SÁCH quản trị (luôn xem được mọi loại + mọi bản dịch) — cố ý KHÔNG kèm `images`.
+ *
+ * Danh sách có thể hàng chục sản phẩm, mỗi sản phẩm tới 5 ảnh phụ base64. Kèm
+ * vào đây là mỗi lần mở trang Sản phẩm kéo về vài chục MB. Ảnh phụ chỉ cần ở
+ * trang sửa một sản phẩm, nên nằm ở `ADMIN_PRODUCT_DETAIL_INCLUDE`.
+ */
 const ADMIN_PRODUCT_INCLUDE = {
   variants: { orderBy: VARIANT_ORDER_BY, include: { translations: true } },
   translations: true,
 } satisfies Prisma.ProductInclude;
 
-/** Chuẩn hóa chuỗi nullable: trim, chuỗi rỗng → null. */
-function normalizeNullable(value: string | undefined): string | null | undefined {
+/** Include cho MỘT sản phẩm (trang sửa): thêm ảnh phụ theo đúng thứ tự. */
+const ADMIN_PRODUCT_DETAIL_INCLUDE = {
+  ...ADMIN_PRODUCT_INCLUDE,
+  images: { orderBy: { sortOrder: 'asc' } },
+} satisfies Prisma.ProductInclude;
+
+/**
+ * Chuẩn hóa chuỗi nullable: trim, chuỗi rỗng → null.
+ *
+ * PHẢI nhận cả `null`. Biểu mẫu sửa sản phẩm gửi `null` cho mọi ô văn bản để
+ * trống (đó là cách xoá một giá trị đã đặt), mà `@IsOptional()` của
+ * class-validator bỏ qua null y như undefined nên nó đi thẳng xuống đây. Bản
+ * trước chỉ chặn `undefined` rồi gọi `.trim()`, nên chỉ cần sửa một sản phẩm mà
+ * để trống "Mô tả ngắn" là API đổ 500 "Cannot read properties of null".
+ */
+function normalizeNullable(
+  value: string | null | undefined,
+): string | null | undefined {
   if (value === undefined) return undefined;
+  if (value === null) return null;
   const trimmed = value.trim();
   return trimmed === '' ? null : trimmed;
+}
+
+/**
+ * Ảnh chỉ ghi ĐỘ DÀI, không ghi nội dung.
+ *
+ * Data URI dài tới ~375 KB, mà `diffChanges` lưu cả giá trị cũ lẫn mới: đổi ảnh
+ * một lần là một dòng nhật ký gần 1 MB, và dòng đó nằm trong cả 14 bản sao lưu.
+ * Độ dài vẫn đủ để biết "ảnh có đổi", vốn là tất cả những gì nhật ký cần.
+ */
+function imageDigest(value: string | null): string | null {
+  return value === null ? null : `ảnh ${value.length} ký tự`;
 }
 
 /** Ảnh chụp phẳng các trường vô hướng của sản phẩm — để diff cho nhật ký. */
@@ -80,7 +119,8 @@ function productSnapshot(product: Product): Record<string, unknown> {
     slug: product.slug,
     shortDescription: product.shortDescription,
     description: product.description,
-    image: product.image,
+    image: imageDigest(product.image),
+    thumbnail: imageDigest(product.thumbnail),
     category: product.category,
     sortOrder: product.sortOrder,
     active: product.active,
@@ -295,6 +335,7 @@ export class AdminService {
         shortDescription: normalizeNullable(dto.shortDescription) ?? null,
         description: normalizeNullable(dto.description) ?? null,
         image: normalizeNullable(dto.image) ?? null,
+        thumbnail: normalizeNullable(dto.thumbnail) ?? null,
         category: normalizeNullable(dto.category) ?? null,
         sortOrder: dto.sortOrder ?? 0,
         active: dto.active ?? true,
@@ -352,6 +393,9 @@ export class AdminService {
       data.description = normalizeNullable(dto.description);
     }
     if (dto.image !== undefined) data.image = normalizeNullable(dto.image);
+    if (dto.thumbnail !== undefined) {
+      data.thumbnail = normalizeNullable(dto.thumbnail);
+    }
     if (dto.category !== undefined) {
       data.category = normalizeNullable(dto.category);
     }
@@ -400,6 +444,123 @@ export class AdminService {
       { name: product.name },
     );
     return { success: true };
+  }
+
+  // ---------- Ảnh phụ của sản phẩm ----------
+
+  /**
+   * Thêm MỘT ảnh phụ vào cuối danh sách.
+   *
+   * Ảnh bìa tính vào hạn mức chung: đã có bìa thì chỉ còn
+   * `PRODUCT_IMAGE_MAX_COUNT - 1` chỗ cho ảnh phụ. Hạn mức tồn tại vì ảnh nằm
+   * base64 trong CSDL và đi theo cả 14 bản sao lưu.
+   */
+  async addProductImage(
+    actor: User,
+    productId: string,
+    dto: AddProductImageDto,
+  ): Promise<ProductDto> {
+    const product = await this.prisma.product.findUnique({
+      where: { id: productId },
+      select: {
+        name: true,
+        image: true,
+        images: {
+          select: { sortOrder: true },
+          orderBy: { sortOrder: 'desc' },
+          take: 1,
+        },
+        _count: { select: { images: true } },
+      },
+    });
+    if (!product) {
+      throw new NotFoundException(K.productNotFound);
+    }
+
+    const used = (product.image ? 1 : 0) + product._count.images;
+    if (used >= PRODUCT_IMAGE_MAX_COUNT) {
+      throw new BadRequestException(
+        withParams(K.adminImageTooMany, { max: PRODUCT_IMAGE_MAX_COUNT }),
+      );
+    }
+
+    const created = await this.prisma.productImage.create({
+      data: {
+        productId,
+        data: dto.data,
+        sortOrder: (product.images[0]?.sortOrder ?? -1) + 1,
+      },
+      select: { id: true },
+    });
+    // Ghi độ dài chứ không ghi nội dung — xem chú thích ở `imageDigest`.
+    await this.audit.log(
+      actor,
+      'product.image.add',
+      { type: 'product', id: productId },
+      { name: product.name, imageId: created.id, length: dto.data.length },
+    );
+    return this.loadProduct(productId);
+  }
+
+  async deleteProductImage(actor: User, imageId: string): Promise<ProductDto> {
+    const image = await this.prisma.productImage.findUnique({
+      where: { id: imageId },
+      select: { productId: true, product: { select: { name: true } } },
+    });
+    if (!image) {
+      throw new NotFoundException(K.adminImageNotFound);
+    }
+    await this.prisma.productImage.delete({ where: { id: imageId } });
+    await this.audit.log(
+      actor,
+      'product.image.delete',
+      { type: 'product', id: image.productId },
+      { name: image.product.name, imageId },
+    );
+    return this.loadProduct(image.productId);
+  }
+
+  /**
+   * Sắp xếp lại ảnh phụ theo danh sách id gửi lên.
+   *
+   * Danh sách phải khớp CHÍNH XÁC tập ảnh hiện có. Thiếu một id thì ảnh đó giữ
+   * `sortOrder` cũ và chen vào giữa thứ tự mới — sai lặng lẽ, chủ shop chỉ phát
+   * hiện khi mở trang khách. Thà trả lỗi.
+   */
+  async reorderProductImages(
+    actor: User,
+    productId: string,
+    dto: ReorderProductImagesDto,
+  ): Promise<ProductDto> {
+    const current = await this.prisma.productImage.findMany({
+      where: { productId },
+      select: { id: true },
+    });
+    const currentIds = new Set(current.map((row) => row.id));
+    const wanted = new Set(dto.ids);
+    if (
+      wanted.size !== dto.ids.length ||
+      wanted.size !== currentIds.size ||
+      dto.ids.some((id) => !currentIds.has(id))
+    ) {
+      throw new BadRequestException(K.adminImageOrderMismatch);
+    }
+
+    await this.prisma.$transaction(
+      dto.ids.map((id, index) =>
+        this.prisma.productImage.update({
+          where: { id },
+          data: { sortOrder: index },
+        }),
+      ),
+    );
+    await this.audit.log(
+      actor,
+      'product.image.reorder',
+      { type: 'product', id: productId },
+      { count: dto.ids.length },
+    );
+    return this.loadProduct(productId);
   }
 
   // ---------- Loại sản phẩm ----------
@@ -904,10 +1065,11 @@ export class AdminService {
 
   // ---------- Nội bộ ----------
 
-  private async loadProduct(id: string): Promise<ProductDto> {
+  /** Một sản phẩm kèm bản dịch và ảnh phụ — dùng cho trang sửa. */
+  async loadProduct(id: string): Promise<ProductDto> {
     const product = await this.prisma.product.findUnique({
       where: { id },
-      include: ADMIN_PRODUCT_INCLUDE,
+      include: ADMIN_PRODUCT_DETAIL_INCLUDE,
     });
     if (!product) {
       throw new NotFoundException(K.productNotFound);

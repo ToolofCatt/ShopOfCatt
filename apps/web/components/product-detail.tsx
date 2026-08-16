@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import type { ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { ProductDto } from '@webcatt/shared';
 import { BuyBox } from '@/components/buy-box';
-import { ProductVisual } from '@/components/icon-map';
 import { useI18n } from '@/lib/i18n/client';
+import { cn } from '@/lib/cn';
 
 /**
  * Thân trang chi tiết sản phẩm — dùng chung giữa trang khách và khung xem trước
@@ -51,6 +51,21 @@ export function renderDescription(description: string): ReactNode[] {
 export function ProductDetail({ product }: { product: ProductDto }) {
   const { t } = useI18n();
 
+  /*
+   * Ảnh bìa đứng đầu, rồi tới ảnh phụ theo thứ tự chủ shop đã sắp.
+   *
+   * Ảnh bìa nằm ở cột `Product.image` chứ không nằm trong bảng `ProductImage`,
+   * nên phải ghép ở đây. Lọc rỗng để sản phẩm chưa có ảnh nào thì mảng rỗng và
+   * cả khối ảnh biến mất, thay vì để lại một ô xám cao gần 400px.
+   */
+  const gallery = useMemo(
+    () => [product.image, ...product.images.map((item) => item.data)].filter(
+      (source): source is string => Boolean(source),
+    ),
+    [product.image, product.images],
+  );
+  const [selected, setSelected] = useState(0);
+
   // Hết hàng khi mọi loại đang bán đều không còn kho (hoặc chưa có loại nào).
   const outOfStock = product.variants
     .filter((variant) => variant.active)
@@ -94,12 +109,53 @@ export function ProductDetail({ product }: { product: ProductDto }) {
             <p className="mt-2 text-neutral-500">{product.shortDescription}</p>
           )}
 
-          <ProductVisual
-            image={product.image}
-            name={product.name}
-            className={`mt-6 aspect-[16/9] w-full ${outOfStock ? 'opacity-50 grayscale' : ''}`}
-            iconClassName="h-16 w-16"
-          />
+          {gallery.length > 0 && (
+            <div className={`mt-6 ${outOfStock ? 'opacity-50 grayscale' : ''}`}>
+              {/*
+                `max-h` chứ KHÔNG phải `aspect-[…]`, và `object-contain` chứ
+                không `object-cover`. Trước đây ô ảnh cố định 16:9 và cắt ảnh
+                cho đầy khung: logo hay ảnh hộp sản phẩm bị xén mất trên dưới,
+                và khi sản phẩm CHƯA có ảnh thì cái ô xám rỗng cao gần 400px vẫn
+                chiếm chỗ, đẩy phần mô tả xuống dưới màn hình đầu tiên.
+                Giờ khung co theo ảnh, và không có ảnh thì không có khung.
+              */}
+              <div className="flex items-center justify-center overflow-hidden rounded-lg bg-neutral-100 p-2">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={gallery[Math.min(selected, gallery.length - 1)]}
+                  alt={product.name}
+                  className="max-h-[420px] w-auto max-w-full rounded object-contain"
+                />
+              </div>
+
+              {gallery.length > 1 && (
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {gallery.map((source, index) => (
+                    <button
+                      key={index}
+                      type="button"
+                      aria-label={t.product.viewImage(index + 1)}
+                      aria-pressed={index === selected}
+                      onClick={() => setSelected(index)}
+                      className={cn(
+                        'h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 bg-neutral-100 transition-colors',
+                        index === selected
+                          ? 'border-neutral-950'
+                          : 'border-transparent hover:border-neutral-300',
+                      )}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={source}
+                        alt=""
+                        className="h-full w-full object-contain"
+                      />
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="@3xl:col-start-2 @3xl:row-start-1 @3xl:sticky @3xl:top-24">

@@ -56,6 +56,10 @@ import { AdminService } from './admin.service';
 import { AddStockDto } from './dto/add-stock.dto';
 import { MarkPaidDto } from './dto/mark-paid.dto';
 import { CreateProductDto } from './dto/create-product.dto';
+import {
+  AddProductImageDto,
+  ReorderProductImagesDto,
+} from './dto/product-image.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { OrdersQueryDto } from './dto/orders-query.dto';
 import { InsightsQueryDto } from './dto/insights-query.dto';
@@ -218,6 +222,17 @@ export class AdminController {
     return this.adminService.createProduct(user, dto);
   }
 
+  /**
+   * Một sản phẩm, kèm ảnh phụ — endpoint danh sách cố ý không trả ảnh phụ.
+   *
+   * Trước đây trang sửa sản phẩm gọi `GET products` rồi tự tìm theo id: kéo về
+   * toàn bộ sản phẩm chỉ để dùng một cái, và không có chỗ nào đưa ảnh phụ tới.
+   */
+  @Get('products/:id')
+  getProduct(@Param('id') id: string): Promise<ProductDto> {
+    return this.adminService.loadProduct(id);
+  }
+
   @Patch('products/:id')
   updateProduct(
     @CurrentUser() user: User,
@@ -242,6 +257,34 @@ export class AdminController {
     @Param('id') id: string,
   ): Promise<ProductDto> {
     return this.adminService.translateProduct(user, id);
+  }
+
+  // ---------- Ảnh phụ của sản phẩm ----------
+
+  @Post('products/:id/images')
+  addProductImage(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: AddProductImageDto,
+  ): Promise<ProductDto> {
+    return this.adminService.addProductImage(user, id, dto);
+  }
+
+  @Patch('products/:id/images/order')
+  reorderProductImages(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: ReorderProductImagesDto,
+  ): Promise<ProductDto> {
+    return this.adminService.reorderProductImages(user, id, dto);
+  }
+
+  @Delete('images/:id')
+  deleteProductImage(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ): Promise<ProductDto> {
+    return this.adminService.deleteProductImage(user, id);
   }
 
   // ---------- Loại sản phẩm ----------

@@ -30,6 +30,40 @@ export class ProductsService {
         include: { translations: { where: { locale } } },
       },
       translations: { where: { locale } },
+      images: { orderBy: { sortOrder: 'asc' as const } },
+    };
+  }
+
+  /**
+   * Danh sách sản phẩm: liệt kê từng cột và **cố ý bỏ `image`** (ảnh bìa bản
+   * lớn) cùng quan hệ `images`.
+   *
+   * Trước đây chỗ này dùng `include`, mà `include` kéo về MỌI cột của Product.
+   * Ảnh lưu base64 ngay trong CSDL, mỗi tấm tới ~375 KB, nên trang chủ 20 sản
+   * phẩm là vài MB JSON — trong khi ô ảnh trên thẻ chỉ rộng ~250px và đã có
+   * `thumbnail`. Thêm cột mới vào Product thì nhớ thêm vào đây, nếu không nó sẽ
+   * vắng mặt ở trang chủ.
+   */
+  private publicListSelect(locale: Locale) {
+    return {
+      id: true,
+      slug: true,
+      name: true,
+      shortDescription: true,
+      description: true,
+      currency: true,
+      thumbnail: true,
+      category: true,
+      sortOrder: true,
+      active: true,
+      createdAt: true,
+      updatedAt: true,
+      variants: {
+        where: { active: true },
+        orderBy: VARIANT_ORDER_BY,
+        include: { translations: { where: { locale } } },
+      },
+      translations: { where: { locale } },
     };
   }
 
@@ -38,7 +72,7 @@ export class ProductsService {
     const products = await this.prisma.product.findMany({
       where: { active: true },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
-      include: this.publicInclude(locale),
+      select: this.publicListSelect(locale),
     });
     const counts = await getVariantStockCountMap(
       this.prisma,
