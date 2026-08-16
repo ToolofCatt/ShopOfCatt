@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Minus, Plus, ShieldCheck, Ticket, Wallet, Zap } from 'lucide-react';
+import { Minus, Plus, Ticket, Wallet, Zap } from 'lucide-react';
 import {
   formatUsdt,
   type CouponPreviewDto,
@@ -43,7 +43,6 @@ export function BuyBox({ product }: { product: ProductDto }) {
   const outOfStock = variants.every((variant) => variant.availableStock <= 0);
   const unitPrice = selected ? selected.price : product.minPrice;
   const availableStock = selected ? selected.availableStock : product.availableStock;
-  const sold = selected ? selected.sold : product.sold;
   const maxQuantity = Math.max(1, availableStock);
 
   const priceLabel = selected
@@ -208,13 +207,12 @@ export function BuyBox({ product }: { product: ProductDto }) {
 
   return (
     <Card className="space-y-5 p-5 shadow-sm">
-      <div>
-        <p className="text-3xl font-semibold tabular-nums tracking-tight">{priceLabel}</p>
-        <p className="mt-1 text-sm text-neutral-500">
-          {availableStock <= 0 ? t.product.outOfStock : t.product.inStockLong(availableStock)}
-          {sold > 0 && <> · {t.product.sold(sold)}</>}
-        </p>
-      </div>
+      {/*
+        Dưới giá từng có dòng "Còn N sản phẩm · Đã bán N". Bỏ theo yêu cầu chủ
+        shop: tồn kho đã hiện ở nhãn từng loại và ở dòng "Tối đa N" dưới ô số
+        lượng, còn trạng thái hết hàng thì nút mua tự đổi chữ.
+      */}
+      <p className="text-3xl font-semibold tabular-nums tracking-tight">{priceLabel}</p>
 
       {variants.length > 1 && (
         <VariantSelector
@@ -351,18 +349,20 @@ export function BuyBox({ product }: { product: ProductDto }) {
         {error && <p className="text-sm text-red-600">{error}</p>}
       </div>
 
-      <div className="space-y-2 border-t border-neutral-100 pt-4 text-sm text-neutral-500">
-        <p className="flex items-center gap-2">
-          <ShieldCheck className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-          {t.product.reassureAuto}
-        </p>
-        {paymentLabel && (
+      {/*
+        Dòng "Giao tự động ngay sau khi thanh toán" đã bỏ theo yêu cầu chủ shop.
+        Khối này phải bọc trong điều kiện: nó có đường kẻ trên: còn mỗi nhãn
+        phương thức thanh toán, mà nhãn đó rỗng khi cửa hàng chưa bật phương
+        thức nào — không bọc thì đáy thẻ hiện một vạch kẻ thừa không nội dung.
+      */}
+      {paymentLabel && (
+        <div className="border-t border-neutral-100 pt-4 text-sm text-neutral-500">
           <p className="flex items-center gap-2">
             <Wallet className="h-4 w-4 shrink-0" strokeWidth={1.75} />
             {paymentLabel}
           </p>
-        )}
-      </div>
+        </div>
+      )}
     </Card>
   );
 }
