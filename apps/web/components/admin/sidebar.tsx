@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
+  KeyRound,
   LayoutDashboard,
   Megaphone,
   FileText,
@@ -85,6 +86,19 @@ export function AdminSidebar() {
         ))}
 
         <div className="my-2 border-t border-neutral-200" aria-hidden="true" />
+
+        {/*
+          Đổi mật khẩu vốn chỉ nằm trong menu tài khoản ở header — mà nút mở menu
+          đó chỉ hiện dãy số mã khách hàng, nhìn không ra là menu. Chủ shop làm
+          việc trong trang quản trị thì tìm ở thanh bên và trang Cấu hình, cả hai
+          đều không có, nên tưởng hệ thống không cho đổi mật khẩu.
+        */}
+        {/* active={false}: thanh bên chỉ tồn tại trong /admin/*, rời khỏi đó là
+            nó tháo luôn nên không bao giờ tự tô sáng được — giống mục "Về cửa hàng". */}
+        <NavLink
+          item={{ href: '/account/password', label: t.nav.changePassword, icon: KeyRound }}
+          active={false}
+        />
 
         <NavLink item={{ href: '/', label: t.admin.navStore, icon: Store }} active={false} />
       </div>
