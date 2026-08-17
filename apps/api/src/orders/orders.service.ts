@@ -30,7 +30,6 @@ import {
 } from '@webcatt/shared';
 import { BinanceExchangeService } from '../binance-exchange/binance-exchange.service';
 import {
-  buildUniqueCryptoAmount,
   matchDeposits,
   binanceNetworkToLabel,
   type BinanceDeposit,
@@ -58,17 +57,6 @@ interface ReservedItem {
 
 /** Khoản nạp được tính từ trước khi tạo đơn tối đa 10 phút (đồng bộ với matcher). */
 const CRYPTO_SLACK_MS = 10 * 60_000;
-
-/**
- * Số tiền của một đơn bị "giữ chỗ" thêm 24 giờ sau khi đơn đó kết thúc.
- *
- * Trước đây chỉ tránh trùng với đơn ĐANG CHỜ. Kịch bản hỏng: đơn A hết hạn sau
- * 30 phút, khách A chuyển tiền muộn; số tiền của A được cấp lại cho đơn B mới;
- * khoản tiền của A về sau khi B được tạo nên khớp vào B — khách B nhận hàng
- * bằng tiền của khách A. Hiếm, nhưng là giao nhầm hàng và không hoàn tác được.
- */
-const AMOUNT_COOLDOWN_MS = 24 * 60 * 60_000;
-
 /** Xóa các trường phiên Binance Pay khi chuyển sang phương thức khác. */
 const CLEAR_PAY_SESSION = {
   prepayId: null,
@@ -563,34 +551,20 @@ export class OrdersService {
       if (binanceId === '') {
         throw new BadRequestException(K.paymentMethodUnavailable);
       }
-      // Số tiền phải khác mọi đơn BINANCE_ID đang chờ — giao dịch Pay cũng
-      // không mang mã đơn, nên số tiền chính là thứ phân biệt khách với nhau.
-      const pendingPay = await this.prisma.payment.findMany({
-        where: {
-          mode: 'BINANCE_ID',
-          cryptoAmount: { not: null },
-          orderId: { not: orderId },
-          OR: [
-            { status: 'PENDING' },
-            { createdAt: { gte: new Date(Date.now() - AMOUNT_COOLDOWN_MS) } },
-          ],
-        },
-        select: { cryptoAmount: true },
-      });
-      const payAmount = buildUniqueCryptoAmount(
-        Number(order.totalAmount),
-        pendingPay.map((p) => Number(p.cryptoAmount)),
-      );
-      if (payAmount === null) {
-        throw new ServiceUnavailableException(K.paymentCryptoAmountUnavailable);
-      }
+      /*
+       * Số tiền ĐÚNG BẰNG giá bán, không thêm phần lẻ.
+       *
+       * Đổi lại, số tiền một mình không còn chỉ ra được đơn nào: khách phải ghi
+       * MÃ ĐƠN vào phần ghi chú khi chuyển. Không ghi thì bộ đối soát chỉ dám
+       * khớp khi đúng một đơn chờ cùng số tiền — xem `matchPayTransfers`.
+       */
       await this.prisma.payment.update({
         where: { id: payment.id },
         data: {
           mode: 'BINANCE_ID',
           cryptoNetwork: null,
           cryptoAddress: binanceId,
-          cryptoAmount: new Prisma.Decimal(payAmount.toFixed(6)),
+          cryptoAmount: new Prisma.Decimal(Number(order.totalAmount).toFixed(6)),
           cryptoTxId: null,
           ...CLEAR_PAY_SESSION,
         },
@@ -606,26 +580,15 @@ export class OrdersService {
       throw new BadRequestException(K.paymentMethodUnavailable);
     }
 
-    // Số tiền đang chờ HOẶC vừa dùng trong 24 giờ trên cùng mạng — xem
-    // AMOUNT_COOLDOWN_MS để biết vì sao không chỉ xét đơn đang chờ.
-    const pendingPayments = await this.prisma.payment.findMany({
-      where: {
-        mode: 'CRYPTO',
-        cryptoNetwork: network,
-        cryptoAmount: { not: null },
-        orderId: { not: orderId },
-        OR: [
-          { status: 'PENDING' },
-          { createdAt: { gte: new Date(Date.now() - AMOUNT_COOLDOWN_MS) } },
-        ],
-      },
-      select: { cryptoAmount: true },
-    });
-    const taken = pendingPayments.map((p) => Number(p.cryptoAmount));
-    const amount = buildUniqueCryptoAmount(Number(order.totalAmount), taken);
-    if (amount === null) {
-      throw new ServiceUnavailableException(K.paymentCryptoAmountUnavailable);
-    }
+    /*
+     * Số tiền ĐÚNG BẰNG giá bán, không thêm phần lẻ.
+     *
+     * Giao dịch on-chain không có chỗ ghi chú, nên khi hai khách cùng mua một
+     * sản phẩm thì hai khoản nạp giống hệt nhau và hệ thống KHÔNG tự phân biệt
+     * được. Khách dán TxID để chỉ rõ khoản nào của mình; bộ đối soát nền chỉ tự
+     * khớp khi đúng một đơn chờ cùng số tiền.
+     */
+    const amount = Number(order.totalAmount);
 
     await this.prisma.payment.update({
       where: { id: payment.id },

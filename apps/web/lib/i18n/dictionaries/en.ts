@@ -91,7 +91,7 @@ export const en: Dictionary = {
     scanQr: 'Scan the QR code with the Binance app to pay',
     qrAlt: (code: string) => `Payment QR code for order ${code}`,
     openBinance: 'Open Binance Pay',
-    autoChecking: 'Checking payment automatically every 4 seconds',
+    autoChecking: 'Checking payment automatically every 3 seconds',
     checkNow: 'Check payment',
     cancelOrder: 'Cancel order',
     cancelConfirm: 'Are you sure you want to cancel this order?',
@@ -120,6 +120,10 @@ export const en: Dictionary = {
     /* ===== v6 — send to a Binance ID ===== */
     binanceIdTitle: 'Send via Binance Pay',
     binanceIdLabel: 'Receiving Binance ID',
+    binanceIdMemoLabel: 'REQUIRED note when sending',
+    binanceIdMemoHint:
+      'Paste this order code into the note/message field when you send. Without it the system cannot tell which order the money belongs to.',
+    copyMemo: 'Copy order code',
     binanceIdSteps:
       'Open the Binance app → Pay → Send → paste the ID above, then enter the exact amount shown above.',
     copyBinanceId: 'Copy Binance ID',
@@ -753,6 +757,9 @@ export const en: Dictionary = {
     settingBinanceIdHint:
       'Customers send USDT straight to your Binance account. No merchant account needed — payments are matched automatically from your Binance Pay history.',
     settingBinanceIdLabel: 'Receiving Binance ID',
+    settingBinanceQrLabel: 'Binance Pay receive QR image',
+    settingBinanceQrHint:
+      'Open the Binance app → Pay → Receive, screenshot the QR and upload it. It cannot be generated from a Binance ID.',
     settingBinanceIdValueHint:
       'Digits only. Open the Binance app → Pay → receive section to find your ID.',
     errBinanceIdRequired: 'Enter a Binance ID before enabling this',

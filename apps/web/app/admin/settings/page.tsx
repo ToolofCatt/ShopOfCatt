@@ -26,6 +26,7 @@ import {
   Spinner,
 } from '@/components/ui';
 import { PageHeader } from '@/components/admin/page-header';
+import { ImagePicker } from '@/components/admin/image-picker';
 import { ToggleRow } from '@/components/admin/toggle-row';
 import { formatAmount } from '@/components/admin/helpers';
 
@@ -50,6 +51,7 @@ export default function AdminSettingsPage() {
   const [binancePayEnabled, setBinancePayEnabled] = useState(false);
   const [binanceIdEnabled, setBinanceIdEnabled] = useState(false);
   const [binanceId, setBinanceId] = useState('');
+  const [binanceQr, setBinanceQr] = useState('');
   const [cryptoEnabled, setCryptoEnabled] = useState(false);
   const [bep20Address, setBep20Address] = useState('');
   const [trc20Address, setTrc20Address] = useState('');
@@ -72,6 +74,7 @@ export default function AdminSettingsPage() {
     setBinancePayEnabled(next.binancePayEnabled);
     setBinanceIdEnabled(next.binanceIdEnabled);
     setBinanceId(next.binanceId);
+    setBinanceQr(next.binanceQr);
     setCryptoEnabled(next.cryptoEnabled);
     setBep20Address(next.bep20Address);
     setTrc20Address(next.trc20Address);
@@ -153,6 +156,7 @@ export default function AdminSettingsPage() {
           binancePayEnabled,
           binanceIdEnabled,
           binanceId: binanceId.trim(),
+          binanceQr,
           cryptoEnabled,
           bep20Address: bep20Address.trim(),
           trc20Address: trc20Address.trim(),
@@ -279,6 +283,28 @@ export default function AdminSettingsPage() {
                     className="font-mono text-[13px]"
                     onChange={(event) => {
                       setBinanceId(event.target.value.replace(/\D/g, ''));
+                      markDirty();
+                    }}
+                  />
+                </Field>
+
+                {/*
+                  QR phải do chủ shop TỰ TẢI LÊN, không dựng được từ Binance ID:
+                  mã của Binance chứa một liên kết nội bộ có token riêng. Mã hoá
+                  số ID trần thì app Binance quét không hiểu.
+                */}
+                <Field
+                  label={t.admin.settingBinanceQrLabel}
+                  htmlFor="setting-binance-qr"
+                  hint={t.admin.settingBinanceQrHint}
+                >
+                  <ImagePicker
+                    id="setting-binance-qr"
+                    value={binanceQr}
+                    bytes={null}
+                    onChange={(pair) => {
+                      // Lấy bản LỚN: mã QR nén mạnh là nhoè, máy quét đọc không ra.
+                      setBinanceQr(pair.image);
                       markDirty();
                     }}
                   />

@@ -90,7 +90,7 @@ export const zh: Dictionary = {
     scanQr: '使用 Binance 应用扫描二维码付款',
     qrAlt: (code: string) => `订单 ${code} 的付款二维码`,
     openBinance: '打开 Binance Pay',
-    autoChecking: '每 4 秒自动查询付款状态',
+    autoChecking: '每 3 秒自动查询付款状态',
     checkNow: '查询付款',
     cancelOrder: '取消订单',
     cancelConfirm: '确定要取消这笔订单吗？',
@@ -118,6 +118,9 @@ export const zh: Dictionary = {
     /* ===== v6 — 转账至 Binance ID ===== */
     binanceIdTitle: '通过 Binance Pay 转账',
     binanceIdLabel: '收款 Binance ID',
+    binanceIdMemoLabel: '转账时必须填写的备注',
+    binanceIdMemoHint: '转账时请把此订单号粘贴到备注/留言栏。不填则系统无法判断这笔款属于哪个订单。',
+    copyMemo: '复制订单号',
     binanceIdSteps: '打开币安 App → Pay → 转账 → 粘贴上方 ID，并按上方金额准确转账。',
     copyBinanceId: '复制 Binance ID',
     cryptoExactWarning: '请转账与此完全一致的金额 —— 系统通过金额识别您的订单。',
@@ -735,6 +738,9 @@ export const zh: Dictionary = {
     settingBinanceIdHint:
       '客户直接把 USDT 转到你的币安账户。无需商户账号 — 系统会根据 Binance Pay 记录自动对账。',
     settingBinanceIdLabel: '收款 Binance ID',
+    settingBinanceQrLabel: 'Binance Pay 收款二维码图片',
+    settingBinanceQrHint:
+      '打开币安 App → Pay → 收款，截图二维码后上传。无法根据 Binance ID 自动生成。',
     settingBinanceIdValueHint: '仅限数字。打开币安 App → Pay → 收款页面即可查看你的 ID。',
     errBinanceIdRequired: '启用前请先填写 Binance ID',
     settingCrypto: 'USDT 链上转账（BEP20 / TRC20）',

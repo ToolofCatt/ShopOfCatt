@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   binanceNetworkToLabel,
-  buildUniqueCryptoAmount,
   matchDeposits,
   NETWORK_TO_BINANCE,
   type BinanceDeposit,
@@ -179,38 +178,42 @@ describe('matchDeposits — những khoản nạp PHẢI bị từ chối', () =
 });
 
 describe('matchDeposits — không được giao trùng', () => {
-  it('MỘT khoản nạp không trả được cho HAI đơn cùng số tiền', () => {
+  it('HAI đơn cùng số tiền → KHÔNG tự khớp, để khách dán TxID', () => {
+    /*
+     * Số tiền của đơn nay đúng bằng giá bán, nên hai khách mua cùng sản phẩm
+     * chuyển hai khoản giống hệt nhau. Chọn bừa một đơn là giao hàng cho người
+     * chưa trả và bỏ rơi người đã trả — thà không giao và để khách tự dán TxID.
+     */
     const matches = matchDeposits(
-      [
-        pending({ orderId: 'order-A' }),
-        pending({ orderId: 'order-B' }),
-      ],
+      [pending({ orderId: 'order-A' }), pending({ orderId: 'order-B' })],
       [deposit()],
       new Set(),
     );
-    expect(matches).toHaveLength(1);
+    expect(matches).toEqual([]);
   });
 
-  it('HAI khoản nạp giống nhau trả cho HAI đơn khác nhau, mỗi đơn một lần', () => {
+  it('hai đơn cùng số tiền thì kể cả có hai khoản nạp cũng không tự khớp', () => {
+    // Không thể biết khoản nào của ai, dù đếm ra vừa đủ.
     const matches = matchDeposits(
       [pending({ orderId: 'order-A' }), pending({ orderId: 'order-B' })],
       [deposit({ txId: 'tx-1' }), deposit({ txId: 'tx-2' })],
       new Set(),
     );
-    expect(matches).toHaveLength(2);
-    expect(new Set(matches.map((m) => m.orderId))).toEqual(
-      new Set(['order-A', 'order-B']),
-    );
-    expect(new Set(matches.map((m) => m.txId))).toEqual(new Set(['tx-1', 'tx-2']));
+    expect(matches).toEqual([]);
   });
 
   it('cùng một txId xuất hiện hai lần trong danh sách chỉ được tính một lần', () => {
     // Lịch sử nạp lấy từ API có thể trùng lặp khi hai lần quét gối đầu nhau.
     const matches = matchDeposits(
-      [pending({ orderId: 'order-A' }), pending({ orderId: 'order-B' })],
+      [pending({ orderId: 'order-A' })],
       [deposit({ txId: 'tx-1' }), deposit({ txId: 'tx-1' })],
       new Set(),
     );
+    expect(matches).toHaveLength(1);
+  });
+
+  it('một đơn duy nhất khớp số tiền thì vẫn tự khớp như trước', () => {
+    const matches = matchDeposits([pending()], [deposit()], new Set());
     expect(matches).toHaveLength(1);
   });
 
@@ -238,51 +241,5 @@ describe('matchDeposits — không được giao trùng', () => {
 
   it('không có đơn nào chờ thì không khớp gì', () => {
     expect(matchDeposits([], [deposit()], new Set())).toEqual([]);
-  });
-});
-
-describe('buildUniqueCryptoAmount', () => {
-  it('luôn cộng thêm phần lẻ, không bao giờ trả về đúng giá gốc', () => {
-    // Bỏ phần lẻ đi là hai khách mua cùng sản phẩm gửi hai khoản giống hệt nhau
-    // và hệ thống không còn cách nào biết khoản nào của ai.
-    const amount = buildUniqueCryptoAmount(12, []);
-    expect(amount).toBeCloseTo(12.0001, 6);
-  });
-
-  it('lấy bước NHỎ NHẤT còn trống — khoản cộng thêm phải gần như bằng không', () => {
-    // Bản trước bốc ngẫu nhiên 1..999 nên trung bình cộng thêm +0.05 USDT,
-    // khách nhìn vào tưởng bị thu phí.
-    expect(buildUniqueCryptoAmount(2.5, [])).toBeCloseTo(2.5001, 6);
-    expect(buildUniqueCryptoAmount(2.5, [2.5001])).toBeCloseTo(2.5002, 6);
-    expect(buildUniqueCryptoAmount(2.5, [2.5001, 2.5002])).toBeCloseTo(2.5003, 6);
-  });
-
-  it('tránh những số tiền đã bị chiếm, kể cả khi không liền nhau', () => {
-    expect(buildUniqueCryptoAmount(12, [12.0001, 12.0002, 12.0004])).toBeCloseTo(
-      12.0003,
-      6,
-    );
-  });
-
-  it('so sánh theo micro-USDT nên không bị sai vì số thực', () => {
-    // 0.1 + 0.2 !== 0.3 trong số thực; hàm phải quy về số nguyên trước khi so.
-    expect(buildUniqueCryptoAmount(0.3, [0.3001])).toBeCloseTo(0.3002, 6);
-  });
-
-  it('hết cả 999 chỗ thì trả null thay vì cấp số trùng', () => {
-    // Cấp trùng nghĩa là hai đơn cùng số tiền → khoản nạp khớp sai đơn.
-    const taken = Array.from({ length: 999 }, (_, i) => 12 + (i + 1) * 0.0001);
-    expect(buildUniqueCryptoAmount(12, taken)).toBeNull();
-  });
-
-  it('số tiền sinh ra khác nhau với mọi đơn đang chờ cùng giá', () => {
-    const taken: number[] = [];
-    for (let i = 0; i < 50; i++) {
-      const amount = buildUniqueCryptoAmount(9.99, taken);
-      expect(amount).not.toBeNull();
-      expect(taken).not.toContain(amount);
-      taken.push(amount as number);
-    }
-    expect(new Set(taken).size).toBe(50);
   });
 });

@@ -13,6 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  PRODUCT_IMAGE_MAX_LENGTH,
   SUPPORT_CHANNELS_MAX,
   SUPPORT_FIELD_MAX_LENGTH,
   SUPPORT_NOTE_MAX_LENGTH,
@@ -56,6 +57,18 @@ export class UpdateSettingsDto {
   @Matches(/^[0-9]*$/, { message: K.adminBinanceIdInvalid })
   @MaxLength(32, { message: K.adminBinanceIdInvalid })
   binanceId: string;
+
+  /**
+   * Ảnh QR nhận tiền Binance Pay, data URI đã nén ở trình duyệt.
+   *
+   * Dùng mức chặn của ảnh LỚN chứ không phải ảnh nhỏ: mã QR cần nét, nén mạnh
+   * là các ô vuông nhoè và máy quét đọc không ra. Chỉ một ảnh cho cả cửa hàng
+   * nên vài trăm KB trong CSDL là chấp nhận được.
+   */
+  @IsOptional()
+  @IsString({ message: K.adminImageInvalid })
+  @MaxLength(PRODUCT_IMAGE_MAX_LENGTH, { message: K.adminImageTooLarge })
+  binanceQr?: string;
 
   @IsBoolean({ message: K.adminSettingsFlagInvalid })
   cryptoEnabled: boolean;

@@ -38,6 +38,13 @@ export interface PaymentMethodDto {
    * binance_id. Không có với binance_pay (merchant) và mock.
    */
   address?: string;
+  /**
+   * Ảnh QR nhận tiền (data URI) — hiện chỉ có với binance_id.
+   *
+   * Trả kèm ở đây chứ KHÔNG chụp vào từng đơn: ảnh cỡ trăm KB, nhân theo số đơn
+   * là phình cả CSDL lẫn 14 bản sao lưu, mà nội dung thì giống nhau mọi đơn.
+   */
+  qr?: string;
 }
 
 // ---------- Auth ----------
@@ -218,6 +225,8 @@ export interface AdminStoreSettingDto {
   /** Binance Pay cá nhân: khách chuyển tới Binance ID bên dưới. */
   binanceIdEnabled: boolean;
   binanceId: string;
+  /** Ảnh QR Binance Pay do chủ shop tải lên (data URI), rỗng = chưa có. */
+  binanceQr: string;
   cryptoEnabled: boolean;
   bep20Address: string;
   trc20Address: string;

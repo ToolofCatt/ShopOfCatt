@@ -8,7 +8,13 @@ import {
 const LUC = new Date('2026-08-17T10:00:00.000Z').getTime();
 
 function don(overrides: Partial<PendingPayPayment> = {}): PendingPayPayment {
-  return { orderId: 'don-1', expected: 5.0123, createdAtMs: LUC, ...overrides };
+  return {
+    orderId: 'don-1',
+    code: 'DH-AAAAAA',
+    expected: 5.0123,
+    createdAtMs: LUC,
+    ...overrides,
+  };
 }
 
 function giaoDich(overrides: Partial<BinancePayTransfer> = {}): BinancePayTransfer {
@@ -27,7 +33,9 @@ const KHONG_DUNG = new Set<string>();
 describe('matchPayTransfers', () => {
   it('khớp khi đúng số tiền và đến sau khi đặt đơn', () => {
     const kq = matchPayTransfers([don()], [giaoDich()], KHONG_DUNG);
-    expect(kq).toEqual([{ orderId: 'don-1', transactionId: 'P_AAA', amount: 5.0123 }]);
+    expect(kq).toEqual([
+      { orderId: 'don-1', transactionId: 'P_AAA', amount: 5.0123, by: 'amount' },
+    ]);
   });
 
   it('BỎ QUA tiền RA — chi 5 USDT của chủ shop không được thành đơn của khách', () => {
@@ -82,22 +90,70 @@ describe('matchPayTransfers', () => {
     expect(kq).toEqual([]);
   });
 
-  it('một giao dịch chỉ trả cho MỘT đơn dù hai đơn cùng số tiền', () => {
+  it('HAI đơn cùng số tiền, giao dịch không ghi chú → BỎ QUA, không đoán', () => {
+    // Số tiền nay đúng bằng giá bán nên hai khách mua cùng sản phẩm chuyển hai
+    // khoản giống hệt. Đoán bừa là giao hàng cho người chưa trả.
     const kq = matchPayTransfers(
-      [don({ orderId: 'don-1' }), don({ orderId: 'don-2' })],
+      [don({ orderId: 'don-1', code: 'DH-AAA' }), don({ orderId: 'don-2', code: 'DH-BBB' })],
       [giaoDich()],
       KHONG_DUNG,
     );
-    expect(kq).toHaveLength(1);
+    expect(kq).toEqual([]);
   });
 
-  it('hai giao dịch cùng số tiền trả cho hai đơn khác nhau', () => {
+  it('hai đơn cùng số tiền nhưng có GHI CHÚ mã đơn → khớp đúng đơn đó', () => {
     const kq = matchPayTransfers(
-      [don({ orderId: 'don-1' }), don({ orderId: 'don-2' })],
-      [giaoDich({ transactionId: 'P_A' }), giaoDich({ transactionId: 'P_B' })],
+      [don({ orderId: 'don-1', code: 'DH-AAA' }), don({ orderId: 'don-2', code: 'DH-BBB' })],
+      [giaoDich({ note: 'thanh toan DH-BBB' })],
+      KHONG_DUNG,
+    );
+    expect(kq).toEqual([
+      { orderId: 'don-2', transactionId: 'P_AAA', amount: 5.0123, by: 'memo' },
+    ]);
+  });
+
+  it('ghi chú đúng mã nhưng SAI SỐ TIỀN → không khớp', () => {
+    // Ghi chú do người gửi tự nhập nên không được tin một mình.
+    const kq = matchPayTransfers(
+      [don({ code: 'DH-AAA' })],
+      [giaoDich({ note: 'DH-AAA', amount: 1 })],
+      KHONG_DUNG,
+    );
+    expect(kq).toEqual([]);
+  });
+
+  it('ghi chú mã đơn không tồn tại → lùi về khớp theo số tiền', () => {
+    const kq = matchPayTransfers(
+      [don({ code: 'DH-AAA' })],
+      [giaoDich({ note: 'DH-KHONG-CO' })],
+      KHONG_DUNG,
+    );
+    expect(kq).toHaveLength(1);
+    expect(kq[0].by).toBe('amount');
+  });
+
+  it('ghi chú không phân biệt chữ hoa chữ thường', () => {
+    const kq = matchPayTransfers(
+      [don({ orderId: 'don-1', code: 'DH-AaBb' }), don({ orderId: 'don-2', code: 'DH-ZZZZ' })],
+      [giaoDich({ note: 'dh-aabb' })],
+      KHONG_DUNG,
+    );
+    expect(kq).toHaveLength(1);
+    expect(kq[0].orderId).toBe('don-1');
+    expect(kq[0].by).toBe('memo');
+  });
+
+  it('hai đơn cùng số tiền, mỗi giao dịch ghi chú riêng → khớp đúng từng đơn', () => {
+    const kq = matchPayTransfers(
+      [don({ orderId: 'don-1', code: 'DH-AAA' }), don({ orderId: 'don-2', code: 'DH-BBB' })],
+      [
+        giaoDich({ transactionId: 'P_A', note: 'DH-AAA' }),
+        giaoDich({ transactionId: 'P_B', note: 'DH-BBB' }),
+      ],
       KHONG_DUNG,
     );
     expect(kq.map((m) => m.orderId).sort()).toEqual(['don-1', 'don-2']);
+    expect(kq.every((m) => m.by === 'memo')).toBe(true);
   });
 
   it('bỏ qua giao dịch vào Binance ID khác', () => {
@@ -135,7 +191,7 @@ describe('matchPayTransfers', () => {
       KHONG_DUNG,
     );
     expect(kq).toEqual([
-      { orderId: 'don-1', transactionId: 'P_TRUOC', amount: 5.0123 },
+      { orderId: 'don-1', transactionId: 'P_TRUOC', amount: 5.0123, by: 'amount' },
     ]);
   });
 });

@@ -365,6 +365,12 @@ model StoreSetting {
   binanceIdEnabled  Boolean  @default(false)
   /// Binance ID nhận tiền, ví dụ "1240006466"
   binanceId         String   @default("")
+  /// Ảnh QR nhận tiền của Binance Pay, do chủ shop tự tải lên (data URI).
+  ///
+  /// KHÔNG dựng được từ Binance ID: mã QR của Binance chứa một liên kết nội bộ
+  /// có token riêng, không suy ra từ số ID. Mã hoá số ID trần thì app Binance
+  /// quét không hiểu — thà để chủ shop chụp QR trong app rồi tải lên.
+  binanceQr         String   @default("")
   cryptoEnabled     Boolean  @default(false)
   bep20Address      String   @default("")
   trc20Address      String   @default("")

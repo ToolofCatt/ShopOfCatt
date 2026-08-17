@@ -81,15 +81,24 @@ export function matchDeposits(
     const label = binanceNetworkToLabel(deposit.network);
     if (!label) continue;
 
-    // Tìm đơn khớp: cùng mạng, đúng số tiền, tạo trước khi nạp (trừ dung sai), chưa bị gán.
-    const candidate = pending.find(
+    // Đơn khớp: cùng mạng, đúng số tiền, tạo trước khi nạp (trừ dung sai), chưa bị gán.
+    const candidates = pending.filter(
       (p) =>
         !claimedOrders.has(p.orderId) &&
         p.network === label &&
         Math.abs(deposit.amount - p.expected) <= epsilon &&
         deposit.insertTimeMs >= p.createdAtMs - slackMs,
     );
-    if (!candidate) continue;
+    /*
+     * NHIỀU HƠN MỘT đơn khớp thì BỎ QUA, không đoán.
+     *
+     * Số tiền của đơn nay đúng bằng giá bán, nên hai khách mua cùng sản phẩm sẽ
+     * chuyển hai khoản giống hệt nhau. Đoán bừa là giao hàng cho người chưa trả
+     * và bỏ rơi người đã trả. Trường hợp này khách tự dán TxID để chỉ rõ khoản
+     * nào của mình, hoặc chủ shop đối soát tay.
+     */
+    if (candidates.length !== 1) continue;
+    const candidate = candidates[0];
 
     claimedOrders.add(candidate.orderId);
     consumedTx.add(deposit.txId);
@@ -102,34 +111,4 @@ export function matchDeposits(
   }
 
   return matches;
-}
-
-/**
- * Sinh số tiền USDT DUY NHẤT cho một đơn: giá gốc + phần lẻ k×0.0001, với k là
- * bước NHỎ NHẤT còn trống. Trả null khi hết chỗ (k > 999).
- *
- * Vì sao phần lẻ phải tồn tại: giao dịch on-chain lẫn Binance Pay đều KHÔNG mang
- * mã đơn. Số tiền chính là mã đơn — bỏ nó đi thì hai khách cùng mua một sản phẩm
- * sẽ gửi hai khoản giống hệt nhau và hệ thống không có cách nào biết ai là ai.
- *
- * Vì sao lấy bước nhỏ nhất chứ không bốc ngẫu nhiên như trước: ngẫu nhiên trong
- * 1..999 cộng trung bình +0.05 USDT và tối đa +0.0999 — khách nhìn vào tưởng bị
- * thu phí. Lấy tuần tự thì cửa hàng ít đơn chờ gần như luôn ra +0.0001, tức một
- * phần vạn USDT, coi như bằng không.
- *
- * Đoán trước được số tiền KHÔNG phải lỗ hổng: kẻ gửi đúng số tiền của đơn người
- * khác chỉ đang tự bỏ tiền ra để người kia được nhận hàng.
- */
-export function buildUniqueCryptoAmount(
-  base: number,
-  takenAmounts: readonly number[],
-): number | null {
-  const taken = new Set(takenAmounts.map((a) => Math.round(a * 1_000_000)));
-  const baseUnits = Math.round(base * 1_000_000);
-
-  for (let k = 1; k <= 999; k++) {
-    const units = baseUnits + k * 100; // k × 0.0001 USDT = k×100 micro-USDT
-    if (!taken.has(units)) return units / 1_000_000;
-  }
-  return null;
 }

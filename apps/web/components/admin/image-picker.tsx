@@ -23,10 +23,16 @@ import {
  * Nhận cả kéo-thả: dán ảnh từ Zalo/điện thoại sang là thao tác thường gặp nhất.
  */
 export function ImagePicker({
+  id = 'product-image',
   value,
   bytes,
   onChange,
 }: {
+  /**
+   * Id của ô chọn tệp. Có tham số vì trang cấu hình dùng thêm một ImagePicker
+   * nữa cho ảnh QR — hai ô cùng id thì nhãn trỏ sai ô và không bấm được.
+   */
+  id?: string;
   /**
    * Thứ để hiển thị: ĐỊA CHỈ ảnh đã lưu, hoặc data URI của ảnh vừa chọn. Cả hai
    * đều dùng thẳng làm `src` được.
@@ -77,7 +83,7 @@ export function ImagePicker({
     <div className="space-y-2">
       <input
         ref={inputRef}
-        id="product-image"
+        id={id}
         type="file"
         accept="image/*"
         className="sr-only"

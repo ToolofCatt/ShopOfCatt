@@ -96,7 +96,7 @@ export const vi = {
     scanQr: 'Quét mã QR bằng ứng dụng Binance để thanh toán',
     qrAlt: (code: string) => `Mã QR thanh toán đơn ${code}`,
     openBinance: 'Mở Binance Pay',
-    autoChecking: 'Tự động kiểm tra thanh toán mỗi 4 giây',
+    autoChecking: 'Tự động kiểm tra thanh toán mỗi 3 giây',
     checkNow: 'Kiểm tra thanh toán',
     cancelOrder: 'Hủy đơn',
     cancelConfirm: 'Bạn có chắc chắn muốn hủy đơn hàng này?',
@@ -125,6 +125,10 @@ export const vi = {
     /* ===== v6 — chuyển tới Binance ID ===== */
     binanceIdTitle: 'Chuyển qua Binance Pay',
     binanceIdLabel: 'Binance ID nhận tiền',
+    binanceIdMemoLabel: 'Ghi chú BẮT BUỘC khi chuyển',
+    binanceIdMemoHint:
+      'Dán mã đơn này vào ô ghi chú/lời nhắn khi chuyển. Không ghi thì hệ thống không biết khoản tiền của đơn nào.',
+    copyMemo: 'Sao chép mã đơn',
     binanceIdSteps:
       'Mở app Binance → Pay → Gửi → dán ID ở trên, rồi nhập đúng số tiền phía trên.',
     copyBinanceId: 'Sao chép Binance ID',
@@ -763,6 +767,9 @@ export const vi = {
     settingBinanceIdHint:
       'Khách chuyển USDT thẳng tới tài khoản Binance của bạn. Không cần tài khoản merchant; hệ thống tự đối soát qua lịch sử Binance Pay.',
     settingBinanceIdLabel: 'Binance ID nhận tiền',
+    settingBinanceQrLabel: 'Ảnh QR nhận tiền Binance Pay',
+    settingBinanceQrHint:
+      'Mở app Binance → Pay → Nhận tiền, chụp lại mã QR rồi tải lên. Không tự dựng được từ Binance ID.',
     settingBinanceIdValueHint:
       'Chỉ gồm chữ số. Mở app Binance → Pay → phần nhận tiền để xem ID của bạn.',
     errBinanceIdRequired: 'Điền Binance ID trước khi bật',

@@ -17,6 +17,7 @@ import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import { Button, Card, Input, Label } from '@/components/ui';
 import { VariantSelector } from '@/components/variant-selector';
+import { Tabs } from '@/components/admin/tabs';
 
 export function BuyBox({ product }: { product: ProductDto }) {
   const router = useRouter();
@@ -99,6 +100,18 @@ export function BuyBox({ product }: { product: ProductDto }) {
 
   /** Chưa bật phương thức nào → đặt hàng chắc chắn lỗi 503, chặn ngay tại đây. */
   const noPaymentMethod = methods !== null && methods.length === 0;
+
+  /*
+   * Khách chọn phương thức NGAY Ở ĐÂY, cùng lúc chọn số lượng.
+   *
+   * Trước đây phải đặt đơn xong, sang trang thanh toán mới thấy có những cách
+   * nào — biết mình không trả được bằng cách nào thì đã giữ mất hàng và phải
+   * huỷ đơn.
+   */
+  const [payMethod, setPayMethod] = useState<PaymentMethod | null>(null);
+  useEffect(() => {
+    if (methods && methods.length > 0) setPayMethod((cur) => cur ?? methods[0]);
+  }, [methods]);
 
   // Mã giảm giá: giữ mã đã áp dụng, số tiền giảm luôn do máy chủ tính lại
   // mỗi khi đổi loại hoặc số lượng — không tự tính ở trình duyệt.
@@ -199,6 +212,22 @@ export function BuyBox({ product }: { product: ProductDto }) {
         },
         token,
       });
+      /*
+       * Chốt phương thức ngay, trước khi chuyển trang. Lỗi ở bước này KHÔNG
+       * chặn: đơn đã tạo và trang thanh toán vẫn cho chọn lại, chặn ở đây chỉ
+       * làm khách mắc kẹt với một đơn đang giữ hàng.
+       */
+      if (payMethod) {
+        try {
+          await apiFetch(`/orders/${response.order.code}/select-payment`, {
+            method: 'POST',
+            body: { method: payMethod },
+            token,
+          });
+        } catch {
+          // để trang thanh toán xử lý
+        }
+      }
       router.push(`/checkout/${response.order.code}`);
     } catch (err) {
       setError(apiErrorMessage(err, t.common.connectionError));
@@ -356,13 +385,28 @@ export function BuyBox({ product }: { product: ProductDto }) {
         phương thức thanh toán, mà nhãn đó rỗng khi cửa hàng chưa bật phương
         thức nào — không bọc thì đáy thẻ hiện một vạch kẻ thừa không nội dung.
       */}
-      {paymentLabel && (
-        <div className="border-t border-neutral-100 pt-4 text-sm text-neutral-500">
-          <p className="flex items-center gap-2">
-            <Wallet className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-            {paymentLabel}
-          </p>
+      {/*
+        Nhiều phương thức thì cho chọn hẳn; chỉ một thì nêu tên cho khách biết
+        mình sẽ trả bằng gì, không cần bắt chọn giữa một lựa chọn.
+      */}
+      {methods && methods.length > 1 && !outOfStock ? (
+        <div className="space-y-2 border-t border-neutral-100 pt-4">
+          <Label htmlFor="pay-method">{t.checkout.methodTitle}</Label>
+          <Tabs
+            items={methods.map((m) => ({ value: m, label: t.checkout.methods[m] }))}
+            value={payMethod ?? methods[0]}
+            onChange={(value) => setPayMethod(value as PaymentMethod)}
+          />
         </div>
+      ) : (
+        paymentLabel && (
+          <div className="border-t border-neutral-100 pt-4 text-sm text-neutral-500">
+            <p className="flex items-center gap-2">
+              <Wallet className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+              {paymentLabel}
+            </p>
+          </div>
+        )
       )}
     </Card>
   );

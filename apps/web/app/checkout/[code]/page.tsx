@@ -237,7 +237,7 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
     if (!order || expired) return;
     const id = window.setInterval(() => {
       void checkPayment(false);
-    }, 4000);
+    }, 3000);
     return () => window.clearInterval(id);
   }, [order, expired, checkPayment]);
 
@@ -376,7 +376,11 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
    * `cryptoQr` là QR địa chỉ ví do máy chủ dựng; `qrcodeLink` là QR do Binance
    * Pay merchant trả về. Không có QR thì trang tự thu lại còn một cột.
    */
-  const qrSrc = payment?.cryptoQr ?? payment?.qrcodeLink ?? null;
+  const binanceQr =
+    payment?.mode === 'BINANCE_ID'
+      ? (methods?.find((m) => m.method === 'binance_id')?.qr ?? null)
+      : null;
+  const qrSrc = payment?.cryptoQr ?? binanceQr ?? payment?.qrcodeLink ?? null;
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-4">
@@ -533,6 +537,28 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                   />
                 </div>
                 <p className="text-xs text-neutral-500">{t.checkout.binanceIdSteps}</p>
+              </div>
+
+              {/*
+                GHI CHÚ là thứ chỉ ra đơn nào. Số tiền nay đúng bằng giá bán, nên
+                hai khách mua cùng sản phẩm chuyển hai khoản giống hệt nhau —
+                không ghi mã đơn thì hệ thống không dám khớp và đơn phải chờ chủ
+                shop đối soát tay.
+              */}
+              <div className="space-y-1.5 border-t border-neutral-100 pt-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                  {t.checkout.binanceIdMemoLabel}
+                </p>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-2.5">
+                  <span className="break-all font-mono text-lg font-semibold text-neutral-950">
+                    {order.code}
+                  </span>
+                  <CopyIconButton text={order.code} label={t.checkout.copyMemo} />
+                </div>
+                <p className="flex items-start gap-1.5 text-xs font-medium text-neutral-950">
+                  <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                  {t.checkout.binanceIdMemoHint}
+                </p>
               </div>
             </div>
           ) : payment?.mode === 'CRYPTO' ? (

@@ -92,7 +92,12 @@ export class SettingsService {
     }
     const binanceId = setting.binanceId.trim();
     if (setting.binanceIdEnabled && binanceId !== '') {
-      methods.push({ method: 'binance_id', address: binanceId });
+      const qr = setting.binanceQr.trim();
+      methods.push({
+        method: 'binance_id',
+        address: binanceId,
+        ...(qr === '' ? {} : { qr }),
+      });
     }
     const bep20 = setting.bep20Address.trim();
     if (setting.cryptoEnabled && bep20 !== '') {
@@ -166,6 +171,11 @@ export class SettingsService {
     return (await this.getSetting()).binanceId.trim();
   }
 
+  /** Ảnh QR Binance Pay chủ shop đã tải lên (rỗng = chưa có). */
+  async getBinanceQr(): Promise<string> {
+    return (await this.getSetting()).binanceQr;
+  }
+
   async getAdmin(): Promise<AdminStoreSettingDto> {
     return toAdminDto(await this.getSetting());
   }
@@ -226,6 +236,8 @@ export class SettingsService {
       binancePayEnabled: dto.binancePayEnabled,
       binanceIdEnabled: dto.binanceIdEnabled,
       binanceId,
+      // Bỏ trống (không gửi lên) = giữ ảnh QR cũ, đừng xoá mất.
+      binanceQr: dto.binanceQr === undefined ? before.binanceQr : dto.binanceQr.trim(),
       cryptoEnabled: dto.cryptoEnabled,
       bep20Address,
       trc20Address,
@@ -259,6 +271,7 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     binancePayEnabled: setting.binancePayEnabled,
     binanceIdEnabled: setting.binanceIdEnabled,
     binanceId: setting.binanceId,
+    binanceQr: setting.binanceQr,
     cryptoEnabled: setting.cryptoEnabled,
     bep20Address: setting.bep20Address,
     trc20Address: setting.trc20Address,

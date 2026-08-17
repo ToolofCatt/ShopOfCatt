@@ -192,6 +192,7 @@ export class CryptoReconcileService implements OnModuleInit, OnModuleDestroy {
 
     const pending: PendingPayPayment[] = payments.map((p) => ({
       orderId: p.orderId,
+      code: p.order.code,
       expected: Number(p.cryptoAmount),
       createdAtMs: p.order.createdAt.getTime(),
     }));
@@ -223,7 +224,8 @@ export class CryptoReconcileService implements OnModuleInit, OnModuleDestroy {
       }
       await this.fulfillment.markPaidAndDeliver({ orderId: match.orderId });
       this.logger.log(
-        `Đối soát Binance Pay: đã khớp đơn ${payment.order.code} với ${match.amount} USDT (giao dịch ${match.transactionId})`,
+        `Đối soát Binance Pay: đã khớp đơn ${payment.order.code} với ${match.amount} USDT ` +
+          `(giao dịch ${match.transactionId}, khớp theo ${match.by === 'memo' ? 'ghi chú' : 'số tiền'})`,
       );
     }
   }
