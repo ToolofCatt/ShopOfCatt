@@ -62,6 +62,7 @@ export const zh: Dictionary = {
     total: '合计',
     buyNow: '立即购买',
     payBinancePay: 'Binance Pay',
+    payBinanceId: 'Binance Pay（转账至 ID）',
     payCrypto: (networks: string) => `USDT 链上 (${networks})`,
     payMock: '测试模式',
     noPaymentMethod: '店铺暂不接受付款，请稍后再来。',
@@ -106,12 +107,19 @@ export const zh: Dictionary = {
     methods: {
       mock: '测试模式',
       binance_pay: 'Binance Pay',
+      binance_id: 'Binance Pay · 转账至 ID',
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
     },
 
     cryptoTitle: 'USDT 链上转账',
     cryptoAmountLabel: '应转金额',
+
+    /* ===== v6 — 转账至 Binance ID ===== */
+    binanceIdTitle: '通过 Binance Pay 转账',
+    binanceIdLabel: '收款 Binance ID',
+    binanceIdSteps: '打开币安 App → Pay → 转账 → 粘贴上方 ID，并按上方金额准确转账。',
+    copyBinanceId: '复制 Binance ID',
     cryptoExactWarning: '请转账与此完全一致的金额 —— 系统通过金额识别您的订单。',
     cryptoQrAlt: '收款钱包地址二维码',
     cryptoQrHint: '扫码获取钱包地址。二维码不包含金额 — 仍需按上方金额准确转账。',
@@ -310,7 +318,8 @@ export const zh: Dictionary = {
 
   paymentMode: {
     MOCK: '测试模式（Mock）',
-    BINANCE: 'Binance Pay',
+    BINANCE: 'Binance Pay（商户）',
+    BINANCE_ID: 'Binance Pay · 转账至 ID',
     CRYPTO: 'USDT 链上转账',
   },
 
@@ -722,6 +731,12 @@ export const zh: Dictionary = {
     settingMockHint: '仅用于测试 —— 不会产生真实交易。',
     settingBinancePay: 'Binance Pay',
     settingBinancePayHint: 'Binance Pay 商户网关（二维码 + Binance 应用）。',
+    settingBinanceId: '转账至 Binance ID',
+    settingBinanceIdHint:
+      '客户直接把 USDT 转到你的币安账户。无需商户账号 — 系统会根据 Binance Pay 记录自动对账。',
+    settingBinanceIdLabel: '收款 Binance ID',
+    settingBinanceIdValueHint: '仅限数字。打开币安 App → Pay → 收款页面即可查看你的 ID。',
+    errBinanceIdRequired: '启用前请先填写 Binance ID',
     settingCrypto: 'USDT 链上转账（BEP20 / TRC20）',
     settingCryptoHint: '客户直接把 USDT 转入商店的 Binance 钱包，系统自动核对入账记录。',
     settingCryptoDisabledHint: '服务器未配置 Binance API 密钥，暂时无法开启链上付款。',

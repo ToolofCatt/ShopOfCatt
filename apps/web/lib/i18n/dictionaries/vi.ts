@@ -67,6 +67,7 @@ export const vi = {
     total: 'Tổng cộng',
     buyNow: 'Mua ngay',
     payBinancePay: 'Binance Pay',
+    payBinanceId: 'Binance Pay (chuyển tới ID)',
     payCrypto: (networks: string) => `USDT on-chain (${networks})`,
     payMock: 'Chế độ thử nghiệm',
     noPaymentMethod: 'Cửa hàng tạm chưa nhận thanh toán. Vui lòng quay lại sau.',
@@ -113,12 +114,20 @@ export const vi = {
     methods: {
       mock: 'Giả lập',
       binance_pay: 'Binance Pay',
+      binance_id: 'Binance Pay · chuyển tới ID',
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
     } satisfies Record<PaymentMethod, string>,
 
     cryptoTitle: 'Chuyển USDT on-chain',
     cryptoAmountLabel: 'Số tiền phải gửi',
+
+    /* ===== v6 — chuyển tới Binance ID ===== */
+    binanceIdTitle: 'Chuyển qua Binance Pay',
+    binanceIdLabel: 'Binance ID nhận tiền',
+    binanceIdSteps:
+      'Mở app Binance → Pay → Gửi → dán ID ở trên, rồi nhập đúng số tiền phía trên.',
+    copyBinanceId: 'Sao chép Binance ID',
     cryptoExactWarning: 'Gửi CHÍNH XÁC số này — hệ thống nhận diện đơn của bạn qua số tiền.',
     cryptoQrAlt: 'Mã QR địa chỉ ví nhận',
     cryptoQrHint:
@@ -322,7 +331,8 @@ export const vi = {
 
   paymentMode: {
     MOCK: 'Giả lập (Mock)',
-    BINANCE: 'Binance Pay',
+    BINANCE: 'Binance Pay (merchant)',
+    BINANCE_ID: 'Binance Pay · chuyển tới ID',
     CRYPTO: 'USDT on-chain',
   },
 
@@ -749,6 +759,13 @@ export const vi = {
     settingMockHint: 'Chỉ dùng khi thử nghiệm — không phát sinh giao dịch thật.',
     settingBinancePay: 'Binance Pay',
     settingBinancePayHint: 'Cổng Binance Pay cho merchant (QR + ứng dụng Binance).',
+    settingBinanceId: 'Chuyển tới Binance ID',
+    settingBinanceIdHint:
+      'Khách chuyển USDT thẳng tới tài khoản Binance của bạn. Không cần tài khoản merchant; hệ thống tự đối soát qua lịch sử Binance Pay.',
+    settingBinanceIdLabel: 'Binance ID nhận tiền',
+    settingBinanceIdValueHint:
+      'Chỉ gồm chữ số. Mở app Binance → Pay → phần nhận tiền để xem ID của bạn.',
+    errBinanceIdRequired: 'Điền Binance ID trước khi bật',
     settingCrypto: 'USDT on-chain (BEP20 / TRC20)',
     settingCryptoHint:
       'Khách chuyển USDT thẳng vào ví Binance của cửa hàng; hệ thống tự đối chiếu lịch sử nạp.',

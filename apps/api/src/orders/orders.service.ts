@@ -549,6 +549,44 @@ export class OrdersService {
       return;
     }
 
+    if (method === 'binance_id') {
+      const binanceId = await this.settings.getBinanceId();
+      if (binanceId === '') {
+        throw new BadRequestException(K.paymentMethodUnavailable);
+      }
+      // Số tiền phải khác mọi đơn BINANCE_ID đang chờ — giao dịch Pay cũng
+      // không mang mã đơn, nên số tiền chính là thứ phân biệt khách với nhau.
+      const pendingPay = await this.prisma.payment.findMany({
+        where: {
+          mode: 'BINANCE_ID',
+          status: 'PENDING',
+          cryptoAmount: { not: null },
+          orderId: { not: orderId },
+        },
+        select: { cryptoAmount: true },
+      });
+      const payAmount = buildUniqueCryptoAmount(
+        Number(order.totalAmount),
+        pendingPay.map((p) => Number(p.cryptoAmount)),
+        (maxExclusive) => randomInt(maxExclusive),
+      );
+      if (payAmount === null) {
+        throw new ServiceUnavailableException(K.paymentCryptoAmountUnavailable);
+      }
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          mode: 'BINANCE_ID',
+          cryptoNetwork: null,
+          cryptoAddress: binanceId,
+          cryptoAmount: new Prisma.Decimal(payAmount.toFixed(6)),
+          cryptoTxId: null,
+          ...CLEAR_PAY_SESSION,
+        },
+      });
+      return;
+    }
+
     // crypto_bep20 / crypto_trc20
     const network: CryptoNetwork =
       method === 'crypto_bep20' ? 'BEP20' : 'TRC20';

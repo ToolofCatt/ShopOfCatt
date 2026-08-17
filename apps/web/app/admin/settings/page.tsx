@@ -48,6 +48,8 @@ export default function AdminSettingsPage() {
 
   const [mockEnabled, setMockEnabled] = useState(false);
   const [binancePayEnabled, setBinancePayEnabled] = useState(false);
+  const [binanceIdEnabled, setBinanceIdEnabled] = useState(false);
+  const [binanceId, setBinanceId] = useState('');
   const [cryptoEnabled, setCryptoEnabled] = useState(false);
   const [bep20Address, setBep20Address] = useState('');
   const [trc20Address, setTrc20Address] = useState('');
@@ -58,6 +60,7 @@ export default function AdminSettingsPage() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [addressError, setAddressError] = useState<string | null>(null);
+  const [binanceIdError, setBinanceIdError] = useState<string | null>(null);
 
   const [status, setStatus] = useState<BinanceStatusDto | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
@@ -67,6 +70,8 @@ export default function AdminSettingsPage() {
     setSettings(next);
     setMockEnabled(next.mockEnabled);
     setBinancePayEnabled(next.binancePayEnabled);
+    setBinanceIdEnabled(next.binanceIdEnabled);
+    setBinanceId(next.binanceId);
     setCryptoEnabled(next.cryptoEnabled);
     setBep20Address(next.bep20Address);
     setTrc20Address(next.trc20Address);
@@ -130,6 +135,13 @@ export default function AdminSettingsPage() {
       return;
     }
     setAddressError(null);
+    // Bật nhận tiền mà chưa điền ID thì khách sẽ thấy một phương thức không
+    // chuyển đi đâu được. Máy chủ cũng chặn, đây chỉ là báo sớm ngay tại ô nhập.
+    if (binanceIdEnabled && !binanceId.trim()) {
+      setBinanceIdError(t.admin.errBinanceIdRequired);
+      return;
+    }
+    setBinanceIdError(null);
     setSaving(true);
     setSaveError(null);
     setSaved(false);
@@ -139,6 +151,8 @@ export default function AdminSettingsPage() {
         body: {
           mockEnabled,
           binancePayEnabled,
+          binanceIdEnabled,
+          binanceId: binanceId.trim(),
           cryptoEnabled,
           bep20Address: bep20Address.trim(),
           trc20Address: trc20Address.trim(),
@@ -222,6 +236,16 @@ export default function AdminSettingsPage() {
                 hint={t.admin.settingBinancePayHint}
               />
               <ToggleRow
+                id="setting-binance-id"
+                checked={binanceIdEnabled}
+                onChange={(checked) => {
+                  setBinanceIdEnabled(checked);
+                  markDirty();
+                }}
+                label={t.admin.settingBinanceId}
+                hint={t.admin.settingBinanceIdHint}
+              />
+              <ToggleRow
                 id="setting-crypto"
                 checked={cryptoEnabled}
                 disabled={cryptoToggleDisabled}
@@ -237,6 +261,30 @@ export default function AdminSettingsPage() {
                 }
               />
             </div>
+
+            {binanceIdEnabled && (
+              <div className="space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <Field
+                  label={t.admin.settingBinanceIdLabel}
+                  htmlFor="setting-binance-id-value"
+                  error={binanceIdError}
+                  hint={t.admin.settingBinanceIdValueHint}
+                >
+                  <Input
+                    id="setting-binance-id-value"
+                    inputMode="numeric"
+                    value={binanceId}
+                    invalid={Boolean(binanceIdError)}
+                    placeholder="1240006466"
+                    className="font-mono text-[13px]"
+                    onChange={(event) => {
+                      setBinanceId(event.target.value.replace(/\D/g, ''));
+                      markDirty();
+                    }}
+                  />
+                </Field>
+              </div>
+            )}
 
             {cryptoEnabled && (
               <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">

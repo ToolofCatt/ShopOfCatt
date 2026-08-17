@@ -462,6 +462,55 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
               </Link>
             </div>
+          ) : payment?.mode === 'BINANCE_ID' ? (
+            /*
+              Chuyển thẳng tới Binance ID cá nhân của chủ shop.
+              Không có ô nhập mã giao dịch như bên on-chain: giao dịch Pay được
+              bộ đối soát nền nhận ra trong vòng một phút, còn khách thì chẳng
+              có mã nào tiện tay để dán.
+            */
+            <div className="space-y-4 rounded-lg border border-neutral-200 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <Wallet className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                  {t.checkout.binanceIdTitle}
+                </p>
+                <Badge variant="solid">Binance Pay</Badge>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                  {t.checkout.cryptoAmountLabel}
+                </p>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                  <span className="break-all font-mono text-2xl font-semibold tabular-nums text-neutral-950">
+                    {cryptoAmountText}
+                    <span className="ml-1.5 text-sm font-medium text-neutral-500">USDT</span>
+                  </span>
+                  <CopyIconButton text={cryptoAmountText} label={t.checkout.copyAmount} />
+                </div>
+                <p className="flex items-start gap-1.5 text-xs font-medium text-neutral-950">
+                  <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                  {t.checkout.cryptoExactWarning}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                  {t.checkout.binanceIdLabel}
+                </p>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                  <span className="break-all font-mono text-lg font-semibold tabular-nums text-neutral-950">
+                    {payment.binanceId}
+                  </span>
+                  <CopyIconButton
+                    text={payment.binanceId ?? ''}
+                    label={t.checkout.copyBinanceId}
+                  />
+                </div>
+                <p className="text-xs text-neutral-500">{t.checkout.binanceIdSteps}</p>
+              </div>
+            </div>
           ) : payment?.mode === 'CRYPTO' ? (
             <div className="space-y-4 rounded-lg border border-neutral-200 p-4">
               <div className="flex items-center justify-between gap-2">

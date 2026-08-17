@@ -75,6 +75,7 @@ function paymentMethodName(payment: PaymentInfoDto, t: Dictionary): string {
     return t.product.payCrypto(payment.cryptoNetwork ?? '');
   }
   if (payment.mode === 'BINANCE') return t.product.payBinancePay;
+  if (payment.mode === 'BINANCE_ID') return t.product.payBinanceId;
   return t.product.payMock;
 }
 
@@ -412,6 +413,17 @@ function OrderDetailContent({ code }: { code: string }) {
                   <dt className="text-neutral-500">{t.orderDetail.paymentSentAmount}</dt>
                   <dd className="mt-0.5 font-medium tabular-nums">
                     {formatCryptoAmount(order.payment.cryptoAmount)} USDT
+                  </dd>
+                </div>
+              )}
+              {order.payment.binanceId && (
+                <div>
+                  <dt className="text-neutral-500">{t.checkout.binanceIdLabel}</dt>
+                  <dd className="mt-0.5 flex items-start gap-1">
+                    <span className="break-all font-mono text-xs leading-5">
+                      {order.payment.binanceId}
+                    </span>
+                    <CopyLineButton text={order.payment.binanceId} />
                   </dd>
                 </div>
               )}

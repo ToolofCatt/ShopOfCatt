@@ -70,7 +70,7 @@ export class SettingsService {
 
   /**
    * Các phương thức thanh toán ĐANG BẬT, theo thứ tự cố định:
-   * binance_pay → crypto_bep20 → crypto_trc20 → mock.
+   * binance_pay → binance_id → crypto_bep20 → crypto_trc20 → mock.
    *
    * Ba quy tắc an toàn:
    * 1. `mock` chỉ xuất hiện khi biến môi trường PAYMENT_MOCK=true — công tắc
@@ -89,6 +89,10 @@ export class SettingsService {
     ).trim();
     if (setting.binancePayEnabled && binancePayKey !== '') {
       methods.push({ method: 'binance_pay' });
+    }
+    const binanceId = setting.binanceId.trim();
+    if (setting.binanceIdEnabled && binanceId !== '') {
+      methods.push({ method: 'binance_id', address: binanceId });
     }
     const bep20 = setting.bep20Address.trim();
     if (setting.cryptoEnabled && bep20 !== '') {
@@ -127,6 +131,12 @@ export class SettingsService {
     return {
       activePaymentMethods: methods.map((entry) => entry.method),
       binancePayKeyMissing: setting.binancePayEnabled && binancePayKey === '',
+      binanceIdMissing: setting.binanceIdEnabled && setting.binanceId.trim() === '',
+      // Bật nhận tiền mà không có khoá đọc thì không có gì đối soát: khách
+      // chuyển xong đơn vẫn treo, chủ shop phải tự đánh dấu từng đơn.
+      binanceIdNoReconcile:
+        setting.binanceIdEnabled &&
+        (this.config.get<string>('BINANCE_API_KEY') ?? '').trim() === '',
       mockActive: methods.some((entry) => entry.method === 'mock'),
       stockAvailable: await this.countAvailableStock(),
       supportChannelsMissing: parseSupportChannels(setting.supportChannels).length === 0,
@@ -151,6 +161,11 @@ export class SettingsService {
     ).trim();
   }
 
+  /** Binance ID nhận tiền (rỗng = chưa cấu hình). */
+  async getBinanceId(): Promise<string> {
+    return (await this.getSetting()).binanceId.trim();
+  }
+
   async getAdmin(): Promise<AdminStoreSettingDto> {
     return toAdminDto(await this.getSetting());
   }
@@ -171,6 +186,7 @@ export class SettingsService {
   async update(actor: User, dto: UpdateSettingsDto): Promise<AdminStoreSettingDto> {
     const bep20Address = dto.bep20Address.trim();
     const trc20Address = dto.trc20Address.trim();
+    const binanceId = dto.binanceId.trim();
 
     if (bep20Address !== '' && !BEP20_ADDRESS_RE.test(bep20Address)) {
       throw new BadRequestException(K.adminBep20AddressInvalid);
@@ -180,6 +196,11 @@ export class SettingsService {
     }
     if (dto.cryptoEnabled && bep20Address === '' && trc20Address === '') {
       throw new BadRequestException(K.adminCryptoAddressRequired);
+    }
+    // Bật nhận tiền mà chưa có ID thì khách sẽ thấy một phương thức không
+    // chuyển đi đâu được — chặn ngay tại đây thay vì để lộ ra trang thanh toán.
+    if (dto.binanceIdEnabled && binanceId === '') {
+      throw new BadRequestException(K.adminBinanceIdRequired);
     }
 
     // Kênh hỗ trợ: bỏ dòng trống, kiểm tra liên kết, cắt theo số lượng tối đa.
@@ -203,6 +224,8 @@ export class SettingsService {
     const data = {
       mockEnabled: dto.mockEnabled,
       binancePayEnabled: dto.binancePayEnabled,
+      binanceIdEnabled: dto.binanceIdEnabled,
+      binanceId,
       cryptoEnabled: dto.cryptoEnabled,
       bep20Address,
       trc20Address,
@@ -234,6 +257,8 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
   return {
     mockEnabled: setting.mockEnabled,
     binancePayEnabled: setting.binancePayEnabled,
+    binanceIdEnabled: setting.binanceIdEnabled,
+    binanceId: setting.binanceId,
     cryptoEnabled: setting.cryptoEnabled,
     bep20Address: setting.bep20Address,
     trc20Address: setting.trc20Address,

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import type { BinancePayTransfer } from './pay-matcher';
 import { createHmac } from 'node:crypto';
 import type { BinanceKeyPermissions, BinanceStatusDto } from '@webcatt/shared';
 import type { BinanceDeposit } from './deposit-matcher';
@@ -37,6 +38,14 @@ interface RawApiRestrictions {
  * số dư USDT và lịch sử nạp on-chain. CHỈ dùng quyền đọc — không có hàm rút/giao dịch.
  * Ký request bằng HMAC-SHA512? Không — Binance dùng HMAC-SHA256 cho REST API.
  */
+interface RawPayTransaction {
+  transactionId?: string;
+  amount?: string | number;
+  currency?: string;
+  transactionTime?: number;
+  receiverInfo?: { binanceId?: number | string };
+}
+
 @Injectable()
 export class BinanceExchangeService {
   private readonly logger = new Logger(BinanceExchangeService.name);
@@ -172,6 +181,38 @@ export class BinanceExchangeService {
         amount: Number(r.amount ?? 0),
         insertTimeMs: r.insertTime ?? 0,
         status: r.status ?? 0,
+      }));
+  }
+
+  /**
+   * Lịch sử giao dịch Binance Pay của TÀI KHOẢN CÁ NHÂN (không phải merchant).
+   *
+   * Đây là thứ cho phép nhận tiền qua Binance ID mà không cần tài khoản
+   * merchant: khoá chỉ-đọc đọc được endpoint này, nên đối soát tự động được y
+   * hệt khoản nạp on-chain.
+   *
+   * `amount` âm là tiền RA — bộ khớp phải tự lọc, đừng lọc ở đây để chỗ gọi
+   * khác còn thấy đủ dữ liệu.
+   */
+  async listPayTransactions(startTimeMs?: number): Promise<BinancePayTransfer[]> {
+    const params: Record<string, string> = { limit: '100' };
+    if (startTimeMs) params.startTime = String(startTimeMs);
+    const raw = await this.signedGet<{ data?: RawPayTransaction[] }>(
+      '/sapi/v1/pay/transactions',
+      params,
+    );
+    const rows = Array.isArray(raw.data) ? raw.data : [];
+    return rows
+      .filter((r) => typeof r.transactionId === 'string' && r.transactionId !== '')
+      .map((r) => ({
+        transactionId: r.transactionId as string,
+        amount: Number(r.amount ?? 0),
+        currency: r.currency ?? '',
+        transactionTimeMs: r.transactionTime ?? 0,
+        receiverBinanceId:
+          r.receiverInfo?.binanceId === undefined
+            ? undefined
+            : String(r.receiverInfo.binanceId),
       }));
   }
 

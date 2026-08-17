@@ -167,6 +167,8 @@ export const K = {
 
   // --- admin: cấu hình cửa hàng ---
   adminSettingsFlagInvalid: 'admin.settings_flag_invalid',
+  adminBinanceIdInvalid: 'admin.binance_id_invalid',
+  adminBinanceIdRequired: 'admin.binance_id_required',
   adminSettingsAddressInvalid: 'admin.settings_address_invalid',
   adminCryptoAddressRequired: 'admin.crypto_address_required',
   adminBep20AddressInvalid: 'admin.bep20_address_invalid',
@@ -733,6 +735,16 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Giá trị bật/tắt không hợp lệ',
     en: 'Invalid on/off value',
     zh: '开关取值无效',
+  },
+  [K.adminBinanceIdInvalid]: {
+    vi: 'Binance ID chỉ gồm chữ số',
+    en: 'Binance ID must contain digits only',
+    zh: 'Binance ID 只能包含数字',
+  },
+  [K.adminBinanceIdRequired]: {
+    vi: 'Bật nhận tiền qua Binance ID thì phải điền Binance ID',
+    en: 'Enter a Binance ID before enabling Binance ID transfers',
+    zh: '启用 Binance ID 收款前请先填写 Binance ID',
   },
   [K.adminSettingsAddressInvalid]: {
     vi: 'Địa chỉ ví không hợp lệ',

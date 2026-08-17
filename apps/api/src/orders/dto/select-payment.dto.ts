@@ -11,6 +11,7 @@ import { K } from '../../i18n/messages';
 export const PAYMENT_METHODS = [
   'mock',
   'binance_pay',
+  'binance_id',
   'crypto_bep20',
   'crypto_trc20',
 ] as const satisfies readonly PaymentMethod[];

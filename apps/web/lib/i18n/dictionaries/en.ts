@@ -62,6 +62,7 @@ export const en: Dictionary = {
     total: 'Total',
     buyNow: 'Buy now',
     payBinancePay: 'Binance Pay',
+    payBinanceId: 'Binance Pay (send to ID)',
     payCrypto: (networks: string) => `USDT on-chain (${networks})`,
     payMock: 'Sandbox mode',
     noPaymentMethod: 'The store is not accepting payments right now. Please check back later.',
@@ -108,12 +109,20 @@ export const en: Dictionary = {
     methods: {
       mock: 'Sandbox',
       binance_pay: 'Binance Pay',
+      binance_id: 'Binance Pay · send to ID',
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
     },
 
     cryptoTitle: 'USDT on-chain transfer',
     cryptoAmountLabel: 'Amount to send',
+
+    /* ===== v6 — send to a Binance ID ===== */
+    binanceIdTitle: 'Send via Binance Pay',
+    binanceIdLabel: 'Receiving Binance ID',
+    binanceIdSteps:
+      'Open the Binance app → Pay → Send → paste the ID above, then enter the exact amount shown above.',
+    copyBinanceId: 'Copy Binance ID',
     cryptoExactWarning: 'Send EXACTLY this amount — the system identifies your order by it.',
     cryptoQrAlt: 'QR code of the receiving wallet address',
     cryptoQrHint:
@@ -317,7 +326,8 @@ export const en: Dictionary = {
 
   paymentMode: {
     MOCK: 'Sandbox (Mock)',
-    BINANCE: 'Binance Pay',
+    BINANCE: 'Binance Pay (merchant)',
+    BINANCE_ID: 'Binance Pay · send to ID',
     CRYPTO: 'USDT on-chain',
   },
 
@@ -739,6 +749,13 @@ export const en: Dictionary = {
     settingMockHint: 'For testing only — no real transactions are made.',
     settingBinancePay: 'Binance Pay',
     settingBinancePayHint: 'Binance Pay merchant gateway (QR + Binance app).',
+    settingBinanceId: 'Send to a Binance ID',
+    settingBinanceIdHint:
+      'Customers send USDT straight to your Binance account. No merchant account needed — payments are matched automatically from your Binance Pay history.',
+    settingBinanceIdLabel: 'Receiving Binance ID',
+    settingBinanceIdValueHint:
+      'Digits only. Open the Binance app → Pay → receive section to find your ID.',
+    errBinanceIdRequired: 'Enter a Binance ID before enabling this',
     settingCrypto: 'USDT on-chain (BEP20 / TRC20)',
     settingCryptoHint:
       "Customers send USDT straight to the store's Binance wallet; deposits are matched automatically.",

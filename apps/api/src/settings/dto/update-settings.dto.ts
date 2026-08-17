@@ -7,6 +7,7 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
   Min,
   ValidateNested,
@@ -41,6 +42,20 @@ export class UpdateSettingsDto {
 
   @IsBoolean({ message: K.adminSettingsFlagInvalid })
   binancePayEnabled: boolean;
+
+  /** Nhận tiền bằng cách khách chuyển thẳng tới Binance ID của chủ shop. */
+  @IsBoolean({ message: K.adminSettingsFlagInvalid })
+  binanceIdEnabled: boolean;
+
+  /**
+   * Binance ID — chỉ gồm chữ số. Không ép độ dài cố định vì Binance có thể đổi,
+   * nhưng chặn ký tự lạ để chủ shop không dán nhầm tên hiển thị vào đây rồi
+   * khách chuyển tiền tới hư không.
+   */
+  @IsString({ message: K.adminBinanceIdInvalid })
+  @Matches(/^[0-9]*$/, { message: K.adminBinanceIdInvalid })
+  @MaxLength(32, { message: K.adminBinanceIdInvalid })
+  binanceId: string;
 
   @IsBoolean({ message: K.adminSettingsFlagInvalid })
   cryptoEnabled: boolean;

@@ -328,15 +328,20 @@ model Payment {
   deeplink        String?
   universalUrl    String?
   rawWebhook      Json?
-  /// Thanh toán crypto on-chain: "BEP20" | "TRC20"
+  /// Thanh toán crypto on-chain: "BEP20" | "TRC20". Null với mode BINANCE_ID.
   cryptoNetwork String?
-  /// Địa chỉ ví nhận (ảnh chụp lúc tạo đơn)
+  /// Nơi nhận tiền, chụp lại lúc tạo đơn: địa chỉ ví với CRYPTO, Binance ID với
+  /// BINANCE_ID. Chốt tại đây để chủ shop đổi ví/ID sau đó thì đơn đang chờ vẫn
+  /// trỏ đúng chỗ đã báo khách.
   cryptoAddress String?
-  /// Số USDT DUY NHẤT khách phải gửi để hệ thống khớp đúng đơn (thêm phần lẻ)
+  /// Số USDT DUY NHẤT khách phải gửi để hệ thống khớp đúng đơn (thêm phần lẻ).
+  /// Dùng chung cho cả CRYPTO lẫn BINANCE_ID — giao dịch nào cũng không mang mã
+  /// đơn, nên số tiền chính là mã đơn.
   cryptoAmount Decimal? @db.Decimal(18, 6)
-  /// TxID của giao dịch nạp đã khớp/được xác nhận.
-  /// @unique là hàng rào CHỐNG DÙNG LẠI: một khoản nạp chỉ trả được cho MỘT đơn,
-  /// kể cả khi nhiều request cùng khai một TxID trong cùng một khoảnh khắc.
+  /// Mã giao dịch đã khớp: TxID on-chain với CRYPTO, transactionId của Binance
+  /// Pay với BINANCE_ID.
+  /// @unique là hàng rào CHỐNG DÙNG LẠI: một khoản tiền chỉ trả được cho MỘT
+  /// đơn, kể cả khi nhiều request cùng khai một mã trong cùng một khoảnh khắc.
   cryptoTxId String?  @unique
 
   createdAt  DateTime @default(now())
@@ -353,7 +358,13 @@ model StoreSetting {
   /// Cổng thanh toán giả lập — MẶC ĐỊNH TẮT. Chỉ có tác dụng khi biến môi
   /// trường PAYMENT_MOCK=true; bật nhầm ở môi trường thật = phát hàng miễn phí.
   mockEnabled       Boolean  @default(false)
+  /// Binance Pay MERCHANT (cần tài khoản merchant riêng + khoá BINANCE_PAY_*)
   binancePayEnabled Boolean  @default(false)
+  /// Binance Pay CÁ NHÂN: khách chuyển USDT thẳng tới Binance ID của chủ shop.
+  /// Khác hẳn merchant — chỉ cần khoá đọc là đối soát được qua lịch sử Pay.
+  binanceIdEnabled  Boolean  @default(false)
+  /// Binance ID nhận tiền, ví dụ "1240006466"
+  binanceId         String   @default("")
   cryptoEnabled     Boolean  @default(false)
   bep20Address      String   @default("")
   trc20Address      String   @default("")

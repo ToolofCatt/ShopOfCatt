@@ -27,9 +27,11 @@ export function toPaymentInfoDto(
   const mode: PaymentMode =
     payment.mode === 'BINANCE'
       ? 'BINANCE'
-      : payment.mode === 'CRYPTO'
-        ? 'CRYPTO'
-        : 'MOCK';
+      : payment.mode === 'BINANCE_ID'
+        ? 'BINANCE_ID'
+        : payment.mode === 'CRYPTO'
+          ? 'CRYPTO'
+          : 'MOCK';
   const dto: PaymentInfoDto = {
     mode,
     status: payment.status,
@@ -37,6 +39,14 @@ export function toPaymentInfoDto(
   };
   if (mode === 'MOCK') {
     dto.mockPayUrl = `/mock-pay/${orderCode}`;
+  } else if (mode === 'BINANCE_ID') {
+    // Dùng chung các cột crypto*: số tiền duy nhất và mã giao dịch đã khớp có ý
+    // nghĩa y hệt, chỉ khác nguồn đối soát (lịch sử Pay thay vì lịch sử nạp).
+    if (payment.cryptoAddress) dto.binanceId = payment.cryptoAddress;
+    if (payment.cryptoAmount !== null) {
+      dto.cryptoAmount = Number(payment.cryptoAmount);
+    }
+    if (payment.cryptoTxId) dto.cryptoTxId = payment.cryptoTxId;
   } else if (mode === 'CRYPTO') {
     if (payment.cryptoNetwork) {
       dto.cryptoNetwork = payment.cryptoNetwork as CryptoNetwork;

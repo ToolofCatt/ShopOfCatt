@@ -9,12 +9,18 @@ export function isAdminRole(role: Role): boolean {
 export type OrderStatus = 'PENDING' | 'PAID' | 'DELIVERED' | 'CANCELLED' | 'EXPIRED';
 export type PaymentStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED';
 export type StockStatus = 'AVAILABLE' | 'RESERVED' | 'SOLD';
-export type PaymentMode = 'MOCK' | 'BINANCE' | 'CRYPTO';
+/**
+ * `BINANCE` = cổng Binance Pay MERCHANT (cần tài khoản merchant riêng).
+ * `BINANCE_ID` = khách chuyển USDT thẳng tới Binance ID cá nhân của chủ shop —
+ * chỉ cần khoá đọc là đối soát được, khác hẳn merchant.
+ */
+export type PaymentMode = 'MOCK' | 'BINANCE' | 'BINANCE_ID' | 'CRYPTO';
 
 /** Phương thức thanh toán khách chọn ở trang thanh toán. */
 export type PaymentMethod =
   | 'mock'
   | 'binance_pay'
+  | 'binance_id'
   | 'crypto_bep20'
   | 'crypto_trc20';
 
@@ -27,7 +33,10 @@ export type DiscountType = 'PERCENT' | 'FIXED';
 
 export interface PaymentMethodDto {
   method: PaymentMethod;
-  /** Địa chỉ ví nhận — chỉ có với crypto_bep20 / crypto_trc20. */
+  /**
+   * Nơi nhận tiền: địa chỉ ví với crypto_bep20 / crypto_trc20, Binance ID với
+   * binance_id. Không có với binance_pay (merchant) và mock.
+   */
   address?: string;
 }
 
@@ -204,7 +213,11 @@ export const SUPPORT_NOTE_MAX_LENGTH = 300;
 
 export interface AdminStoreSettingDto {
   mockEnabled: boolean;
+  /** Binance Pay MERCHANT — cần khoá BINANCE_PAY_* ở máy chủ. */
   binancePayEnabled: boolean;
+  /** Binance Pay cá nhân: khách chuyển tới Binance ID bên dưới. */
+  binanceIdEnabled: boolean;
+  binanceId: string;
   cryptoEnabled: boolean;
   bep20Address: string;
   trc20Address: string;
@@ -333,6 +346,8 @@ export interface PaymentInfoDto {
   /** CRYPTO mode: mạng, địa chỉ ví nhận, và số USDT DUY NHẤT phải gửi. */
   cryptoNetwork?: CryptoNetwork;
   cryptoAddress?: string;
+  /** BINANCE_ID mode: Binance ID nhận tiền, chụp lại lúc tạo đơn. */
+  binanceId?: string;
   cryptoAmount?: number;
   /**
    * Mã QR của ĐỊA CHỈ VÍ, dạng data URI SVG (~1 KB).
@@ -440,8 +455,17 @@ export interface AdminStatsDto {
 export interface StoreReadinessDto {
   /** Phương thức thanh toán THỰC SỰ dùng được (đã bật + đủ cấu hình). */
   activePaymentMethods: PaymentMethod[];
-  /** Bật Binance Pay trong cài đặt nhưng máy chủ thiếu BINANCE_PAY_API_KEY. */
+  /** Bật Binance Pay merchant trong cài đặt nhưng máy chủ thiếu BINANCE_PAY_API_KEY. */
   binancePayKeyMissing: boolean;
+  /** Bật chuyển tới Binance ID nhưng chưa điền ID. */
+  binanceIdMissing: boolean;
+  /**
+   * Đã bật chuyển tới Binance ID nhưng máy chủ thiếu BINANCE_API_KEY.
+   *
+   * Khách vẫn chuyển được tiền, nhưng KHÔNG có gì đối soát: đơn treo mãi ở
+   * PENDING và chủ shop phải tự đánh dấu đã thanh toán từng đơn.
+   */
+  binanceIdNoReconcile: boolean;
   /** Đang chạy cổng thanh toán giả lập — tuyệt đối không để bật khi bán thật. */
   mockActive: boolean;
   /** Tổng số key/tài khoản còn trong kho của các loại đang bán. */
