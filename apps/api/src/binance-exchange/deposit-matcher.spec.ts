@@ -242,39 +242,47 @@ describe('matchDeposits — không được giao trùng', () => {
 });
 
 describe('buildUniqueCryptoAmount', () => {
-  /** randomInt tất định để test không phụ thuộc may mắn. */
-  const fixedRandom = (value: number) => () => value;
-
   it('luôn cộng thêm phần lẻ, không bao giờ trả về đúng giá gốc', () => {
-    const amount = buildUniqueCryptoAmount(12, [], fixedRandom(0));
-    expect(amount).not.toBeNull();
-    expect(amount).toBeGreaterThan(12);
-    // k nhỏ nhất là 1 → +0.0001
+    // Bỏ phần lẻ đi là hai khách mua cùng sản phẩm gửi hai khoản giống hệt nhau
+    // và hệ thống không còn cách nào biết khoản nào của ai.
+    const amount = buildUniqueCryptoAmount(12, []);
     expect(amount).toBeCloseTo(12.0001, 6);
   });
 
-  it('tránh những số tiền đã có đơn khác đang chờ', () => {
-    // randomInt luôn trả 0 → thử k=1 trước; k=1 đã bị chiếm nên phải sang k=2.
-    const amount = buildUniqueCryptoAmount(12, [12.0001], fixedRandom(0));
-    expect(amount).toBeCloseTo(12.0002, 6);
+  it('lấy bước NHỎ NHẤT còn trống — khoản cộng thêm phải gần như bằng không', () => {
+    // Bản trước bốc ngẫu nhiên 1..999 nên trung bình cộng thêm +0.05 USDT,
+    // khách nhìn vào tưởng bị thu phí.
+    expect(buildUniqueCryptoAmount(2.5, [])).toBeCloseTo(2.5001, 6);
+    expect(buildUniqueCryptoAmount(2.5, [2.5001])).toBeCloseTo(2.5002, 6);
+    expect(buildUniqueCryptoAmount(2.5, [2.5001, 2.5002])).toBeCloseTo(2.5003, 6);
+  });
+
+  it('tránh những số tiền đã bị chiếm, kể cả khi không liền nhau', () => {
+    expect(buildUniqueCryptoAmount(12, [12.0001, 12.0002, 12.0004])).toBeCloseTo(
+      12.0003,
+      6,
+    );
   });
 
   it('so sánh theo micro-USDT nên không bị sai vì số thực', () => {
     // 0.1 + 0.2 !== 0.3 trong số thực; hàm phải quy về số nguyên trước khi so.
-    const amount = buildUniqueCryptoAmount(0.3, [0.3001], fixedRandom(0));
-    expect(amount).toBeCloseTo(0.3002, 6);
+    expect(buildUniqueCryptoAmount(0.3, [0.3001])).toBeCloseTo(0.3002, 6);
   });
 
   it('hết cả 999 chỗ thì trả null thay vì cấp số trùng', () => {
     // Cấp trùng nghĩa là hai đơn cùng số tiền → khoản nạp khớp sai đơn.
     const taken = Array.from({ length: 999 }, (_, i) => 12 + (i + 1) * 0.0001);
-    expect(buildUniqueCryptoAmount(12, taken, fixedRandom(0))).toBeNull();
+    expect(buildUniqueCryptoAmount(12, taken)).toBeNull();
   });
 
-  it('vẫn tìm ra chỗ trống dù ngẫu nhiên liên tục trỏ vào chỗ đã chiếm', () => {
-    // Sau 40 lần thử ngẫu nhiên, hàm quét tuần tự 1..999 để chắc chắn tìm ra.
-    const amount = buildUniqueCryptoAmount(12, [12.0007], fixedRandom(6));
-    expect(amount).not.toBeNull();
-    expect(amount).not.toBeCloseTo(12.0007, 6);
+  it('số tiền sinh ra khác nhau với mọi đơn đang chờ cùng giá', () => {
+    const taken: number[] = [];
+    for (let i = 0; i < 50; i++) {
+      const amount = buildUniqueCryptoAmount(9.99, taken);
+      expect(amount).not.toBeNull();
+      expect(taken).not.toContain(amount);
+      taken.push(amount as number);
+    }
+    expect(new Set(taken).size).toBe(50);
   });
 });

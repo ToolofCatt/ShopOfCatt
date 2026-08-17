@@ -371,42 +371,65 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   const cryptoAmountText =
     payment?.cryptoAmount !== undefined ? formatCryptoAmount(payment.cryptoAmount) : '';
 
+  /*
+   * Mã QR của phương thức đang chọn, gom về một biến để đưa sang CỘT PHẢI.
+   * `cryptoQr` là QR địa chỉ ví do máy chủ dựng; `qrcodeLink` là QR do Binance
+   * Pay merchant trả về. Không có QR thì trang tự thu lại còn một cột.
+   */
+  const qrSrc = payment?.cryptoQr ?? payment?.qrcodeLink ?? null;
+
   return (
-    <div className="mx-auto w-full max-w-md px-4 py-12">
-      <Card className="space-y-6 p-6">
-        <div className="space-y-2 text-center">
-          <h1 className="text-xl font-semibold tracking-tight">{t.checkout.title}</h1>
-          <p className="font-mono text-sm text-neutral-500">{order.code}</p>
-          <p className="text-4xl font-semibold tabular-nums tracking-tight">
-            {formatUsdt(order.totalAmount)}
-          </p>
-          {order.discountAmount > 0 && (
-            <p className="text-sm text-neutral-500">
-              <span className="line-through">{formatUsdt(order.subtotalAmount)}</span>{' '}
-              <span className="font-medium text-neutral-950">
-                −{formatUsdt(order.discountAmount)}
-              </span>
-              {order.couponCode && (
-                <span className="ml-1 font-mono text-xs">({order.couponCode})</span>
-              )}
+    <div className="mx-auto w-full max-w-4xl px-4 py-4">
+      <Card className="p-5">
+        {/*
+          Đầu trang gói trong MỘT hàng thay vì xếp dọc giữa trang: cả trang phải
+          nằm gọn trong một khung hình, khách không phải cuộn mới thấy mã QR.
+        */}
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-1 border-b border-neutral-100 pb-3">
+          <div className="min-w-0">
+            <h1 className="text-lg font-semibold tracking-tight">{t.checkout.title}</h1>
+            <p className="font-mono text-sm text-neutral-500">{order.code}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-3xl font-semibold tabular-nums tracking-tight">
+              {formatUsdt(order.totalAmount)}
             </p>
-          )}
-          {remainingMs !== null && (
-            <p className="flex items-center justify-center gap-1.5 text-sm text-neutral-500">
-              <Clock className="h-4 w-4" strokeWidth={1.75} />
-              {t.checkout.expiresIn}{' '}
-              <span className="font-mono font-medium tabular-nums text-neutral-950">
-                {formatCountdown(remainingMs)}
-              </span>
-            </p>
-          )}
+            {order.discountAmount > 0 && (
+              <p className="text-sm text-neutral-500">
+                <span className="line-through">{formatUsdt(order.subtotalAmount)}</span>{' '}
+                <span className="font-medium text-neutral-950">
+                  −{formatUsdt(order.discountAmount)}
+                </span>
+                {order.couponCode && (
+                  <span className="ml-1 font-mono text-xs">({order.couponCode})</span>
+                )}
+              </p>
+            )}
+            {remainingMs !== null && (
+              <p className="flex items-center justify-end gap-1.5 text-sm text-neutral-500">
+                <Clock className="h-4 w-4" strokeWidth={1.75} />
+                {t.checkout.expiresIn}{' '}
+                <span className="font-mono font-medium tabular-nums text-neutral-950">
+                  {formatCountdown(remainingMs)}
+                </span>
+              </p>
+            )}
+          </div>
         </div>
+
+        <div
+          className={cn(
+            'mt-4 grid gap-6',
+            qrSrc && 'lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start',
+          )}
+        >
+          <div className="min-w-0 space-y-4">
 
         {/*
           Đang trả tiền cho CÁI GÌ. Trước đây trang này chỉ có mã đơn và số tiền,
           nên khách bấm nhầm sản phẩm cũng không có cách nào nhận ra trước khi trả.
         */}
-        <ul className="space-y-2 border-t border-neutral-100 pt-4 text-sm">
+        <ul className="space-y-2 text-sm">
           {order.items.map((item) => (
             <li key={item.id} className="flex items-baseline justify-between gap-3">
               <span className="min-w-0">
@@ -470,7 +493,7 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
               bộ đối soát nền nhận ra trong vòng một phút, còn khách thì chẳng
               có mã nào tiện tay để dán.
             */
-            <div className="space-y-4 rounded-lg border border-neutral-200 p-4">
+            <div className="space-y-3 rounded-lg border border-neutral-200 p-3.5">
               <div className="flex items-center justify-between gap-2">
                 <p className="flex items-center gap-2 text-sm font-medium">
                   <Wallet className="h-4 w-4 shrink-0" strokeWidth={1.75} />
@@ -513,7 +536,7 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
               </div>
             </div>
           ) : payment?.mode === 'CRYPTO' ? (
-            <div className="space-y-4 rounded-lg border border-neutral-200 p-4">
+            <div className="space-y-3 rounded-lg border border-neutral-200 p-3.5">
               <div className="flex items-center justify-between gap-2">
                 <p className="flex items-center gap-2 text-sm font-medium">
                   <Wallet className="h-4 w-4 shrink-0" strokeWidth={1.75} />
@@ -543,24 +566,6 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
                   {t.checkout.cryptoAddressLabel}
                 </p>
-                {payment.cryptoQr && (
-                  <div className="flex flex-col items-center gap-2 rounded-lg border border-neutral-200 bg-white p-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={payment.cryptoQr}
-                      alt={t.checkout.cryptoQrAlt}
-                      className="h-40 w-40"
-                    />
-                    {/*
-                      Nói thẳng là mã CHỈ chứa địa chỉ. Quét xong tưởng đã xong
-                      rồi gửi tròn số là tiền vào ví mà đơn không khớp được —
-                      lúc đó phải nhờ admin đối soát tay.
-                    */}
-                    <p className="text-center text-xs text-neutral-500">
-                      {t.checkout.cryptoQrHint}
-                    </p>
-                  </div>
-                )}
                 <div className="flex items-start justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
                   <span className="break-all font-mono text-[13px] leading-5 text-neutral-950">
                     {payment.cryptoAddress}
@@ -577,12 +582,16 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
 
               <form
                 onSubmit={(event) => void handleSubmitTx(event)}
-                className="space-y-2 border-t border-neutral-100 pt-3"
+                className="space-y-1.5 border-t border-neutral-100 pt-3"
               >
-                <Label htmlFor="crypto-txid">{t.checkout.cryptoTxIdLabel}</Label>
+                {/*
+                  Bỏ nhãn nổi để trang gọn trong một khung hình — chỗ nhập đã có
+                  chữ gợi ý, còn trình đọc màn hình vẫn có `aria-label`.
+                */}
                 <div className="flex gap-2">
                   <Input
                     id="crypto-txid"
+                    aria-label={t.checkout.cryptoTxIdLabel}
                     value={txId}
                     onChange={(event) => setTxId(event.target.value)}
                     placeholder={t.checkout.cryptoTxIdPlaceholder}
@@ -598,17 +607,6 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
             </div>
           ) : (
             <div className="space-y-3 text-center">
-              {payment?.qrcodeLink && (
-                <div className="mx-auto w-fit rounded-xl border border-neutral-200 p-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={payment.qrcodeLink}
-                    alt={t.checkout.qrAlt(order.code)}
-                    className="h-44 w-44"
-                  />
-                </div>
-              )}
-              <p className="text-sm text-neutral-500">{t.checkout.scanQr}</p>
               {payment?.checkoutUrl && (
                 <a
                   href={payment.checkoutUrl}
@@ -626,55 +624,68 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
 
         {error && <p className="text-center text-sm text-red-600">{error}</p>}
 
-        <div className="flex items-center justify-center gap-2 text-xs text-neutral-400">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-neutral-400 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-neutral-500" />
-          </span>
-          {t.checkout.autoChecking}
-        </div>
-
-        <div className="flex gap-2 border-t border-neutral-100 pt-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="flex-1"
-            loading={checking}
-            onClick={() => void checkPayment(true)}
-          >
-            {!checking && <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.75} />}
-            {t.checkout.checkNow}
-          </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            className="flex-1"
-            loading={cancelling}
-            onClick={() => void handleCancel()}
-          >
-            {t.checkout.cancelOrder}
-          </Button>
-        </div>
-
         {/*
-          Điều khoản đặt ở ĐÂY, ngay trước lúc trả tiền — chỗ duy nhất mà việc
-          đồng ý có ý nghĩa. Bán sản phẩm số thì tranh chấp "key không dùng được"
-          là chuyện thường ngày, và khi đó mọi bên cần quy về một văn bản.
+          Dòng "đang tự kiểm tra" gộp vào hàng nút thay vì chiếm một dòng riêng —
+          cả trang phải nằm gọn trong một khung hình.
         */}
-        <p className="border-t border-neutral-100 pt-3 text-center text-xs leading-relaxed text-neutral-500">
-          {t.checkout.legalNotice}{' '}
-          <Link href="/legal/terms" className="underline underline-offset-2 hover:text-neutral-950">
-            {t.legal.termsTitle}
-          </Link>
-          {' · '}
-          <Link href="/legal/refund" className="underline underline-offset-2 hover:text-neutral-950">
-            {t.legal.refundTitle}
-          </Link>
-          {' · '}
-          <Link href="/legal/privacy" className="underline underline-offset-2 hover:text-neutral-950">
-            {t.legal.privacyTitle}
-          </Link>
-        </p>
+        <div className="flex flex-wrap items-center gap-2 border-t border-neutral-100 pt-3">
+          <span className="flex items-center gap-1.5 text-xs text-neutral-400">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-neutral-400 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-neutral-500" />
+            </span>
+            {t.checkout.autoChecking}
+          </span>
+          <span className="ml-auto flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              loading={checking}
+              onClick={() => void checkPayment(true)}
+            >
+              {!checking && <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.75} />}
+              {t.checkout.checkNow}
+            </Button>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={cancelling}
+              onClick={() => void handleCancel()}
+            >
+              {t.checkout.cancelOrder}
+            </Button>
+          </span>
+        </div>
+          </div>
+
+          {/*
+            CỘT PHẢI: chỉ mã QR. Trước đây QR nằm lẫn trong khối thông tin nên
+            trang dài quá một khung hình, khách phải cuộn mới thấy thứ cần quét.
+            `lg:sticky` để QR luôn trong tầm mắt nếu cột trái dài ra.
+          */}
+          {qrSrc && (
+            <div className="flex flex-col items-center gap-2 lg:sticky lg:top-24">
+              <div className="rounded-xl border border-neutral-200 bg-white p-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={qrSrc}
+                  alt={
+                    payment?.cryptoQr ? t.checkout.cryptoQrAlt : t.checkout.qrAlt(order.code)
+                  }
+                  className="h-52 w-52"
+                />
+              </div>
+              {/*
+                Với QR địa chỉ ví phải nói rõ mã KHÔNG chứa số tiền: quét xong
+                tưởng đã xong rồi gửi tròn số là tiền vào ví mà đơn không khớp
+                được, lúc đó phải nhờ admin đối soát tay.
+              */}
+              <p className="max-w-[13rem] text-center text-xs text-neutral-500">
+                {payment?.cryptoQr ? t.checkout.cryptoQrHint : t.checkout.scanQr}
+              </p>
+            </div>
+          )}
+        </div>
       </Card>
     </div>
   );

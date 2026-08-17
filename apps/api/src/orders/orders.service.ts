@@ -28,7 +28,6 @@ import {
   type OrderSummaryDto,
   type PaymentMethod,
 } from '@webcatt/shared';
-import { randomInt } from 'node:crypto';
 import { BinanceExchangeService } from '../binance-exchange/binance-exchange.service';
 import {
   buildUniqueCryptoAmount,
@@ -59,6 +58,16 @@ interface ReservedItem {
 
 /** Khoản nạp được tính từ trước khi tạo đơn tối đa 10 phút (đồng bộ với matcher). */
 const CRYPTO_SLACK_MS = 10 * 60_000;
+
+/**
+ * Số tiền của một đơn bị "giữ chỗ" thêm 24 giờ sau khi đơn đó kết thúc.
+ *
+ * Trước đây chỉ tránh trùng với đơn ĐANG CHỜ. Kịch bản hỏng: đơn A hết hạn sau
+ * 30 phút, khách A chuyển tiền muộn; số tiền của A được cấp lại cho đơn B mới;
+ * khoản tiền của A về sau khi B được tạo nên khớp vào B — khách B nhận hàng
+ * bằng tiền của khách A. Hiếm, nhưng là giao nhầm hàng và không hoàn tác được.
+ */
+const AMOUNT_COOLDOWN_MS = 24 * 60 * 60_000;
 
 /** Xóa các trường phiên Binance Pay khi chuyển sang phương thức khác. */
 const CLEAR_PAY_SESSION = {
@@ -559,16 +568,18 @@ export class OrdersService {
       const pendingPay = await this.prisma.payment.findMany({
         where: {
           mode: 'BINANCE_ID',
-          status: 'PENDING',
           cryptoAmount: { not: null },
           orderId: { not: orderId },
+          OR: [
+            { status: 'PENDING' },
+            { createdAt: { gte: new Date(Date.now() - AMOUNT_COOLDOWN_MS) } },
+          ],
         },
         select: { cryptoAmount: true },
       });
       const payAmount = buildUniqueCryptoAmount(
         Number(order.totalAmount),
         pendingPay.map((p) => Number(p.cryptoAmount)),
-        (maxExclusive) => randomInt(maxExclusive),
       );
       if (payAmount === null) {
         throw new ServiceUnavailableException(K.paymentCryptoAmountUnavailable);
@@ -595,23 +606,23 @@ export class OrdersService {
       throw new BadRequestException(K.paymentMethodUnavailable);
     }
 
-    // Các số tiền đang chờ trên cùng mạng — số của đơn này phải khác tất cả.
+    // Số tiền đang chờ HOẶC vừa dùng trong 24 giờ trên cùng mạng — xem
+    // AMOUNT_COOLDOWN_MS để biết vì sao không chỉ xét đơn đang chờ.
     const pendingPayments = await this.prisma.payment.findMany({
       where: {
         mode: 'CRYPTO',
-        status: 'PENDING',
         cryptoNetwork: network,
         cryptoAmount: { not: null },
         orderId: { not: orderId },
+        OR: [
+          { status: 'PENDING' },
+          { createdAt: { gte: new Date(Date.now() - AMOUNT_COOLDOWN_MS) } },
+        ],
       },
       select: { cryptoAmount: true },
     });
     const taken = pendingPayments.map((p) => Number(p.cryptoAmount));
-    const amount = buildUniqueCryptoAmount(
-      Number(order.totalAmount),
-      taken,
-      (maxExclusive) => randomInt(maxExclusive),
-    );
+    const amount = buildUniqueCryptoAmount(Number(order.totalAmount), taken);
     if (amount === null) {
       throw new ServiceUnavailableException(K.paymentCryptoAmountUnavailable);
     }

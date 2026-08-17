@@ -105,22 +105,29 @@ export function matchDeposits(
 }
 
 /**
- * Sinh số tiền USDT DUY NHẤT cho một đơn: giá gốc + phần lẻ k×0.0001 (k = 1..999),
- * không trùng với các đơn đang chờ khác trên CÙNG mạng. Trả null nếu hết chỗ.
+ * Sinh số tiền USDT DUY NHẤT cho một đơn: giá gốc + phần lẻ k×0.0001, với k là
+ * bước NHỎ NHẤT còn trống. Trả null khi hết chỗ (k > 999).
+ *
+ * Vì sao phần lẻ phải tồn tại: giao dịch on-chain lẫn Binance Pay đều KHÔNG mang
+ * mã đơn. Số tiền chính là mã đơn — bỏ nó đi thì hai khách cùng mua một sản phẩm
+ * sẽ gửi hai khoản giống hệt nhau và hệ thống không có cách nào biết ai là ai.
+ *
+ * Vì sao lấy bước nhỏ nhất chứ không bốc ngẫu nhiên như trước: ngẫu nhiên trong
+ * 1..999 cộng trung bình +0.05 USDT và tối đa +0.0999 — khách nhìn vào tưởng bị
+ * thu phí. Lấy tuần tự thì cửa hàng ít đơn chờ gần như luôn ra +0.0001, tức một
+ * phần vạn USDT, coi như bằng không.
+ *
+ * Đoán trước được số tiền KHÔNG phải lỗ hổng: kẻ gửi đúng số tiền của đơn người
+ * khác chỉ đang tự bỏ tiền ra để người kia được nhận hàng.
  */
 export function buildUniqueCryptoAmount(
   base: number,
   takenAmounts: readonly number[],
-  randomInt: (maxExclusive: number) => number,
 ): number | null {
   const taken = new Set(takenAmounts.map((a) => Math.round(a * 1_000_000)));
   const baseUnits = Math.round(base * 1_000_000);
-  // Thử ngẫu nhiên trước cho khó đoán, sau đó quét tuần tự để chắc chắn tìm ra.
-  const tries: number[] = [];
-  for (let i = 0; i < 40; i++) tries.push(1 + randomInt(999));
-  for (let k = 1; k <= 999; k++) tries.push(k);
 
-  for (const k of tries) {
+  for (let k = 1; k <= 999; k++) {
     const units = baseUnits + k * 100; // k × 0.0001 USDT = k×100 micro-USDT
     if (!taken.has(units)) return units / 1_000_000;
   }
