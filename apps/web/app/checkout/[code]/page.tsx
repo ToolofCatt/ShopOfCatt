@@ -45,6 +45,7 @@ function methodOfPayment(payment: PaymentInfoDto | null): PaymentMethod | null {
   if (!payment) return null;
   if (payment.mode === 'MOCK') return 'mock';
   if (payment.mode === 'BINANCE') return 'binance_pay';
+  if (payment.mode === 'BINANCE_ID') return 'binance_id';
   return payment.cryptoNetwork === 'TRC20' ? 'crypto_trc20' : 'crypto_bep20';
 }
 
