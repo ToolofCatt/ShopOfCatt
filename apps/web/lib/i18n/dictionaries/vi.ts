@@ -120,6 +120,9 @@ export const vi = {
     cryptoTitle: 'Chuyển USDT on-chain',
     cryptoAmountLabel: 'Số tiền phải gửi',
     cryptoExactWarning: 'Gửi CHÍNH XÁC số này — hệ thống nhận diện đơn của bạn qua số tiền.',
+    cryptoQrAlt: 'Mã QR địa chỉ ví nhận',
+    cryptoQrHint:
+      'Quét để lấy địa chỉ ví. Mã KHÔNG chứa số tiền — bạn vẫn phải nhập đúng số ở trên.',
     cryptoAddressLabel: 'Địa chỉ ví nhận',
     cryptoNetworkNote: (network: string) =>
       `Chỉ gửi USDT trên đúng mạng ${network}. Gửi sai mạng hoặc sai loại coin sẽ mất tiền.`,

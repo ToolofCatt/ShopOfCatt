@@ -115,6 +115,9 @@ export const en: Dictionary = {
     cryptoTitle: 'USDT on-chain transfer',
     cryptoAmountLabel: 'Amount to send',
     cryptoExactWarning: 'Send EXACTLY this amount — the system identifies your order by it.',
+    cryptoQrAlt: 'QR code of the receiving wallet address',
+    cryptoQrHint:
+      'Scan to get the wallet address. The code does NOT carry the amount — you still have to enter the exact amount above.',
     cryptoAddressLabel: 'Deposit address',
     cryptoNetworkNote: (network: string) =>
       `Only send USDT on the ${network} network. A wrong network or coin means lost funds.`,

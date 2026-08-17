@@ -493,6 +493,24 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
                   {t.checkout.cryptoAddressLabel}
                 </p>
+                {payment.cryptoQr && (
+                  <div className="flex flex-col items-center gap-2 rounded-lg border border-neutral-200 bg-white p-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={payment.cryptoQr}
+                      alt={t.checkout.cryptoQrAlt}
+                      className="h-40 w-40"
+                    />
+                    {/*
+                      Nói thẳng là mã CHỈ chứa địa chỉ. Quét xong tưởng đã xong
+                      rồi gửi tròn số là tiền vào ví mà đơn không khớp được —
+                      lúc đó phải nhờ admin đối soát tay.
+                    */}
+                    <p className="text-center text-xs text-neutral-500">
+                      {t.checkout.cryptoQrHint}
+                    </p>
+                  </div>
+                )}
                 <div className="flex items-start justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
                   <span className="break-all font-mono text-[13px] leading-5 text-neutral-950">
                     {payment.cryptoAddress}

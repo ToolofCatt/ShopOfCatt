@@ -113,6 +113,8 @@ export const zh: Dictionary = {
     cryptoTitle: 'USDT 链上转账',
     cryptoAmountLabel: '应转金额',
     cryptoExactWarning: '请转账与此完全一致的金额 —— 系统通过金额识别您的订单。',
+    cryptoQrAlt: '收款钱包地址二维码',
+    cryptoQrHint: '扫码获取钱包地址。二维码不包含金额 — 仍需按上方金额准确转账。',
     cryptoAddressLabel: '收款地址',
     cryptoNetworkNote: (network: string) =>
       `请仅通过 ${network} 网络发送 USDT，网络或币种错误将导致资金丢失。`,

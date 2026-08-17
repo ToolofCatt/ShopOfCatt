@@ -7,6 +7,7 @@ import type {
   PaymentInfoDto,
   PaymentMode,
 } from '@webcatt/shared';
+import { cryptoAddressQr } from './crypto-qr';
 
 export type OrderWithRelations = Order & {
   items: Array<
@@ -40,7 +41,14 @@ export function toPaymentInfoDto(
     if (payment.cryptoNetwork) {
       dto.cryptoNetwork = payment.cryptoNetwork as CryptoNetwork;
     }
-    if (payment.cryptoAddress) dto.cryptoAddress = payment.cryptoAddress;
+    if (payment.cryptoAddress) {
+      dto.cryptoAddress = payment.cryptoAddress;
+      // QR dựng từ địa chỉ ĐÃ CHỐT TRONG ĐƠN, không phải địa chỉ hiện tại trong
+      // cấu hình: chủ shop đổi ví sau đó thì đơn đang chờ vẫn phải trỏ đúng chỗ
+      // khách được báo lúc đầu.
+      const qr = cryptoAddressQr(payment.cryptoAddress);
+      if (qr) dto.cryptoQr = qr;
+    }
     if (payment.cryptoAmount !== null) {
       dto.cryptoAmount = Number(payment.cryptoAmount);
     }

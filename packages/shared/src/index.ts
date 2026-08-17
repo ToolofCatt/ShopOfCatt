@@ -334,6 +334,13 @@ export interface PaymentInfoDto {
   cryptoNetwork?: CryptoNetwork;
   cryptoAddress?: string;
   cryptoAmount?: number;
+  /**
+   * Mã QR của ĐỊA CHỈ VÍ, dạng data URI SVG (~1 KB).
+   *
+   * Chỉ chứa địa chỉ, KHÔNG chứa số tiền — chuẩn URI cho token được hỗ trợ rất
+   * chắp vá nên quét xong khách vẫn phải tự nhập số tiền. Giao diện phải nói rõ.
+   */
+  cryptoQr?: string;
   /** TxID đã khớp (khi đã thanh toán). */
   cryptoTxId?: string;
   /** MOCK mode: relative web path to the fake gateway, e.g. /mock-pay/DH-XXXXXX */
