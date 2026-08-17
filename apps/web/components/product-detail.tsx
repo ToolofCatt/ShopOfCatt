@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ChevronRight } from 'lucide-react';
 import type { ProductDto } from '@webcatt/shared';
 import { BuyBox } from '@/components/buy-box';
@@ -65,6 +65,41 @@ export function ProductDetail({ product }: { product: ProductDto }) {
     [product.image, product.images],
   );
   const [selected, setSelected] = useState(0);
+  /** Rê chuột vào khung ảnh thì dừng chạy tự động — đang xem thì đừng cướp ảnh. */
+  const [paused, setPaused] = useState(false);
+  /**
+   * Người dùng có bật "giảm chuyển động" trong hệ điều hành hay không.
+   *
+   * Đọc trong effect chứ không đọc thẳng khi render: `matchMedia` không tồn tại
+   * lúc render phía máy chủ, và giá trị máy chủ đoán ra cũng sẽ lệch với máy
+   * khách gây cảnh báo hydrate.
+   */
+  const [reducedMotion, setReducedMotion] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const apply = () => setReducedMotion(query.matches);
+    apply();
+    query.addEventListener('change', apply);
+    return () => query.removeEventListener('change', apply);
+  }, []);
+
+  /*
+   * Tự chuyển ảnh mỗi 3 giây, tuần tự, quay vòng.
+   *
+   * Dùng `setTimeout` phụ thuộc `selected` chứ không phải `setInterval`: bấm
+   * chọn ảnh bằng tay là hẹn giờ đặt lại từ đầu, nếu không ảnh vừa bấm có thể
+   * bị nhảy sang ảnh khác chỉ sau vài phần mười giây.
+   */
+  useEffect(() => {
+    if (gallery.length < 2 || paused || reducedMotion) return;
+    const timer = window.setTimeout(() => {
+      setSelected((current) => (current + 1) % gallery.length);
+    }, 3000);
+    return () => window.clearTimeout(timer);
+  }, [selected, gallery.length, paused, reducedMotion]);
+
+  // Xoá bớt ảnh ở trang quản trị có thể làm chỉ số hiện tại vượt mảng.
+  const current = gallery.length > 0 ? Math.min(selected, gallery.length - 1) : 0;
 
   // Hết hàng khi mọi loại đang bán đều không còn kho (hoặc chưa có loại nào).
   const outOfStock = product.variants
@@ -112,20 +147,50 @@ export function ProductDetail({ product }: { product: ProductDto }) {
           {gallery.length > 0 && (
             <div className={`mt-6 ${outOfStock ? 'opacity-50 grayscale' : ''}`}>
               {/*
-                `max-h` chứ KHÔNG phải `aspect-[…]`, và `object-contain` chứ
-                không `object-cover`. Trước đây ô ảnh cố định 16:9 và cắt ảnh
-                cho đầy khung: logo hay ảnh hộp sản phẩm bị xén mất trên dưới,
-                và khi sản phẩm CHƯA có ảnh thì cái ô xám rỗng cao gần 400px vẫn
-                chiếm chỗ, đẩy phần mô tả xuống dưới màn hình đầu tiên.
-                Giờ khung co theo ảnh, và không có ảnh thì không có khung.
+                KHUNG CAO CỐ ĐỊNH, ảnh `object-contain` bên trong.
+
+                Hai lần trước đều sai theo hai kiểu khác nhau: khung cứng 16:9 +
+                `object-cover` thì cắt mất mép ảnh; đổi sang chỉ đặt `max-h` thì
+                khung co theo từng ảnh, nên chuyển ảnh ngang sang ảnh vuông là
+                cả phần mô tả bên dưới nhảy lên nhảy xuống. Cố định chiều cao
+                khung rồi cho ảnh vừa vào trong là được cả hai: không cắt, và
+                không có gì dịch chuyển.
+
+                Chiều cao theo `@container` vì component này còn chạy trong
+                khung xem trước rộng ~380px của trang quản trị.
               */}
-              <div className="flex items-center justify-center overflow-hidden rounded-lg bg-neutral-100 p-2">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={gallery[Math.min(selected, gallery.length - 1)]}
-                  alt={product.name}
-                  className="max-h-[420px] w-auto max-w-full rounded object-contain"
-                />
+              <div
+                className="relative h-64 overflow-hidden rounded-lg bg-neutral-100 @xl:h-[360px] @3xl:h-[420px]"
+                onMouseEnter={() => setPaused(true)}
+                onMouseLeave={() => setPaused(false)}
+                onFocus={() => setPaused(true)}
+                onBlur={() => setPaused(false)}
+              >
+                <div
+                  className={cn(
+                    'flex h-full',
+                    // Không hoạt hình khi người dùng đã bật "giảm chuyển động".
+                    reducedMotion ? '' : 'transition-transform duration-500 ease-out',
+                  )}
+                  style={{ transform: `translateX(-${current * 100}%)` }}
+                >
+                  {gallery.map((source, index) => (
+                    <div
+                      key={index}
+                      className="flex h-full w-full shrink-0 items-center justify-center p-2"
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={source}
+                        alt={index === 0 ? product.name : ''}
+                        // Ảnh đầu tải ngay vì nó nằm trong màn hình đầu tiên;
+                        // các ảnh sau nằm ngoài khung nên để trình duyệt hoãn.
+                        loading={index === 0 ? 'eager' : 'lazy'}
+                        className="max-h-full max-w-full rounded object-contain"
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {gallery.length > 1 && (
@@ -135,11 +200,11 @@ export function ProductDetail({ product }: { product: ProductDto }) {
                       key={index}
                       type="button"
                       aria-label={t.product.viewImage(index + 1)}
-                      aria-pressed={index === selected}
+                      aria-pressed={index === current}
                       onClick={() => setSelected(index)}
                       className={cn(
                         'h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 bg-neutral-100 transition-colors',
-                        index === selected
+                        index === current
                           ? 'border-neutral-950'
                           : 'border-transparent hover:border-neutral-300',
                       )}
@@ -148,6 +213,7 @@ export function ProductDetail({ product }: { product: ProductDto }) {
                       <img
                         src={source}
                         alt=""
+                        loading="lazy"
                         className="h-full w-full object-contain"
                       />
                     </button>
