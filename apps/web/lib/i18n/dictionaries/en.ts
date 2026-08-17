@@ -189,6 +189,13 @@ export const en: Dictionary = {
     receiptQty: 'Qty',
     receiptTotal: 'Total',
 
+    /* ===== v6 — payment details shown on the page ===== */
+    paymentTitle: 'Payment',
+    paymentMethodLabel: 'Method',
+    paymentSentAmount: 'Amount sent',
+    receiptFileName: 'order',
+    keysFileName: 'keys',
+
     /* ===== v5 — discount codes ===== */
     subtotal: 'Subtotal',
     discount: 'Discount',

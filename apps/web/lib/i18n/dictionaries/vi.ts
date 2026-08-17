@@ -193,6 +193,14 @@ export const vi = {
     receiptQty: 'SL',
     receiptTotal: 'Tổng cộng',
 
+    /* ===== v6 — thông tin thanh toán hiện ngay trên trang ===== */
+    paymentTitle: 'Thanh toán',
+    paymentMethodLabel: 'Phương thức',
+    paymentSentAmount: 'Số tiền đã gửi',
+    /* Tên file khi tải về — theo ngôn ngữ đang chọn, không ghi cứng tiếng Việt. */
+    receiptFileName: 'don-hang',
+    keysFileName: 'ma-san-pham',
+
     /* ===== v5 — mã giảm giá ===== */
     subtotal: 'Tiền hàng',
     discount: 'Giảm giá',

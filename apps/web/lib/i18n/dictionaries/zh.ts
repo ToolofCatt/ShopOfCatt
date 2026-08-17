@@ -184,6 +184,13 @@ export const zh: Dictionary = {
     receiptQty: '数量',
     receiptTotal: '总计',
 
+    /* ===== v6 — 页面上的支付信息 ===== */
+    paymentTitle: '支付',
+    paymentMethodLabel: '方式',
+    paymentSentAmount: '已转金额',
+    receiptFileName: 'dingdan',
+    keysFileName: 'kami',
+
     /* ===== v5 — 优惠码 ===== */
     subtotal: '商品金额',
     discount: '优惠',

@@ -20,12 +20,14 @@ import {
   formatUsdt,
   formatUserCode,
   type OrderDetailDto,
+  type PaymentInfoDto,
   type PublicUser,
 } from '@webcatt/shared';
 import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import type { Dictionary } from '@/lib/i18n';
+import { formatCryptoAmount } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { Badge, Button, Card, EmptyState, Spinner, buttonVariants } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/order-status-badge';
@@ -67,6 +69,15 @@ function downloadTxt(filename: string, content: string): void {
   URL.revokeObjectURL(url);
 }
 
+/** Tên phương thức thanh toán, dùng chung cho cả trang lẫn biên nhận. */
+function paymentMethodName(payment: PaymentInfoDto, t: Dictionary): string {
+  if (payment.mode === 'CRYPTO') {
+    return t.product.payCrypto(payment.cryptoNetwork ?? '');
+  }
+  if (payment.mode === 'BINANCE') return t.product.payBinancePay;
+  return t.product.payMock;
+}
+
 /* ---------- biên nhận .txt (nội dung theo ngôn ngữ đang chọn) ---------- */
 
 function buildReceipt(
@@ -87,6 +98,27 @@ function buildReceipt(
   lines.push(
     `${t.orderDetail.receiptCreatedAt}: ${formatDate(order.createdAt)}   ${t.orderDetail.receiptPaidAt}: ${formatDate(order.paidAt)}`,
   );
+  if (order.payment) {
+    lines.push(
+      `${t.orderDetail.paymentMethodLabel}: ${paymentMethodName(order.payment, t)}`,
+    );
+    if (order.payment.cryptoAmount !== undefined) {
+      lines.push(
+        `${t.orderDetail.paymentSentAmount}: ${formatCryptoAmount(order.payment.cryptoAmount)} USDT`,
+      );
+    }
+    if (order.payment.cryptoAddress) {
+      lines.push(`${t.checkout.cryptoAddressLabel}: ${order.payment.cryptoAddress}`);
+    }
+    if (order.payment.cryptoTxId) {
+      lines.push(`${t.checkout.cryptoTxIdLabel}: ${order.payment.cryptoTxId}`);
+    }
+    // `merchantTradeNo` được sinh cho MỌI thanh toán, không riêng Binance Pay —
+    // chỉ dán nhãn Binance Pay khi đơn thật sự đi qua cổng đó.
+    if (order.payment.mode === 'BINANCE' && order.payment.merchantTradeNo) {
+      lines.push(`Binance Pay: ${order.payment.merchantTradeNo}`);
+    }
+  }
   lines.push('');
   order.items.forEach((item, index) => {
     const name = item.variantName
@@ -296,7 +328,10 @@ function OrderDetailContent({ code }: { code: string }) {
               variant="outline"
               size="sm"
               onClick={() =>
-                downloadTxt(`don-hang-${order.code}.txt`, buildReceipt(order, user, t, formatDate))
+                downloadTxt(
+                  `${t.orderDetail.receiptFileName}-${order.code}.txt`,
+                  buildReceipt(order, user, t, formatDate),
+                )
               }
             >
               <FileDown className="h-3.5 w-3.5" strokeWidth={1.75} />
@@ -352,6 +387,70 @@ function OrderDetailContent({ code }: { code: string }) {
             </div>
           )}
         </dl>
+
+        {/*
+          Thông tin thanh toán hiện thẳng ở đây.
+
+          Trước đây trang này không nói gì về việc đơn được trả bằng cách nào —
+          muốn biết mạng nào, gửi vào ví nào, TxID bao nhiêu thì chỉ còn cách tải
+          file .txt về đọc. Mà file đó cũng chưa có mấy thông tin này.
+        */}
+        {order.payment && (
+          <div className="mt-4 border-t border-neutral-100 pt-4">
+            <p className="text-sm font-medium text-neutral-950">
+              {t.orderDetail.paymentTitle}
+            </p>
+            <dl className="mt-2.5 grid gap-4 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-neutral-500">{t.orderDetail.paymentMethodLabel}</dt>
+                <dd className="mt-0.5 font-medium">
+                  {paymentMethodName(order.payment, t)}
+                </dd>
+              </div>
+              {order.payment.cryptoAmount !== undefined && (
+                <div>
+                  <dt className="text-neutral-500">{t.orderDetail.paymentSentAmount}</dt>
+                  <dd className="mt-0.5 font-medium tabular-nums">
+                    {formatCryptoAmount(order.payment.cryptoAmount)} USDT
+                  </dd>
+                </div>
+              )}
+              {order.payment.cryptoAddress && (
+                <div className="sm:col-span-2">
+                  <dt className="text-neutral-500">{t.checkout.cryptoAddressLabel}</dt>
+                  <dd className="mt-0.5 flex items-start gap-1">
+                    <span className="break-all font-mono text-xs leading-5">
+                      {order.payment.cryptoAddress}
+                    </span>
+                    <CopyLineButton text={order.payment.cryptoAddress} />
+                  </dd>
+                </div>
+              )}
+              {order.payment.cryptoTxId && (
+                <div className="sm:col-span-2">
+                  <dt className="text-neutral-500">{t.checkout.cryptoTxIdLabel}</dt>
+                  <dd className="mt-0.5 flex items-start gap-1">
+                    <span className="break-all font-mono text-xs leading-5">
+                      {order.payment.cryptoTxId}
+                    </span>
+                    <CopyLineButton text={order.payment.cryptoTxId} />
+                  </dd>
+                </div>
+              )}
+              {order.payment.mode === 'BINANCE' && order.payment.merchantTradeNo && (
+                <div className="sm:col-span-2">
+                  <dt className="text-neutral-500">Binance Pay</dt>
+                  <dd className="mt-0.5 flex items-start gap-1">
+                    <span className="break-all font-mono text-xs leading-5">
+                      {order.payment.merchantTradeNo}
+                    </span>
+                    <CopyLineButton text={order.payment.merchantTradeNo} />
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
       </Card>
 
       {partiallyMissing && (
@@ -399,7 +498,12 @@ function OrderDetailContent({ code }: { code: string }) {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => downloadTxt(`${order.code}.txt`, lines.join('\n'))}
+                        onClick={() =>
+                          downloadTxt(
+                            `${t.orderDetail.keysFileName}-${order.code}.txt`,
+                            lines.join('\n'),
+                          )
+                        }
                       >
                         <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
                         {t.orderDetail.downloadTxt}
