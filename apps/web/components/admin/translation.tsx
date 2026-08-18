@@ -24,7 +24,8 @@ export function useTranslationStatus(): TranslationStatusDto | null {
         if (active) setStatus(data);
       })
       .catch(() => {
-        if (active) setStatus({ configured: false, source: null, model: '' });
+        if (active)
+          setStatus({ configured: false, source: null, provider: 'anthropic', model: '' });
       });
     return () => {
       active = false;

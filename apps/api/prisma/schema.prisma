@@ -375,13 +375,22 @@ model StoreSetting {
   bep20Address      String   @default("")
   trc20Address      String   @default("")
 
-  /// Khoá Claude API dùng cho tính năng dịch tự động sang EN/ZH.
+  /// --- Dịch tự động sang EN/ZH ---
+  /// Chuẩn giao thức: "anthropic" hoặc "openai". Chọn "openai" là dùng được gần
+  /// như mọi nhà cung cấp khác (OpenRouter, DeepSeek, Groq, Ark, Ollama nội bộ…)
+  /// vì tất cả đều nói chung giao thức /chat/completions — chỉ khác địa chỉ gốc.
+  aiProvider        String   @default("anthropic")
+  /// Địa chỉ gốc API. Rỗng = địa chỉ mặc định của nhà cung cấp.
+  aiBaseUrl         String   @default("")
+  /// Tên model. Rỗng = claude-opus-5 (chỉ có nghĩa với Anthropic).
+  aiModel           String   @default("")
+  /// Khoá API cho dịch tự động.
   ///
   /// Là BÍ MẬT: không bao giờ nằm trong AdminStoreSettingDto, không bao giờ đi
   /// vào nhật ký thao tác (chỉ ghi "có/không"), và có mặt trong mọi bản pg_dump
   /// — đó là cái giá của việc cho sửa ngay trên web thay vì phải SSH vào máy chủ.
   /// Rỗng thì lùi về biến môi trường ANTHROPIC_API_KEY.
-  anthropicApiKey   String   @default("")
+  aiApiKey          String   @default("")
 
   /// Danh sách kênh liên hệ hỗ trợ — mảng {label, value, url?}, admin tự sửa.
   /// Hiện ở khối "Quên mật khẩu" trang đăng nhập.

@@ -169,7 +169,11 @@ export const K = {
   adminSettingsFlagInvalid: 'admin.settings_flag_invalid',
   adminBinanceIdInvalid: 'admin.binance_id_invalid',
   adminBinanceIdRequired: 'admin.binance_id_required',
-  adminAnthropicKeyInvalid: 'admin.anthropic_key_invalid',
+  adminAiKeyInvalid: 'admin.ai_key_invalid',
+  adminAiProviderInvalid: 'admin.ai_provider_invalid',
+  adminAiBaseUrlInvalid: 'admin.ai_base_url_invalid',
+  adminAiModelInvalid: 'admin.ai_model_invalid',
+  adminAiModelRequired: 'admin.ai_model_required',
   adminSettingsAddressInvalid: 'admin.settings_address_invalid',
   adminCryptoAddressRequired: 'admin.crypto_address_required',
   adminBep20AddressInvalid: 'admin.bep20_address_invalid',
@@ -742,10 +746,30 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     en: 'Binance ID must contain digits only',
     zh: 'Binance ID 只能包含数字',
   },
-  [K.adminAnthropicKeyInvalid]: {
-    vi: 'Khoá Claude API không đúng dạng — phải bắt đầu bằng "sk-ant-"',
-    en: 'Invalid Claude API key — it must start with "sk-ant-"',
-    zh: 'Claude API 密钥格式不正确 —— 必须以 "sk-ant-" 开头',
+  [K.adminAiKeyInvalid]: {
+    vi: 'Khoá API không hợp lệ',
+    en: 'Invalid API key',
+    zh: 'API 密钥无效',
+  },
+  [K.adminAiProviderInvalid]: {
+    vi: 'Nhà cung cấp AI không hợp lệ',
+    en: 'Invalid AI provider',
+    zh: 'AI 服务商无效',
+  },
+  [K.adminAiBaseUrlInvalid]: {
+    vi: 'Địa chỉ API phải bắt đầu bằng http:// hoặc https://',
+    en: 'The API base URL must start with http:// or https://',
+    zh: 'API 地址必须以 http:// 或 https:// 开头',
+  },
+  [K.adminAiModelInvalid]: {
+    vi: 'Tên model không hợp lệ',
+    en: 'Invalid model name',
+    zh: '模型名称无效',
+  },
+  [K.adminAiModelRequired]: {
+    vi: 'Dùng nhà cung cấp theo chuẩn OpenAI thì phải điền tên model',
+    en: 'A model name is required when using an OpenAI-compatible provider',
+    zh: '使用 OpenAI 兼容服务商时必须填写模型名称',
   },
   [K.adminBinanceIdRequired]: {
     vi: 'Bật nhận tiền qua Binance ID thì phải điền Binance ID',

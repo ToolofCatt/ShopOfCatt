@@ -195,8 +195,21 @@ export interface AdminAnnouncementDto {
 }
 
 // ---------- Dịch tự động ----------
+/**
+ * Chuẩn giao thức của dịch vụ AI dùng để dịch.
+ *
+ * `openai` không có nghĩa là phải dùng OpenAI — gần như mọi nhà cung cấp khác
+ * (OpenRouter, DeepSeek, Groq, Together, BytePlus Ark, Ollama chạy nội bộ…) đều
+ * nói cùng giao thức `POST /chat/completions` này, nên chỉ cần đổi địa chỉ gốc.
+ */
+export const AI_PROVIDERS = ['anthropic', 'openai'] as const;
+export type AiProvider = (typeof AI_PROVIDERS)[number];
+
+/** Model dùng khi chủ shop để trống ô model (chỉ có nghĩa với Anthropic). */
+export const AI_DEFAULT_MODEL = 'claude-opus-5';
+
 export interface TranslationStatusDto {
-  /** Có khoá Claude API dùng được hay không (trong cài đặt hoặc biến môi trường). */
+  /** Có khoá API dùng được hay không (trong cài đặt hoặc biến môi trường). */
   configured: boolean;
   /**
    * Khoá đang dùng lấy từ đâu — `null` khi chưa có.
@@ -206,6 +219,7 @@ export interface TranslationStatusDto {
    * năng vẫn chạy (hoặc ngược lại) và không hiểu vì sao.
    */
   source: 'settings' | 'env' | null;
+  provider: AiProvider;
   model: string;
 }
 
@@ -238,15 +252,21 @@ export interface AdminStoreSettingDto {
   cryptoEnabled: boolean;
   bep20Address: string;
   trc20Address: string;
+  /** Chuẩn giao thức của dịch vụ AI dùng để dịch. */
+  aiProvider: AiProvider;
+  /** Địa chỉ gốc API; rỗng = dùng địa chỉ mặc định của nhà cung cấp. */
+  aiBaseUrl: string;
+  /** Tên model; rỗng = dùng AI_DEFAULT_MODEL. */
+  aiModel: string;
   /**
-   * Đã lưu khoá Claude API trong cài đặt hay chưa.
+   * Đã lưu khoá API trong cài đặt hay chưa.
    *
    * KHÔNG BAO GIỜ trả về chính khoá đó: trang quản trị chỉ cần biết có hay
    * không. Gửi khoá xuống trình duyệt là bất kỳ lỗi XSS nào cũng đọc được nó.
    */
-  anthropicKeySet: boolean;
+  aiKeySet: boolean;
   /** Bốn ký tự cuối của khoá đã lưu, để chủ shop nhận ra mình dán khoá nào. */
-  anthropicKeyHint: string;
+  aiKeyHint: string;
   /** Các kênh liên hệ hiển thị ở khối "Quên mật khẩu". */
   supportChannels: SupportChannelDto[];
   /** Lời nhắn tùy chỉnh; rỗng = dùng câu mặc định theo ngôn ngữ. */

@@ -1,4 +1,4 @@
-import type { AuditAction, PaymentMethod } from '@webcatt/shared';
+import type { AiProvider, AuditAction, PaymentMethod } from '@webcatt/shared';
 
 /**
  * Từ điển tiếng Việt — nguồn chuẩn (source of truth).
@@ -546,7 +546,7 @@ export const vi = {
     translateDone: 'Đã dịch xong.',
     translateFixForm: 'Vui lòng sửa các lỗi trong biểu mẫu trước khi dịch.',
     translateNothing: 'Chưa có nội dung tiếng Việt để dịch.',
-    translateNoKey: 'Chưa có khoá Claude API. Dán khoá ở Cài đặt → Dịch tự động.',
+    translateNoKey: 'Chưa có khoá API. Dán khoá ở Cài đặt → Dịch tự động.',
     localeEn: 'Tiếng Anh (EN)',
     localeZh: 'Tiếng Trung (ZH)',
     transFieldName: 'Tên',
@@ -772,6 +772,7 @@ export const vi = {
     settingBinanceIdValueHint:
       'Chỉ gồm chữ số. Mở app Binance → Pay → phần nhận tiền để xem ID của bạn.',
     errBinanceIdRequired: 'Điền Binance ID trước khi bật',
+    errAiModelRequired: 'Chuẩn OpenAI thì phải điền tên model.',
     settingCrypto: 'USDT on-chain (BEP20 / TRC20)',
     settingCryptoHint:
       'Khách chuyển USDT thẳng vào ví Binance của cửa hàng; hệ thống tự đối chiếu lịch sử nạp.',
@@ -847,11 +848,19 @@ export const vi = {
     /* ===== v7 — khoá Claude API cho dịch tự động ===== */
     settingTranslationTitle: 'Dịch tự động',
     settingTranslationHint:
-      'Dịch tên và mô tả sản phẩm sang tiếng Anh + tiếng Trung bằng Claude API.',
+      'Dịch tên và mô tả sản phẩm sang tiếng Anh + tiếng Trung bằng AI.',
+    settingAiProviders: {
+      anthropic: 'Claude (Anthropic)',
+      openai: 'Chuẩn OpenAI',
+    } satisfies Record<AiProvider, string>,
+    settingAiBaseUrlLabel: 'Địa chỉ API',
+    settingAiBaseUrlHint: 'Để trống = địa chỉ mặc định của nhà cung cấp.',
+    settingAiModelLabel: 'Model',
+    settingAiModelHint: 'Để trống = claude-opus-5.',
     settingApiKeyLabel: 'Khoá Claude API',
     settingApiKeyReplaceLabel: 'Thay bằng khoá mới',
     settingApiKeyHint:
-      'Lấy ở platform.claude.com → API keys. Để trống = giữ khoá đang dùng.',
+      'Khoá của nhà cung cấp đã chọn. Để trống = giữ khoá đang dùng.',
     settingApiKeySaved: (hint: string) => `Đã lưu khoá ····${hint}`,
     settingApiKeyClear: 'Xoá khoá',
     settingApiKeyWillClear: 'Khoá sẽ bị xoá khi bạn bấm Lưu — dịch tự động sẽ tắt.',

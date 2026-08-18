@@ -2,8 +2,10 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type StoreSetting, type User } from '@prisma/client';
 import {
+  AI_PROVIDERS,
   SUPPORT_CHANNELS_MAX,
   type AdminStoreSettingDto,
+  type AiProvider,
   type CryptoNetwork,
   type PaymentMethodDto,
   type StoreReadinessDto,
@@ -26,11 +28,14 @@ const TRC20_ADDRESS_RE = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
 const SUPPORT_URL_RE = /^(https?:\/\/|mailto:)/i;
 
 /**
- * Khoá Claude API luôn bắt đầu bằng "sk-ant-". Kiểm ngay tại đây để chủ shop
- * biết mình dán nhầm — nếu không thì phải tới lúc bấm "Dịch tự động" mới thấy
- * lỗi, mà lúc đó thông báo chỉ là "gọi API thất bại", chẳng chỉ ra được gì.
+ * Địa chỉ API chỉ nhận http/https.
+ *
+ * KHÔNG chặn địa chỉ nội bộ: dùng LLM chạy ngay trên máy (Ollama ở
+ * http://localhost:11434/v1) là một trong những lý do chính để có ô này. Đổi
+ * lại, ai chiếm được tài khoản quản trị có thể bắt máy chủ gọi tới địa chỉ nội
+ * bộ bất kỳ — chấp nhận được vì phản hồi chỉ dùng để dịch, không hiện ra đâu.
  */
-const ANTHROPIC_KEY_PREFIX = 'sk-ant-';
+const AI_BASE_URL_RE = /^https?:\/\//i;
 
 /**
  * Đọc mảng kênh hỗ trợ từ cột JSON. Dữ liệu trong cột có thể do bản cũ ghi vào
@@ -184,12 +189,22 @@ export class SettingsService {
   }
 
   /**
-   * Khoá Claude API chủ shop lưu trong cài đặt (rỗng = chưa đặt).
-   *
-   * Chỉ TranslationService gọi. Không đi qua bất kỳ DTO nào.
+   * Cấu hình AI cho dịch tự động. Khoá là bí mật nên chỉ TranslationService gọi
+   * hàm này; nó không đi qua bất kỳ DTO nào.
    */
-  async getAnthropicApiKey(): Promise<string> {
-    return (await this.getSetting()).anthropicApiKey.trim();
+  async getAiConfig(): Promise<{
+    apiKey: string;
+    provider: AiProvider;
+    baseUrl: string;
+    model: string;
+  }> {
+    const setting = await this.getSetting();
+    return {
+      apiKey: setting.aiApiKey.trim(),
+      provider: normalizeProvider(setting.aiProvider),
+      baseUrl: setting.aiBaseUrl.trim().replace(/\/+$/, ''),
+      model: setting.aiModel.trim(),
+    };
   }
 
   async getAdmin(): Promise<AdminStoreSettingDto> {
@@ -210,6 +225,9 @@ export class SettingsService {
 
   /** Cập nhật cấu hình + ghi nhật ký `settings.update` kèm diff thay đổi. */
   async update(actor: User, dto: UpdateSettingsDto): Promise<AdminStoreSettingDto> {
+    // Đọc sớm: vài phép kiểm bên dưới cần biết giá trị CŨ, vì trang quản trị
+    // chỉ gửi lên những trường nó thực sự đổi.
+    const before0 = await this.getSetting();
     const bep20Address = dto.bep20Address.trim();
     const trc20Address = dto.trc20Address.trim();
     const binanceId = dto.binanceId.trim();
@@ -229,13 +247,18 @@ export class SettingsService {
       throw new BadRequestException(K.adminBinanceIdRequired);
     }
 
-    const anthropicApiKey = dto.anthropicApiKey?.trim();
-    if (
-      anthropicApiKey !== undefined &&
-      anthropicApiKey !== '' &&
-      !anthropicApiKey.startsWith(ANTHROPIC_KEY_PREFIX)
-    ) {
-      throw new BadRequestException(K.adminAnthropicKeyInvalid);
+    const aiApiKey = dto.aiApiKey?.trim();
+    // Bỏ dấu / thừa ở cuối để lúc nối đường dẫn không sinh ra "//chat/completions".
+    const aiBaseUrl = dto.aiBaseUrl?.trim().replace(/\/+$/, '');
+    const aiModel = dto.aiModel?.trim();
+    if (aiBaseUrl !== undefined && aiBaseUrl !== '' && !AI_BASE_URL_RE.test(aiBaseUrl)) {
+      throw new BadRequestException(K.adminAiBaseUrlInvalid);
+    }
+    // Anthropic có model mặc định, các nhà cung cấp khác thì không đoán được.
+    const aiProviderNext = dto.aiProvider ?? normalizeProvider(before0.aiProvider);
+    const aiModelNext = aiModel ?? before0.aiModel.trim();
+    if (aiProviderNext === 'openai' && aiModelNext === '') {
+      throw new BadRequestException(K.adminAiModelRequired);
     }
 
     // Kênh hỗ trợ: bỏ dòng trống, kiểm tra liên kết, cắt theo số lượng tối đa.
@@ -254,7 +277,7 @@ export class SettingsService {
       throw new BadRequestException(K.adminSupportTooMany);
     }
 
-    const before = await this.getSetting();
+    const before = before0;
 
     const data = {
       mockEnabled: dto.mockEnabled,
@@ -266,11 +289,13 @@ export class SettingsService {
       cryptoEnabled: dto.cryptoEnabled,
       bep20Address,
       trc20Address,
+      aiProvider: aiProviderNext,
+      aiBaseUrl: aiBaseUrl === undefined ? before.aiBaseUrl : aiBaseUrl,
+      aiModel: aiModelNext,
       // Không gửi = giữ khoá cũ. Trang quản trị không bao giờ nhận được khoá
       // nên nó KHÔNG THỂ gửi ngược lên — quên nhánh này thì mỗi lần lưu cài đặt
       // là khoá bị xoá mất mà không ai biết.
-      anthropicApiKey:
-        anthropicApiKey === undefined ? before.anthropicApiKey : anthropicApiKey,
+      aiApiKey: aiApiKey === undefined ? before.aiApiKey : aiApiKey,
       // Bỏ trống (không gửi lên) = giữ nguyên giá trị cũ.
       supportChannels:
         dto.supportChannels === undefined
@@ -305,10 +330,13 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     cryptoEnabled: setting.cryptoEnabled,
     bep20Address: setting.bep20Address,
     trc20Address: setting.trc20Address,
+    aiProvider: normalizeProvider(setting.aiProvider),
+    aiBaseUrl: setting.aiBaseUrl,
+    aiModel: setting.aiModel,
     // Cố ý KHÔNG trả khoá về: chỉ "có hay không" + bốn ký tự cuối để chủ shop
     // nhận ra mình đã dán khoá nào.
-    anthropicKeySet: setting.anthropicApiKey.trim() !== '',
-    anthropicKeyHint: setting.anthropicApiKey.trim().slice(-4),
+    aiKeySet: setting.aiApiKey.trim() !== '',
+    aiKeyHint: setting.aiApiKey.trim().slice(-4),
     supportChannels: parseSupportChannels(setting.supportChannels),
     supportNote: setting.supportNote,
   };
@@ -322,10 +350,24 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
     cryptoEnabled: setting.cryptoEnabled,
     bep20Address: setting.bep20Address,
     trc20Address: setting.trc20Address,
+    aiProvider: setting.aiProvider,
+    aiBaseUrl: setting.aiBaseUrl,
+    aiModel: setting.aiModel,
     // BOOLEAN, không phải chính khoá: nhật ký lưu vĩnh viễn và hiện ở
     // /admin/audit. Ghi cả chuỗi vào đây là rò bí mật ra một chỗ thứ hai.
-    anthropicKeySet: setting.anthropicApiKey.trim() !== '',
+    aiKeySet: setting.aiApiKey.trim() !== '',
     supportChannels: parseSupportChannels(setting.supportChannels),
     supportNote: setting.supportNote,
   };
+}
+
+/**
+ * Cột `aiProvider` là TEXT tự do trong CSDL, nên bản cũ hoặc một lần sửa tay
+ * bằng psql có thể để lại giá trị lạ. Quy về "anthropic" thay vì để nó rơi
+ * xuống nhánh nào không ai lường trước.
+ */
+function normalizeProvider(value: string): AiProvider {
+  return (AI_PROVIDERS as readonly string[]).includes(value)
+    ? (value as AiProvider)
+    : 'anthropic';
 }

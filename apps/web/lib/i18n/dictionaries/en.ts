@@ -538,7 +538,7 @@ export const en: Dictionary = {
     translateDone: 'Translation finished.',
     translateFixForm: 'Please fix the errors in the form before translating.',
     translateNothing: 'There is no Vietnamese content to translate yet.',
-    translateNoKey: 'No Claude API key yet. Paste one in Settings → Auto-translate.',
+    translateNoKey: 'No API key yet. Paste one in Settings → Auto-translate.',
     localeEn: 'English (EN)',
     localeZh: 'Chinese (ZH)',
     transFieldName: 'Name',
@@ -762,6 +762,7 @@ export const en: Dictionary = {
     settingBinanceIdValueHint:
       'Digits only. Open the Binance app → Pay → receive section to find your ID.',
     errBinanceIdRequired: 'Enter a Binance ID before enabling this',
+    errAiModelRequired: 'A model name is required for OpenAI-compatible providers.',
     settingCrypto: 'USDT on-chain (BEP20 / TRC20)',
     settingCryptoHint:
       "Customers send USDT straight to the store's Binance wallet; deposits are matched automatically.",
@@ -838,11 +839,19 @@ export const en: Dictionary = {
     /* ===== v7 — Claude API key for auto-translation ===== */
     settingTranslationTitle: 'Auto-translate',
     settingTranslationHint:
-      'Translate product names and descriptions into English + Chinese with the Claude API.',
+      'Translate product names and descriptions into English + Chinese with AI.',
+    settingAiProviders: {
+      anthropic: 'Claude (Anthropic)',
+      openai: 'OpenAI-compatible',
+    },
+    settingAiBaseUrlLabel: 'API base URL',
+    settingAiBaseUrlHint: "Leave empty for the provider's default.",
+    settingAiModelLabel: 'Model',
+    settingAiModelHint: 'Leave empty for claude-opus-5.',
     settingApiKeyLabel: 'Claude API key',
     settingApiKeyReplaceLabel: 'Replace with a new key',
     settingApiKeyHint:
-      'Get one at platform.claude.com → API keys. Leave empty to keep the current key.',
+      'The key for the selected provider. Leave empty to keep the current key.',
     settingApiKeySaved: (hint: string) => `Key saved ····${hint}`,
     settingApiKeyClear: 'Remove key',
     settingApiKeyWillClear: 'The key will be removed when you save — auto-translation turns off.',

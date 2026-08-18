@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -13,10 +14,12 @@ import {
   ValidateNested,
 } from 'class-validator';
 import {
+  AI_PROVIDERS,
   PRODUCT_IMAGE_MAX_LENGTH,
   SUPPORT_CHANNELS_MAX,
   SUPPORT_FIELD_MAX_LENGTH,
   SUPPORT_NOTE_MAX_LENGTH,
+  type AiProvider,
 } from '@webcatt/shared';
 import { K } from '../../i18n/messages';
 
@@ -71,16 +74,36 @@ export class UpdateSettingsDto {
   binanceQr?: string;
 
   /**
-   * Khoá Claude API cho dịch tự động.
+   * Chuẩn giao thức của dịch vụ AI. `IsIn` lấy thẳng từ AI_PROVIDERS trong
+   * shared, nên thêm nhà cung cấp mới ở đó là chỗ này tự nhận.
+   */
+  @IsOptional()
+  @IsIn(AI_PROVIDERS, { message: K.adminAiProviderInvalid })
+  aiProvider?: AiProvider;
+
+  /** Địa chỉ gốc API. Rỗng = mặc định của nhà cung cấp. */
+  @IsOptional()
+  @IsString({ message: K.adminAiBaseUrlInvalid })
+  @MaxLength(300, { message: K.adminAiBaseUrlInvalid })
+  aiBaseUrl?: string;
+
+  /** Tên model. Rỗng = mặc định. */
+  @IsOptional()
+  @IsString({ message: K.adminAiModelInvalid })
+  @MaxLength(120, { message: K.adminAiModelInvalid })
+  aiModel?: string;
+
+  /**
+   * Khoá API cho dịch tự động.
    *
    * Ba trạng thái, đừng gộp lại: KHÔNG gửi trường này = giữ nguyên khoá cũ
    * (trang quản trị không bao giờ nhận được khoá nên không gửi ngược lên được),
    * gửi chuỗi rỗng = xoá khoá, gửi chuỗi khác = đặt khoá mới.
    */
   @IsOptional()
-  @IsString({ message: K.adminAnthropicKeyInvalid })
-  @MaxLength(200, { message: K.adminAnthropicKeyInvalid })
-  anthropicApiKey?: string;
+  @IsString({ message: K.adminAiKeyInvalid })
+  @MaxLength(300, { message: K.adminAiKeyInvalid })
+  aiApiKey?: string;
 
   @IsBoolean({ message: K.adminSettingsFlagInvalid })
   cryptoEnabled: boolean;

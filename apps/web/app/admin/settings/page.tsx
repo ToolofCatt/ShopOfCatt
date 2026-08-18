@@ -3,13 +3,17 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Plus, PlugZap, ServerCrash, ShieldAlert, Trash2 } from 'lucide-react';
 import {
+  AI_DEFAULT_MODEL,
+  AI_PROVIDERS,
   SUPPORT_CHANNELS_MAX,
   SUPPORT_FIELD_MAX_LENGTH,
   SUPPORT_NOTE_MAX_LENGTH,
   type AdminStoreSettingDto,
+  type AiProvider,
   type BinanceStatusDto,
   type SupportChannelDto,
 } from '@webcatt/shared';
+import { Tabs } from '@/components/admin/tabs';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
@@ -55,13 +59,17 @@ export default function AdminSettingsPage() {
   const [cryptoEnabled, setCryptoEnabled] = useState(false);
   const [bep20Address, setBep20Address] = useState('');
   const [trc20Address, setTrc20Address] = useState('');
+  const [aiProvider, setAiProvider] = useState<AiProvider>('anthropic');
+  const [aiBaseUrl, setAiBaseUrl] = useState('');
+  const [aiModel, setAiModel] = useState('');
   /*
-    Khoá Claude API: máy chủ KHÔNG BAO GIỜ trả khoá về, nên ô này luôn rỗng khi
-    mở trang. Rỗng = "không đổi gì", chứ không phải "xoá khoá" — muốn xoá thì
-    bấm nút riêng, nếu không mỗi lần lưu cài đặt là khoá bay mất.
+    Khoá API: máy chủ KHÔNG BAO GIỜ trả khoá về, nên ô này luôn rỗng khi mở
+    trang. Rỗng = "không đổi gì", chứ không phải "xoá khoá" — muốn xoá thì bấm
+    nút riêng, nếu không mỗi lần lưu cài đặt là khoá bay mất.
   */
-  const [anthropicKey, setAnthropicKey] = useState('');
-  const [clearAnthropicKey, setClearAnthropicKey] = useState(false);
+  const [aiKey, setAiKey] = useState('');
+  const [clearAiKey, setClearAiKey] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [supportNote, setSupportNote] = useState('');
   const [supportChannels, setSupportChannels] = useState<SupportChannelDto[]>([]);
 
@@ -87,8 +95,11 @@ export default function AdminSettingsPage() {
     setTrc20Address(next.trc20Address);
     setSupportNote(next.supportNote);
     setSupportChannels(next.supportChannels);
-    setAnthropicKey('');
-    setClearAnthropicKey(false);
+    setAiProvider(next.aiProvider);
+    setAiBaseUrl(next.aiBaseUrl);
+    setAiModel(next.aiModel);
+    setAiKey('');
+    setClearAiKey(false);
   };
 
   useEffect(() => {
@@ -126,6 +137,7 @@ export default function AdminSettingsPage() {
   const markDirty = () => {
     setSaved(false);
     setAddressError(null);
+    setAiError(null);
   };
 
   /** Sửa một ô của kênh liên hệ thứ `index`. */
@@ -154,6 +166,13 @@ export default function AdminSettingsPage() {
       return;
     }
     setBinanceIdError(null);
+    // Anthropic có model mặc định, nhà cung cấp khác thì không đoán được.
+    // Máy chủ cũng chặn; đây chỉ là báo sớm ngay tại ô nhập.
+    if (aiProvider === 'openai' && aiModel.trim() === '') {
+      setAiError(t.admin.errAiModelRequired);
+      return;
+    }
+    setAiError(null);
     setSaving(true);
     setSaveError(null);
     setSaved(false);
@@ -169,12 +188,15 @@ export default function AdminSettingsPage() {
           cryptoEnabled,
           bep20Address: bep20Address.trim(),
           trc20Address: trc20Address.trim(),
+          aiProvider,
+          aiBaseUrl: aiBaseUrl.trim(),
+          aiModel: aiModel.trim(),
           // Ba trạng thái: bấm xoá → chuỗi rỗng, có gõ → khoá mới, không đụng
           // tới → KHÔNG gửi trường này để máy chủ giữ nguyên khoá cũ.
-          ...(clearAnthropicKey
-            ? { anthropicApiKey: '' }
-            : anthropicKey.trim() !== ''
-              ? { anthropicApiKey: anthropicKey.trim() }
+          ...(clearAiKey
+            ? { aiApiKey: '' }
+            : aiKey.trim() !== ''
+              ? { aiApiKey: aiKey.trim() }
               : {}),
           supportNote: supportNote.trim(),
           // Bỏ các dòng còn trống trước khi gửi.
@@ -365,9 +387,8 @@ export default function AdminSettingsPage() {
             )}
 
             {/*
-              Khoá Claude API cho dịch tự động. Nằm trong CSDL nên sửa được ngay
-              trên web — đổi lại nó có mặt trong mọi bản sao lưu, xem ghi chú ở
-              schema.prisma.
+              Cấu hình dịch tự động. Nằm trong CSDL nên sửa được ngay trên web —
+              đổi lại khoá có mặt trong mọi bản sao lưu, xem ghi chú ở schema.prisma.
             */}
             <div className="space-y-3 border-t border-neutral-100 pt-4">
               <div>
@@ -379,18 +400,76 @@ export default function AdminSettingsPage() {
                 </p>
               </div>
 
-              {settings?.anthropicKeySet && !clearAnthropicKey ? (
+              <Tabs
+                items={AI_PROVIDERS.map((value) => ({
+                  value,
+                  label: t.admin.settingAiProviders[value],
+                }))}
+                value={aiProvider}
+                onChange={(value) => {
+                  setAiProvider(value);
+                  markDirty();
+                }}
+              />
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label={t.admin.settingAiBaseUrlLabel}
+                  htmlFor="setting-ai-base-url"
+                  hint={t.admin.settingAiBaseUrlHint}
+                >
+                  <Input
+                    id="setting-ai-base-url"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={aiBaseUrl}
+                    placeholder={
+                      aiProvider === 'anthropic'
+                        ? 'https://api.anthropic.com'
+                        : 'https://openrouter.ai/api/v1'
+                    }
+                    className="font-mono text-[13px]"
+                    onChange={(event) => {
+                      setAiBaseUrl(event.target.value);
+                      markDirty();
+                    }}
+                  />
+                </Field>
+
+                <Field
+                  label={t.admin.settingAiModelLabel}
+                  htmlFor="setting-ai-model"
+                  error={aiError}
+                  hint={aiProvider === 'anthropic' ? t.admin.settingAiModelHint : undefined}
+                >
+                  <Input
+                    id="setting-ai-model"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={aiModel}
+                    invalid={Boolean(aiError)}
+                    placeholder={aiProvider === 'anthropic' ? AI_DEFAULT_MODEL : 'deepseek-chat'}
+                    className="font-mono text-[13px]"
+                    onChange={(event) => {
+                      setAiModel(event.target.value);
+                      markDirty();
+                    }}
+                  />
+                </Field>
+              </div>
+
+              {settings?.aiKeySet && !clearAiKey ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
                   <span className="font-mono text-sm text-neutral-950">
-                    {t.admin.settingApiKeySaved(settings.anthropicKeyHint)}
+                    {t.admin.settingApiKeySaved(settings.aiKeyHint)}
                   </span>
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => {
-                      setClearAnthropicKey(true);
-                      setAnthropicKey('');
+                      setClearAiKey(true);
+                      setAiKey('');
                       markDirty();
                     }}
                   >
@@ -401,30 +480,30 @@ export default function AdminSettingsPage() {
 
               <Field
                 label={
-                  settings?.anthropicKeySet && !clearAnthropicKey
+                  settings?.aiKeySet && !clearAiKey
                     ? t.admin.settingApiKeyReplaceLabel
                     : t.admin.settingApiKeyLabel
                 }
-                htmlFor="setting-anthropic-key"
+                htmlFor="setting-ai-key"
                 hint={t.admin.settingApiKeyHint}
               >
                 <Input
-                  id="setting-anthropic-key"
+                  id="setting-ai-key"
                   type="password"
                   autoComplete="off"
                   spellCheck={false}
-                  value={anthropicKey}
-                  placeholder="sk-ant-..."
+                  value={aiKey}
+                  placeholder={aiProvider === 'anthropic' ? 'sk-ant-...' : 'sk-...'}
                   className="font-mono text-[13px]"
                   onChange={(event) => {
-                    setAnthropicKey(event.target.value);
-                    setClearAnthropicKey(false);
+                    setAiKey(event.target.value);
+                    setClearAiKey(false);
                     markDirty();
                   }}
                 />
               </Field>
 
-              {clearAnthropicKey && (
+              {clearAiKey && (
                 <p className="text-sm font-medium text-neutral-950">
                   {t.admin.settingApiKeyWillClear}
                 </p>

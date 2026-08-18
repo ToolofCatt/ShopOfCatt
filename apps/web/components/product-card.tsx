@@ -25,10 +25,16 @@ export function ProductCard({ product }: { product: ProductDto }) {
         Ruy-băng chéo ở góc trên bên phải. `overflow-hidden` ở thẻ cha cắt hai
         đầu thừa — bỏ nó là dải băng thò ra ngoài viền và đè lên thẻ bên cạnh.
         `pointer-events-none` để nó không nuốt cú bấm vào thẻ.
+
+        `z-10` KHÔNG thừa: ô ảnh bên dưới mang `opacity-50 grayscale` khi hết
+        hàng, mà opacity < 1 và filter đều tạo stacking context. Ruy-băng (định
+        vị tuyệt đối, z tự động) và ô ảnh khi đó nằm CÙNG một tầng vẽ, và cùng
+        tầng thì cái đứng sau trong DOM thắng — tức ảnh đè lên ruy-băng. Đúng
+        lúc hết hàng mới có `opacity-50`, nên bỏ z-10 là lỗi xảy ra 100%.
       */}
       {outOfStock && (
         <span
-          className="pointer-events-none absolute -right-9 top-4 w-32 rotate-45 bg-neutral-900 py-1 text-center text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm"
+          className="pointer-events-none absolute -right-9 top-4 z-10 w-32 rotate-45 bg-neutral-900 py-1 text-center text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm"
         >
           {t.product.outOfStock}
         </span>

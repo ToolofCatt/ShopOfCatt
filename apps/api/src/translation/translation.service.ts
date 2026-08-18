@@ -8,7 +8,9 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  AI_DEFAULT_MODEL,
   TRANSLATABLE_LOCALES,
+  type AiProvider,
   type TranslatableLocale,
   type TranslationStatusDto,
 } from '@webcatt/shared';
@@ -19,10 +21,17 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { VARIANT_ORDER_BY } from '../products/product.mapper';
 
-/** Model dùng để dịch nội dung sang tiếng Anh + tiếng Trung. */
-export const TRANSLATION_MODEL = 'claude-opus-5';
+/** Model mặc định khi chủ shop để trống ô model. */
+export const TRANSLATION_MODEL = AI_DEFAULT_MODEL;
 
 const MAX_TOKENS = 16000;
+/**
+ * Hạn chờ khi gọi nhà cung cấp theo chuẩn OpenAI.
+ *
+ * SDK Anthropic tự có hạn chờ, còn `fetch` trần thì KHÔNG — thiếu dòng này là
+ * một nhà cung cấp treo sẽ giữ request quản trị lại vô hạn.
+ */
+const OPENAI_TIMEOUT_MS = 120_000;
 /** Cho phép máy chủ tự chuyển sang model dự phòng khi bị từ chối. */
 const TRANSLATION_BETAS = ['server-side-fallback-2026-07-01'];
 
@@ -140,11 +149,19 @@ function cleanNullable(value: unknown): string | null {
  * Khoá đọc THEO TỪNG LẦN GỌI chứ không chốt lúc khởi động: chủ shop dán khoá ở
  * /admin/settings thì phải dùng được ngay, không phải dựng lại container.
  */
+interface AiConfig {
+  key: string;
+  source: TranslationStatusDto['source'];
+  provider: AiProvider;
+  baseUrl: string;
+  model: string;
+}
+
 @Injectable()
 export class TranslationService {
   private readonly logger = new Logger(TranslationService.name);
-  /** Khoá ứng với `cachedClient` — đổi khoá thì dựng client mới. */
-  private cachedKey = '';
+  /** Khoá + địa chỉ ứng với `cachedClient` — đổi cái nào cũng phải dựng lại. */
+  private cachedSignature = '';
   private cachedClient: Anthropic | null = null;
 
   constructor(
@@ -154,44 +171,54 @@ export class TranslationService {
   ) {}
 
   /**
-   * Khoá đang dùng và nguồn của nó. Cài đặt được ưu tiên hơn biến môi trường:
-   * chủ shop sửa được ô trong cài đặt, còn biến môi trường thì không, nên thứ
-   * sửa được phải thắng — nếu ngược lại thì dán khoá mới mà không có tác dụng.
+   * Cấu hình đang dùng. Cài đặt được ưu tiên hơn biến môi trường: chủ shop sửa
+   * được ô trong cài đặt, còn biến môi trường thì không, nên thứ sửa được phải
+   * thắng — nếu ngược lại thì dán khoá mới mà không có tác dụng.
    */
-  private async resolveKey(): Promise<{
-    key: string;
-    source: TranslationStatusDto['source'];
-  }> {
-    const fromSettings = await this.settings.getAnthropicApiKey();
-    if (fromSettings !== '') return { key: fromSettings, source: 'settings' };
+  private async resolveConfig(): Promise<AiConfig> {
+    const cai = await this.settings.getAiConfig();
+    const chung = {
+      provider: cai.provider,
+      baseUrl: cai.baseUrl,
+      model: cai.model === '' ? TRANSLATION_MODEL : cai.model,
+    };
+    if (cai.apiKey !== '') {
+      return { key: cai.apiKey, source: 'settings', ...chung };
+    }
+    // Biến môi trường chỉ có khoá, nên nó luôn đi kèm cấu hình trong CSDL —
+    // vốn mặc định là Anthropic, đúng với thời trước khi có ô cài đặt này.
     const fromEnv = (this.config.get<string>('ANTHROPIC_API_KEY') ?? '').trim();
-    if (fromEnv !== '') return { key: fromEnv, source: 'env' };
-    return { key: '', source: null };
+    if (fromEnv !== '') return { key: fromEnv, source: 'env', ...chung };
+    return { key: '', source: null, ...chung };
   }
 
-  private async getClient(): Promise<Anthropic | null> {
-    const { key } = await this.resolveKey();
-    if (key === '') {
-      this.cachedKey = '';
-      this.cachedClient = null;
-      return null;
-    }
-    if (key !== this.cachedKey) {
+  /** Client Anthropic, dựng lại khi khoá hoặc địa chỉ gốc đổi. */
+  private getAnthropicClient(cfg: AiConfig): Anthropic {
+    const chuKy = `${cfg.key}|${cfg.baseUrl}`;
+    if (this.cachedClient === null || chuKy !== this.cachedSignature) {
       // Truyền khoá thẳng vào SDK thay vì để nó tự đọc biến môi trường — khoá
       // trong CSDL không có mặt ở process.env.
-      this.cachedClient = new Anthropic({ apiKey: key });
-      this.cachedKey = key;
+      this.cachedClient = new Anthropic({
+        apiKey: cfg.key,
+        ...(cfg.baseUrl === '' ? {} : { baseURL: cfg.baseUrl }),
+      });
+      this.cachedSignature = chuKy;
     }
     return this.cachedClient;
   }
 
   async isConfigured(): Promise<boolean> {
-    return (await this.resolveKey()).key !== '';
+    return (await this.resolveConfig()).key !== '';
   }
 
   async getStatus(): Promise<TranslationStatusDto> {
-    const { source } = await this.resolveKey();
-    return { configured: source !== null, source, model: TRANSLATION_MODEL };
+    const cfg = await this.resolveConfig();
+    return {
+      configured: cfg.source !== null,
+      source: cfg.source,
+      provider: cfg.provider,
+      model: cfg.model,
+    };
   }
 
   /**
@@ -319,62 +346,191 @@ export class TranslationService {
     }
   }
 
-  /**
-   * Một lượt hỏi Claude với JSON schema bắt buộc → phản hồi luôn đúng hình dạng.
-   * Không gửi temperature/top_p/budget_tokens (model này từ chối các tham số đó).
-   */
+  /** Một lượt hỏi, định tuyến theo chuẩn giao thức chủ shop đã chọn. */
   private async ask<T>(
     system: string,
     payload: unknown,
     schema: Record<string, unknown>,
   ): Promise<T> {
-    const client = await this.getClient();
-    if (!client) {
+    const cfg = await this.resolveConfig();
+    if (cfg.key === '') {
       throw new BadRequestException(K.adminTranslationNotConfigured);
     }
 
+    const text =
+      cfg.provider === 'openai'
+        ? await this.hoiOpenAi(cfg, system, payload, schema)
+        : await this.hoiAnthropic(cfg, system, payload, schema);
+
+    if (text.trim() === '') {
+      this.logger.error(`${cfg.provider}: phản hồi rỗng`);
+      throw new BadGatewayException(K.adminTranslationFailed);
+    }
+    try {
+      return JSON.parse(boVoMa(text)) as T;
+    } catch {
+      this.logger.error(`${cfg.provider}: không phân tích được JSON`);
+      throw new BadGatewayException(K.adminTranslationFailed);
+    }
+  }
+
+  /**
+   * Anthropic. Với địa chỉ gốc mặc định thì dùng luôn `output_config` +
+   * `json_schema` cho phản hồi đúng hình dạng ngay từ đầu. Với địa chỉ gốc do
+   * chủ shop tự đặt thì KHÔNG dùng: đó là các tính năng riêng của Anthropic,
+   * proxy trung gian thường chưa hỗ trợ và sẽ trả 400 khó hiểu. Lúc đó nhét
+   * schema vào lời nhắc — kém chặt hơn, nhưng chạy được ở mọi nơi.
+   */
+  private async hoiAnthropic(
+    cfg: AiConfig,
+    system: string,
+    payload: unknown,
+    schema: Record<string, unknown>,
+  ): Promise<string> {
+    const client = this.getAnthropicClient(cfg);
+    const chinhChu = cfg.baseUrl === '';
     let message: Anthropic.Beta.BetaMessage;
     try {
       message = await client.beta.messages.create({
-        model: TRANSLATION_MODEL,
+        model: cfg.model,
         max_tokens: MAX_TOKENS,
-        betas: TRANSLATION_BETAS,
-        fallbacks: 'default',
-        output_config: {
-          effort: 'low',
-          format: { type: 'json_schema', schema },
-        },
-        system,
+        // Không gửi temperature/top_p/budget_tokens — model này từ chối.
+        ...(chinhChu
+          ? {
+              betas: TRANSLATION_BETAS,
+              fallbacks: 'default' as const,
+              output_config: {
+                effort: 'low' as const,
+                format: { type: 'json_schema' as const, schema },
+              },
+            }
+          : {}),
+        system: chinhChu ? system : themSchemaVaoLoiNhac(system, schema),
         messages: [{ role: 'user', content: JSON.stringify(payload) }],
       });
     } catch (error) {
-      this.logger.error(
-        `Gọi Claude API thất bại: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
+      this.logger.error(`Gọi Anthropic thất bại: ${moTaLoi(error)}`);
       throw new BadGatewayException(K.adminTranslationFailed);
     }
 
     if (message.stop_reason === 'refusal') {
-      this.logger.warn('Claude API từ chối yêu cầu dịch');
+      this.logger.warn('Anthropic từ chối yêu cầu dịch');
       throw new BadGatewayException(K.adminTranslationRefused);
     }
-
-    const text = message.content
+    return message.content
       .map((block) => (block.type === 'text' ? block.text : ''))
       .join('')
       .trim();
-    if (!text) {
-      this.logger.error('Claude API trả về phản hồi rỗng');
+  }
+
+  /**
+   * Chuẩn OpenAI `/chat/completions` — dùng chung cho OpenRouter, DeepSeek,
+   * Groq, Together, Ark, Ollama nội bộ… Gọi bằng `fetch` chứ không thêm gói SDK
+   * mới: yêu cầu chỉ là một POST JSON, thêm phụ thuộc chẳng đổi lại được gì.
+   *
+   * Thử `json_schema` trước rồi lùi về `json_object`: nhiều nhà cung cấp chưa
+   * làm `json_schema` và trả 400: cứ thế bỏ cuộc thì phần lớn nhà cung cấp
+   * không dùng được, mà đó lại chính là điều ô cấu hình này sinh ra để giải quyết.
+   */
+  private async hoiOpenAi(
+    cfg: AiConfig,
+    system: string,
+    payload: unknown,
+    schema: Record<string, unknown>,
+  ): Promise<string> {
+    const goc = cfg.baseUrl === '' ? 'https://api.openai.com/v1' : cfg.baseUrl;
+    const url = `${goc}/chat/completions`;
+
+    const goi = async (chatChe: boolean) => {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${cfg.key}`,
+        },
+        body: JSON.stringify({
+          model: cfg.model,
+          max_tokens: MAX_TOKENS,
+          messages: [
+            {
+              role: 'system',
+              content: chatChe ? system : themSchemaVaoLoiNhac(system, schema),
+            },
+            { role: 'user', content: JSON.stringify(payload) },
+          ],
+          response_format: chatChe
+            ? { type: 'json_schema', json_schema: { name: 'ban_dich', strict: true, schema } }
+            : { type: 'json_object' },
+        }),
+        signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
+      });
+      return { ok: res.ok, status: res.status, than: await res.text() };
+    };
+
+    let r = await goi(true);
+    if (!r.ok && r.status === 400) {
+      this.logger.warn('Nhà cung cấp từ chối json_schema, thử lại bằng json_object');
+      r = await goi(false);
+    }
+    if (!r.ok) {
+      this.logger.error(`Gọi ${goc} thất bại: HTTP ${r.status} ${r.than.slice(0, 300)}`);
       throw new BadGatewayException(K.adminTranslationFailed);
     }
 
+    let data: OpenAiResponse;
     try {
-      return JSON.parse(text) as T;
+      data = JSON.parse(r.than) as OpenAiResponse;
     } catch {
-      this.logger.error('Không phân tích được JSON từ Claude API');
+      this.logger.error(`Phản hồi từ ${goc} không phải JSON`);
       throw new BadGatewayException(K.adminTranslationFailed);
     }
+    const choice = data.choices?.[0];
+    if (choice?.finish_reason === 'content_filter') {
+      this.logger.warn('Nhà cung cấp từ chối yêu cầu dịch');
+      throw new BadGatewayException(K.adminTranslationRefused);
+    }
+    return (choice?.message?.content ?? '').trim();
   }
+}
+
+/** Hình dạng tối thiểu của phản hồi /chat/completions mà mã này thực sự đọc. */
+interface OpenAiResponse {
+  choices?: {
+    message?: { content?: string };
+    finish_reason?: string;
+  }[];
+}
+
+/**
+ * Khi không ép được hình dạng phản hồi ở tầng API thì mô tả nó trong lời nhắc.
+ * Kém chặt hơn `json_schema`, nhưng các hàm `clean`/`cleanNullable` bên trên đã
+ * chịu được trường thiếu, nên phản hồi lệch một chút vẫn không làm hỏng dữ liệu.
+ */
+function themSchemaVaoLoiNhac(system: string, schema: Record<string, unknown>): string {
+  return [
+    system,
+    '',
+    'Return ONLY a JSON object matching this JSON Schema.',
+    'No prose, no explanation, no markdown code fence.',
+    JSON.stringify(schema),
+  ].join('\n');
+}
+
+/**
+ * Gỡ rào ```json ... ``` quanh phản hồi.
+ *
+ * Cần thiết vì nhiều model vẫn bọc kết quả trong rào markdown dù đã được dặn là
+ * đừng — và chỉ một rào thừa là JSON.parse hỏng, đơn dịch coi như thất bại.
+ */
+function boVoMa(text: string): string {
+  const t = text.trim();
+  if (!t.startsWith('```')) return t;
+  return t
+    .replace(/^```[a-zA-Z]*\s*/, '')
+    .replace(/\s*```$/, '')
+    .trim();
+}
+
+function moTaLoi(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
