@@ -16,6 +16,7 @@ import { ANNOUNCEMENT_ID } from '../announcement/announcement.constants';
 import { sanitizeAnnouncementHtml } from '../announcement/sanitize-announcement';
 import { K } from '../i18n/messages';
 import { PrismaService } from '../prisma/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 import { VARIANT_ORDER_BY } from '../products/product.mapper';
 
 /** Model dùng để dịch nội dung sang tiếng Anh + tiếng Trung. */
@@ -133,29 +134,64 @@ function cleanNullable(value: unknown): string | null {
 
 /**
  * Dịch nội dung sản phẩm / thông báo sang tiếng Anh + tiếng Trung bằng Claude API.
- * Không cấu hình ANTHROPIC_API_KEY thì `isConfigured` = false và mọi endpoint
- * dịch trả về lỗi 400 có hướng dẫn — phần còn lại của hệ thống vẫn chạy bình thường.
+ * Không có khoá thì `isConfigured` = false và mọi endpoint dịch trả về lỗi 400
+ * có hướng dẫn — phần còn lại của hệ thống vẫn chạy bình thường.
+ *
+ * Khoá đọc THEO TỪNG LẦN GỌI chứ không chốt lúc khởi động: chủ shop dán khoá ở
+ * /admin/settings thì phải dùng được ngay, không phải dựng lại container.
  */
 @Injectable()
 export class TranslationService {
   private readonly logger = new Logger(TranslationService.name);
-  private readonly client: Anthropic | null;
+  /** Khoá ứng với `cachedClient` — đổi khoá thì dựng client mới. */
+  private cachedKey = '';
+  private cachedClient: Anthropic | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
-    config: ConfigService,
-  ) {
-    const apiKey = (config.get<string>('ANTHROPIC_API_KEY') ?? '').trim();
-    // SDK tự đọc biến môi trường ANTHROPIC_API_KEY.
-    this.client = apiKey ? new Anthropic() : null;
+    private readonly settings: SettingsService,
+    private readonly config: ConfigService,
+  ) {}
+
+  /**
+   * Khoá đang dùng và nguồn của nó. Cài đặt được ưu tiên hơn biến môi trường:
+   * chủ shop sửa được ô trong cài đặt, còn biến môi trường thì không, nên thứ
+   * sửa được phải thắng — nếu ngược lại thì dán khoá mới mà không có tác dụng.
+   */
+  private async resolveKey(): Promise<{
+    key: string;
+    source: TranslationStatusDto['source'];
+  }> {
+    const fromSettings = await this.settings.getAnthropicApiKey();
+    if (fromSettings !== '') return { key: fromSettings, source: 'settings' };
+    const fromEnv = (this.config.get<string>('ANTHROPIC_API_KEY') ?? '').trim();
+    if (fromEnv !== '') return { key: fromEnv, source: 'env' };
+    return { key: '', source: null };
   }
 
-  get isConfigured(): boolean {
-    return this.client !== null;
+  private async getClient(): Promise<Anthropic | null> {
+    const { key } = await this.resolveKey();
+    if (key === '') {
+      this.cachedKey = '';
+      this.cachedClient = null;
+      return null;
+    }
+    if (key !== this.cachedKey) {
+      // Truyền khoá thẳng vào SDK thay vì để nó tự đọc biến môi trường — khoá
+      // trong CSDL không có mặt ở process.env.
+      this.cachedClient = new Anthropic({ apiKey: key });
+      this.cachedKey = key;
+    }
+    return this.cachedClient;
   }
 
-  getStatus(): TranslationStatusDto {
-    return { configured: this.isConfigured, model: TRANSLATION_MODEL };
+  async isConfigured(): Promise<boolean> {
+    return (await this.resolveKey()).key !== '';
+  }
+
+  async getStatus(): Promise<TranslationStatusDto> {
+    const { source } = await this.resolveKey();
+    return { configured: source !== null, source, model: TRANSLATION_MODEL };
   }
 
   /**
@@ -163,7 +199,7 @@ export class TranslationService {
    * rồi lưu lại bằng upsert theo (productId, locale) / (variantId, locale).
    */
   async translateProduct(productId: string): Promise<void> {
-    this.assertConfigured();
+    await this.assertConfigured();
 
     const product = await this.prisma.product.findUnique({
       where: { id: productId },
@@ -227,7 +263,7 @@ export class TranslationService {
    * để thao tác lưu của quản trị viên luôn phản hồi tức thì.
    */
   async translateProductSafe(productId: string): Promise<void> {
-    if (!this.isConfigured) return;
+    if (!(await this.isConfigured())) return;
     try {
       await this.translateProduct(productId);
       this.logger.log(`Đã dịch xong sản phẩm ${productId}`);
@@ -242,7 +278,7 @@ export class TranslationService {
 
   /** Dịch hộp thông báo trang chủ và lưu lại theo (announcementId, locale). */
   async translateAnnouncement(): Promise<void> {
-    this.assertConfigured();
+    await this.assertConfigured();
 
     const announcement = await this.prisma.announcement.findUnique({
       where: { id: ANNOUNCEMENT_ID },
@@ -277,8 +313,8 @@ export class TranslationService {
     }
   }
 
-  private assertConfigured(): void {
-    if (!this.client) {
+  private async assertConfigured(): Promise<void> {
+    if (!(await this.isConfigured())) {
       throw new BadRequestException(K.adminTranslationNotConfigured);
     }
   }
@@ -292,7 +328,7 @@ export class TranslationService {
     payload: unknown,
     schema: Record<string, unknown>,
   ): Promise<T> {
-    const client = this.client;
+    const client = await this.getClient();
     if (!client) {
       throw new BadRequestException(K.adminTranslationNotConfigured);
     }

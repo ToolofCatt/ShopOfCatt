@@ -517,10 +517,13 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                   </span>
                   <CopyIconButton text={cryptoAmountText} label={t.checkout.copyAmount} />
                 </div>
-                <p className="flex items-start gap-1.5 text-xs font-medium text-neutral-950">
-                  <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-                  {t.checkout.cryptoExactWarning}
-                </p>
+                {/*
+                  KHÔNG dùng cryptoExactWarning ở đây: câu đó nói đơn được nhận
+                  diện qua số tiền, đúng với on-chain nhưng sai với Binance Pay —
+                  bên này nhận diện qua ghi chú. Số tiền vẫn phải đúng vì bộ đối
+                  soát còn đối chiếu cả số.
+                */}
+                <p className="text-xs text-neutral-500">{t.checkout.binanceIdExactHint}</p>
               </div>
 
               <div className="space-y-1.5">
@@ -536,7 +539,6 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                     label={t.checkout.copyBinanceId}
                   />
                 </div>
-                <p className="text-xs text-neutral-500">{t.checkout.binanceIdSteps}</p>
               </div>
 
               {/*

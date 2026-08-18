@@ -196,8 +196,16 @@ export interface AdminAnnouncementDto {
 
 // ---------- Dịch tự động ----------
 export interface TranslationStatusDto {
-  /** Máy chủ đã cấu hình ANTHROPIC_API_KEY hay chưa. */
+  /** Có khoá Claude API dùng được hay không (trong cài đặt hoặc biến môi trường). */
   configured: boolean;
+  /**
+   * Khoá đang dùng lấy từ đâu — `null` khi chưa có.
+   *
+   * Cần thiết vì có HAI nguồn: ô trong trang cài đặt và biến môi trường
+   * ANTHROPIC_API_KEY. Không nói rõ thì chủ shop thấy ô cài đặt trống mà chức
+   * năng vẫn chạy (hoặc ngược lại) và không hiểu vì sao.
+   */
+  source: 'settings' | 'env' | null;
   model: string;
 }
 
@@ -230,6 +238,15 @@ export interface AdminStoreSettingDto {
   cryptoEnabled: boolean;
   bep20Address: string;
   trc20Address: string;
+  /**
+   * Đã lưu khoá Claude API trong cài đặt hay chưa.
+   *
+   * KHÔNG BAO GIỜ trả về chính khoá đó: trang quản trị chỉ cần biết có hay
+   * không. Gửi khoá xuống trình duyệt là bất kỳ lỗi XSS nào cũng đọc được nó.
+   */
+  anthropicKeySet: boolean;
+  /** Bốn ký tự cuối của khoá đã lưu, để chủ shop nhận ra mình dán khoá nào. */
+  anthropicKeyHint: string;
   /** Các kênh liên hệ hiển thị ở khối "Quên mật khẩu". */
   supportChannels: SupportChannelDto[];
   /** Lời nhắn tùy chỉnh; rỗng = dùng câu mặc định theo ngôn ngữ. */

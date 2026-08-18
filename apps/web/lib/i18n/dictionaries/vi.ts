@@ -125,12 +125,10 @@ export const vi = {
     /* ===== v6 — chuyển tới Binance ID ===== */
     binanceIdTitle: 'Chuyển qua Binance Pay',
     binanceIdLabel: 'Binance ID nhận tiền',
+    binanceIdExactHint: 'Gửi đúng số tiền này.',
     binanceIdMemoLabel: 'Ghi chú BẮT BUỘC khi chuyển',
-    binanceIdMemoHint:
-      'Dán mã đơn này vào ô ghi chú/lời nhắn khi chuyển. Không ghi thì hệ thống không biết khoản tiền của đơn nào.',
+    binanceIdMemoHint: 'Thiếu ghi chú thì đơn phải chờ chủ shop đối soát tay.',
     copyMemo: 'Sao chép mã đơn',
-    binanceIdSteps:
-      'Mở app Binance → Pay → Gửi → dán ID ở trên, rồi nhập đúng số tiền phía trên.',
     copyBinanceId: 'Sao chép Binance ID',
     cryptoExactWarning: 'Gửi CHÍNH XÁC số này — hệ thống nhận diện đơn của bạn qua số tiền.',
     cryptoQrAlt: 'Mã QR địa chỉ ví nhận',
@@ -548,6 +546,7 @@ export const vi = {
     translateDone: 'Đã dịch xong.',
     translateFixForm: 'Vui lòng sửa các lỗi trong biểu mẫu trước khi dịch.',
     translateNothing: 'Chưa có nội dung tiếng Việt để dịch.',
+    translateNoKey: 'Chưa có khoá Claude API. Dán khoá ở Cài đặt → Dịch tự động.',
     localeEn: 'Tiếng Anh (EN)',
     localeZh: 'Tiếng Trung (ZH)',
     transFieldName: 'Tên',
@@ -844,6 +843,18 @@ export const vi = {
       `Đặt lại mật khẩu cho ${email}? Mọi phiên đăng nhập hiện tại của khách sẽ bị đăng xuất.`,
     resetPasswordDone: 'Đã đặt lại mật khẩu. Gửi mật khẩu này cho khách:',
     resetPasswordWarning: 'Mật khẩu chỉ hiện MỘT lần — hãy sao chép ngay.',
+
+    /* ===== v7 — khoá Claude API cho dịch tự động ===== */
+    settingTranslationTitle: 'Dịch tự động',
+    settingTranslationHint:
+      'Dịch tên và mô tả sản phẩm sang tiếng Anh + tiếng Trung bằng Claude API.',
+    settingApiKeyLabel: 'Khoá Claude API',
+    settingApiKeyReplaceLabel: 'Thay bằng khoá mới',
+    settingApiKeyHint:
+      'Lấy ở platform.claude.com → API keys. Để trống = giữ khoá đang dùng.',
+    settingApiKeySaved: (hint: string) => `Đã lưu khoá ····${hint}`,
+    settingApiKeyClear: 'Xoá khoá',
+    settingApiKeyWillClear: 'Khoá sẽ bị xoá khi bạn bấm Lưu — dịch tự động sẽ tắt.',
 
     settingSupportTitle: 'Hỗ trợ khách hàng',
     settingSupportHint:

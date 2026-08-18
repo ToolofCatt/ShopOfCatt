@@ -70,6 +70,18 @@ export class UpdateSettingsDto {
   @MaxLength(PRODUCT_IMAGE_MAX_LENGTH, { message: K.adminImageTooLarge })
   binanceQr?: string;
 
+  /**
+   * Khoá Claude API cho dịch tự động.
+   *
+   * Ba trạng thái, đừng gộp lại: KHÔNG gửi trường này = giữ nguyên khoá cũ
+   * (trang quản trị không bao giờ nhận được khoá nên không gửi ngược lên được),
+   * gửi chuỗi rỗng = xoá khoá, gửi chuỗi khác = đặt khoá mới.
+   */
+  @IsOptional()
+  @IsString({ message: K.adminAnthropicKeyInvalid })
+  @MaxLength(200, { message: K.adminAnthropicKeyInvalid })
+  anthropicApiKey?: string;
+
   @IsBoolean({ message: K.adminSettingsFlagInvalid })
   cryptoEnabled: boolean;
 

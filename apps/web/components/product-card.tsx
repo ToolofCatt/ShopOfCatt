@@ -19,8 +19,20 @@ export function ProductCard({ product }: { product: ProductDto }) {
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group flex flex-col gap-3 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-neutral-400"
+      className="group relative flex flex-col gap-3 overflow-hidden rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-neutral-400"
     >
+      {/*
+        Ruy-băng chéo ở góc trên bên phải. `overflow-hidden` ở thẻ cha cắt hai
+        đầu thừa — bỏ nó là dải băng thò ra ngoài viền và đè lên thẻ bên cạnh.
+        `pointer-events-none` để nó không nuốt cú bấm vào thẻ.
+      */}
+      {outOfStock && (
+        <span
+          className="pointer-events-none absolute -right-9 top-4 w-32 rotate-45 bg-neutral-900 py-1 text-center text-[10px] font-semibold uppercase tracking-wide text-white shadow-sm"
+        >
+          {t.product.outOfStock}
+        </span>
+      )}
       <ProductVisual
         // Danh sách chỉ có ảnh nhỏ: truy vấn list không kéo cột ảnh lớn về.
         image={product.thumbnail ?? product.image}
@@ -51,9 +63,8 @@ export function ProductCard({ product }: { product: ProductDto }) {
           {priceLabel}
         </p>
         <div className="flex flex-col items-end gap-1">
-          {outOfStock ? (
-            <Badge variant="muted">{t.product.outOfStock}</Badge>
-          ) : (
+          {/* Hết hàng đã có ruy-băng ở góc — nhắc lại ở đây là thừa. */}
+          {!outOfStock && (
             <Badge variant="outline">{t.product.inStockShort(product.availableStock)}</Badge>
           )}
           {/* Cửa hàng mới thì "đã bán 0" là bằng chứng NGƯỢC — ẩn cho tới khi có số thật. */}

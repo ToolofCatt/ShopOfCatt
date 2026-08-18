@@ -870,7 +870,7 @@ export class AdminService {
 
   // ---------- Dịch tự động ----------
 
-  getTranslationStatus(): TranslationStatusDto {
+  async getTranslationStatus(): Promise<TranslationStatusDto> {
     return this.translation.getStatus();
   }
 

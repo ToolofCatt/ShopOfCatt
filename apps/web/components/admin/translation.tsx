@@ -24,7 +24,7 @@ export function useTranslationStatus(): TranslationStatusDto | null {
         if (active) setStatus(data);
       })
       .catch(() => {
-        if (active) setStatus({ configured: false, model: '' });
+        if (active) setStatus({ configured: false, source: null, model: '' });
       });
     return () => {
       active = false;
@@ -120,7 +120,17 @@ export function TranslationSection({ blocks, onTranslate, className }: Translati
             </span>
           )}
         </div>
-        {configured && <p className="text-xs text-neutral-500">{t.admin.translateHintSaves}</p>}
+        {configured ? (
+          <p className="text-xs text-neutral-500">{t.admin.translateHintSaves}</p>
+        ) : (
+          status !== null && (
+            /*
+              Trước đây chỗ này KHÔNG hiện gì: nút chỉ mờ đi, chủ shop không đoán
+              nổi vì sao bấm không được. Nay nói thẳng là thiếu khoá và chỉ chỗ dán.
+            */
+            <p className="text-xs text-neutral-500">{t.admin.translateNoKey}</p>
+          )
+        )}
         {done && !error && (
           <p className="text-sm font-medium text-emerald-600">{t.admin.translateDone}</p>
         )}

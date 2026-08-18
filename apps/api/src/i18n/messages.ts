@@ -169,6 +169,7 @@ export const K = {
   adminSettingsFlagInvalid: 'admin.settings_flag_invalid',
   adminBinanceIdInvalid: 'admin.binance_id_invalid',
   adminBinanceIdRequired: 'admin.binance_id_required',
+  adminAnthropicKeyInvalid: 'admin.anthropic_key_invalid',
   adminSettingsAddressInvalid: 'admin.settings_address_invalid',
   adminCryptoAddressRequired: 'admin.crypto_address_required',
   adminBep20AddressInvalid: 'admin.bep20_address_invalid',
@@ -740,6 +741,11 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Binance ID chỉ gồm chữ số',
     en: 'Binance ID must contain digits only',
     zh: 'Binance ID 只能包含数字',
+  },
+  [K.adminAnthropicKeyInvalid]: {
+    vi: 'Khoá Claude API không đúng dạng — phải bắt đầu bằng "sk-ant-"',
+    en: 'Invalid Claude API key — it must start with "sk-ant-"',
+    zh: 'Claude API 密钥格式不正确 —— 必须以 "sk-ant-" 开头',
   },
   [K.adminBinanceIdRequired]: {
     vi: 'Bật nhận tiền qua Binance ID thì phải điền Binance ID',

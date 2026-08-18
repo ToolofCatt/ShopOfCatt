@@ -375,6 +375,14 @@ model StoreSetting {
   bep20Address      String   @default("")
   trc20Address      String   @default("")
 
+  /// Khoá Claude API dùng cho tính năng dịch tự động sang EN/ZH.
+  ///
+  /// Là BÍ MẬT: không bao giờ nằm trong AdminStoreSettingDto, không bao giờ đi
+  /// vào nhật ký thao tác (chỉ ghi "có/không"), và có mặt trong mọi bản pg_dump
+  /// — đó là cái giá của việc cho sửa ngay trên web thay vì phải SSH vào máy chủ.
+  /// Rỗng thì lùi về biến môi trường ANTHROPIC_API_KEY.
+  anthropicApiKey   String   @default("")
+
   /// Danh sách kênh liên hệ hỗ trợ — mảng {label, value, url?}, admin tự sửa.
   /// Hiện ở khối "Quên mật khẩu" trang đăng nhập.
   supportChannels Json   @default("[]")

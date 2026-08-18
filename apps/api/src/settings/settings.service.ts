@@ -26,6 +26,13 @@ const TRC20_ADDRESS_RE = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
 const SUPPORT_URL_RE = /^(https?:\/\/|mailto:)/i;
 
 /**
+ * Khoá Claude API luôn bắt đầu bằng "sk-ant-". Kiểm ngay tại đây để chủ shop
+ * biết mình dán nhầm — nếu không thì phải tới lúc bấm "Dịch tự động" mới thấy
+ * lỗi, mà lúc đó thông báo chỉ là "gọi API thất bại", chẳng chỉ ra được gì.
+ */
+const ANTHROPIC_KEY_PREFIX = 'sk-ant-';
+
+/**
  * Đọc mảng kênh hỗ trợ từ cột JSON. Dữ liệu trong cột có thể do bản cũ ghi vào
  * nên phải kiểm tra từng phần tử thay vì ép kiểu thẳng.
  */
@@ -176,6 +183,15 @@ export class SettingsService {
     return (await this.getSetting()).binanceQr;
   }
 
+  /**
+   * Khoá Claude API chủ shop lưu trong cài đặt (rỗng = chưa đặt).
+   *
+   * Chỉ TranslationService gọi. Không đi qua bất kỳ DTO nào.
+   */
+  async getAnthropicApiKey(): Promise<string> {
+    return (await this.getSetting()).anthropicApiKey.trim();
+  }
+
   async getAdmin(): Promise<AdminStoreSettingDto> {
     return toAdminDto(await this.getSetting());
   }
@@ -213,6 +229,15 @@ export class SettingsService {
       throw new BadRequestException(K.adminBinanceIdRequired);
     }
 
+    const anthropicApiKey = dto.anthropicApiKey?.trim();
+    if (
+      anthropicApiKey !== undefined &&
+      anthropicApiKey !== '' &&
+      !anthropicApiKey.startsWith(ANTHROPIC_KEY_PREFIX)
+    ) {
+      throw new BadRequestException(K.adminAnthropicKeyInvalid);
+    }
+
     // Kênh hỗ trợ: bỏ dòng trống, kiểm tra liên kết, cắt theo số lượng tối đa.
     const channels: SupportChannelDto[] = [];
     for (const raw of dto.supportChannels ?? []) {
@@ -241,6 +266,11 @@ export class SettingsService {
       cryptoEnabled: dto.cryptoEnabled,
       bep20Address,
       trc20Address,
+      // Không gửi = giữ khoá cũ. Trang quản trị không bao giờ nhận được khoá
+      // nên nó KHÔNG THỂ gửi ngược lên — quên nhánh này thì mỗi lần lưu cài đặt
+      // là khoá bị xoá mất mà không ai biết.
+      anthropicApiKey:
+        anthropicApiKey === undefined ? before.anthropicApiKey : anthropicApiKey,
       // Bỏ trống (không gửi lên) = giữ nguyên giá trị cũ.
       supportChannels:
         dto.supportChannels === undefined
@@ -275,6 +305,10 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     cryptoEnabled: setting.cryptoEnabled,
     bep20Address: setting.bep20Address,
     trc20Address: setting.trc20Address,
+    // Cố ý KHÔNG trả khoá về: chỉ "có hay không" + bốn ký tự cuối để chủ shop
+    // nhận ra mình đã dán khoá nào.
+    anthropicKeySet: setting.anthropicApiKey.trim() !== '',
+    anthropicKeyHint: setting.anthropicApiKey.trim().slice(-4),
     supportChannels: parseSupportChannels(setting.supportChannels),
     supportNote: setting.supportNote,
   };
@@ -288,6 +322,9 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
     cryptoEnabled: setting.cryptoEnabled,
     bep20Address: setting.bep20Address,
     trc20Address: setting.trc20Address,
+    // BOOLEAN, không phải chính khoá: nhật ký lưu vĩnh viễn và hiện ở
+    // /admin/audit. Ghi cả chuỗi vào đây là rò bí mật ra một chỗ thứ hai.
+    anthropicKeySet: setting.anthropicApiKey.trim() !== '',
     supportChannels: parseSupportChannels(setting.supportChannels),
     supportNote: setting.supportNote,
   };

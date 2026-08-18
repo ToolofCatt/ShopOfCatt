@@ -180,7 +180,7 @@ export class AdminController {
   // ---------- Dịch tự động ----------
 
   @Get('translation/status')
-  getTranslationStatus(): TranslationStatusDto {
+  getTranslationStatus(): Promise<TranslationStatusDto> {
     return this.adminService.getTranslationStatus();
   }
 

@@ -55,6 +55,13 @@ export default function AdminSettingsPage() {
   const [cryptoEnabled, setCryptoEnabled] = useState(false);
   const [bep20Address, setBep20Address] = useState('');
   const [trc20Address, setTrc20Address] = useState('');
+  /*
+    Khoá Claude API: máy chủ KHÔNG BAO GIỜ trả khoá về, nên ô này luôn rỗng khi
+    mở trang. Rỗng = "không đổi gì", chứ không phải "xoá khoá" — muốn xoá thì
+    bấm nút riêng, nếu không mỗi lần lưu cài đặt là khoá bay mất.
+  */
+  const [anthropicKey, setAnthropicKey] = useState('');
+  const [clearAnthropicKey, setClearAnthropicKey] = useState(false);
   const [supportNote, setSupportNote] = useState('');
   const [supportChannels, setSupportChannels] = useState<SupportChannelDto[]>([]);
 
@@ -80,6 +87,8 @@ export default function AdminSettingsPage() {
     setTrc20Address(next.trc20Address);
     setSupportNote(next.supportNote);
     setSupportChannels(next.supportChannels);
+    setAnthropicKey('');
+    setClearAnthropicKey(false);
   };
 
   useEffect(() => {
@@ -160,6 +169,13 @@ export default function AdminSettingsPage() {
           cryptoEnabled,
           bep20Address: bep20Address.trim(),
           trc20Address: trc20Address.trim(),
+          // Ba trạng thái: bấm xoá → chuỗi rỗng, có gõ → khoá mới, không đụng
+          // tới → KHÔNG gửi trường này để máy chủ giữ nguyên khoá cũ.
+          ...(clearAnthropicKey
+            ? { anthropicApiKey: '' }
+            : anthropicKey.trim() !== ''
+              ? { anthropicApiKey: anthropicKey.trim() }
+              : {}),
           supportNote: supportNote.trim(),
           // Bỏ các dòng còn trống trước khi gửi.
           supportChannels: supportChannels
@@ -347,6 +363,73 @@ export default function AdminSettingsPage() {
                 <p className="text-xs text-neutral-500">{t.admin.settingAddressesHint}</p>
               </div>
             )}
+
+            {/*
+              Khoá Claude API cho dịch tự động. Nằm trong CSDL nên sửa được ngay
+              trên web — đổi lại nó có mặt trong mọi bản sao lưu, xem ghi chú ở
+              schema.prisma.
+            */}
+            <div className="space-y-3 border-t border-neutral-100 pt-4">
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
+                  {t.admin.settingTranslationTitle}
+                </h2>
+                <p className="mt-0.5 text-sm text-neutral-500">
+                  {t.admin.settingTranslationHint}
+                </p>
+              </div>
+
+              {settings?.anthropicKeySet && !clearAnthropicKey ? (
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                  <span className="font-mono text-sm text-neutral-950">
+                    {t.admin.settingApiKeySaved(settings.anthropicKeyHint)}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setClearAnthropicKey(true);
+                      setAnthropicKey('');
+                      markDirty();
+                    }}
+                  >
+                    {t.admin.settingApiKeyClear}
+                  </Button>
+                </div>
+              ) : null}
+
+              <Field
+                label={
+                  settings?.anthropicKeySet && !clearAnthropicKey
+                    ? t.admin.settingApiKeyReplaceLabel
+                    : t.admin.settingApiKeyLabel
+                }
+                htmlFor="setting-anthropic-key"
+                hint={t.admin.settingApiKeyHint}
+              >
+                <Input
+                  id="setting-anthropic-key"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={anthropicKey}
+                  placeholder="sk-ant-..."
+                  className="font-mono text-[13px]"
+                  onChange={(event) => {
+                    setAnthropicKey(event.target.value);
+                    setClearAnthropicKey(false);
+                    markDirty();
+                  }}
+                />
+              </Field>
+
+              {clearAnthropicKey && (
+                <p className="text-sm font-medium text-neutral-950">
+                  {t.admin.settingApiKeyWillClear}
+                </p>
+              )}
+            </div>
 
             {/* Kênh liên hệ cho khách quên mật khẩu (cửa hàng không gửi email). */}
             <div className="space-y-4 border-t border-neutral-100 pt-4">

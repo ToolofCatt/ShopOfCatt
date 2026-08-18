@@ -118,10 +118,10 @@ export const zh: Dictionary = {
     /* ===== v6 — 转账至 Binance ID ===== */
     binanceIdTitle: '通过 Binance Pay 转账',
     binanceIdLabel: '收款 Binance ID',
+    binanceIdExactHint: '请转账此金额。',
     binanceIdMemoLabel: '转账时必须填写的备注',
-    binanceIdMemoHint: '转账时请把此订单号粘贴到备注/留言栏。不填则系统无法判断这笔款属于哪个订单。',
+    binanceIdMemoHint: '不填备注的话，订单需要店主手动核对。',
     copyMemo: '复制订单号',
-    binanceIdSteps: '打开币安 App → Pay → 转账 → 粘贴上方 ID，并按上方金额准确转账。',
     copyBinanceId: '复制 Binance ID',
     cryptoExactWarning: '请转账与此完全一致的金额 —— 系统通过金额识别您的订单。',
     cryptoQrAlt: '收款钱包地址二维码',
@@ -526,6 +526,7 @@ export const zh: Dictionary = {
     translateDone: '翻译完成。',
     translateFixForm: '请先修正表单中的错误，然后再翻译。',
     translateNothing: '暂无可翻译的越南语内容。',
+    translateNoKey: '尚未配置 Claude API 密钥。请在“设置 → 自动翻译”中粘贴。',
     localeEn: '英语（EN）',
     localeZh: '中文（ZH）',
     transFieldName: '名称',
@@ -812,6 +813,16 @@ export const zh: Dictionary = {
       `重置 ${email} 的密码？该客户当前所有登录会话都会被退出。`,
     resetPasswordDone: '密码已重置，请把新密码发给客户：',
     resetPasswordWarning: '此密码仅显示一次 — 请立即复制。',
+
+    /* ===== v7 —— 自动翻译所用的 Claude API 密钥 ===== */
+    settingTranslationTitle: '自动翻译',
+    settingTranslationHint: '使用 Claude API 将商品名称和描述翻译成英文和中文。',
+    settingApiKeyLabel: 'Claude API 密钥',
+    settingApiKeyReplaceLabel: '更换为新密钥',
+    settingApiKeyHint: '在 platform.claude.com → API keys 获取。留空表示保留当前密钥。',
+    settingApiKeySaved: (hint: string) => `已保存密钥 ····${hint}`,
+    settingApiKeyClear: '删除密钥',
+    settingApiKeyWillClear: '保存后密钥将被删除 —— 自动翻译会关闭。',
 
     settingSupportTitle: '客户支持',
     settingSupportHint: '显示在登录页「忘记密码」处，方便客户联系您重置密码。',
