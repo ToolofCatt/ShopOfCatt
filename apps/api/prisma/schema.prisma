@@ -37,6 +37,9 @@ enum StockStatus {
   AVAILABLE
   RESERVED
   SOLD
+  /// Chủ shop tự rút ra khỏi kho — không bán được nữa, nhưng KHÔNG tính là đã
+  /// bán nên không vào doanh thu. Giữ lại dòng thay vì xoá để còn dấu vết.
+  WITHDRAWN
 }
 
 enum PaymentStatus {
@@ -246,6 +249,8 @@ model StockItem {
   orderItem   OrderItem?     @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
   createdAt   DateTime       @default(now())
   soldAt      DateTime?
+  /// Lúc chủ shop rút dòng này ra khỏi kho.
+  withdrawnAt DateTime?
 
   @@index([variantId, status])
   @@index([orderItemId])

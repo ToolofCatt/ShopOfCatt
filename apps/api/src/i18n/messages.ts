@@ -113,6 +113,10 @@ export const K = {
   adminSortOrderInt: 'admin.sort_order_int',
   adminActiveInvalid: 'admin.active_invalid',
   adminStockDrawModeInvalid: 'admin.stock_draw_mode_invalid',
+  adminWithdrawQuantityInvalid: 'admin.withdraw_quantity_invalid',
+  adminWithdrawTooMany: 'admin.withdraw_too_many',
+  adminWithdrawNoStock: 'admin.withdraw_no_stock',
+  adminStockNotWithdrawn: 'admin.stock_not_withdrawn',
   adminSlugFailed: 'admin.slug_generate_failed',
   adminSlugExists: 'admin.slug_exists',
   adminProductHasOrders: 'admin.product_has_orders',
@@ -525,6 +529,26 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Thứ tự sắp xếp phải là số nguyên',
     en: 'Sort order must be an integer',
     zh: '排序必须是整数',
+  },
+  [K.adminWithdrawQuantityInvalid]: {
+    vi: 'Số lượng rút phải là số nguyên từ 1 trở lên',
+    en: 'The withdraw quantity must be a whole number of at least 1',
+    zh: '抽取数量必须是不小于 1 的整数',
+  },
+  [K.adminWithdrawTooMany]: {
+    vi: 'Mỗi lần chỉ rút được tối đa 500 dòng',
+    en: 'At most 500 lines can be withdrawn at once',
+    zh: '每次最多抽取 500 条',
+  },
+  [K.adminWithdrawNoStock]: {
+    vi: 'Loại này không còn dòng nào bán được để rút',
+    en: 'This variant has no sellable lines left to withdraw',
+    zh: '该规格已无可售卡密可抽取',
+  },
+  [K.adminStockNotWithdrawn]: {
+    vi: 'Chỉ trả lại kho được những dòng đã rút',
+    en: 'Only withdrawn lines can be returned to stock',
+    zh: '只有已抽取的卡密才能退回库存',
   },
   [K.adminStockDrawModeInvalid]: {
     vi: 'Cách rút kho không hợp lệ',

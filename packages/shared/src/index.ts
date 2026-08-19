@@ -8,7 +8,7 @@ export function isAdminRole(role: Role): boolean {
 }
 export type OrderStatus = 'PENDING' | 'PAID' | 'DELIVERED' | 'CANCELLED' | 'EXPIRED';
 export type PaymentStatus = 'PENDING' | 'SUCCESS' | 'FAILED' | 'EXPIRED';
-export type StockStatus = 'AVAILABLE' | 'RESERVED' | 'SOLD';
+export type StockStatus = 'AVAILABLE' | 'RESERVED' | 'SOLD' | 'WITHDRAWN';
 /**
  * `BINANCE` = cổng Binance Pay MERCHANT (cần tài khoản merchant riêng).
  * `BINANCE_ID` = khách chuyển USDT thẳng tới Binance ID cá nhân của chủ shop —
@@ -617,6 +617,8 @@ export const AUDIT_ACTIONS = [
   'variant.delete',
   'stock.add',
   'stock.delete',
+  'stock.withdraw',
+  'stock.restore',
   'order.redeliver',
   'order.cancel',
   'order.mark_paid',
@@ -653,9 +655,26 @@ export interface StockItemDto {
   status: StockStatus;
   createdAt: string;
   soldAt: string | null;
+  /** Lúc chủ shop rút dòng này ra khỏi kho; `null` nếu chưa rút. */
+  withdrawnAt: string | null;
   orderCode: string | null;
   variantId: string;
   variantName: string;
+}
+
+/** Một dòng vừa được rút ra khỏi kho — đủ để chủ shop sao chép lại. */
+export interface WithdrawnStockLineDto {
+  id: string;
+  content: string;
+}
+
+export interface WithdrawStockResponse {
+  /** Nội dung các dòng vừa rút, theo đúng thứ tự rút. */
+  lines: WithdrawnStockLineDto[];
+  /** Số dòng thực sự rút được — có thể ÍT HƠN yêu cầu nếu kho không đủ. */
+  withdrawn: number;
+  /** Số dòng còn bán được sau khi rút. */
+  remaining: number;
 }
 
 export interface AddStockResponse {
@@ -682,6 +701,7 @@ export const STOCK_STATUS_LABEL: Record<StockStatus, string> = {
   AVAILABLE: 'Còn hàng',
   RESERVED: 'Đang giữ',
   SOLD: 'Đã bán',
+  WITHDRAWN: 'Đã rút',
 };
 
 // ---------- Helpers ----------

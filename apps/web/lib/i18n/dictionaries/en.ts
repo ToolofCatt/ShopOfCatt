@@ -317,6 +317,7 @@ export const en: Dictionary = {
     AVAILABLE: 'Available',
     RESERVED: 'Reserved',
     SOLD: 'Sold',
+    WITHDRAWN: 'Withdrawn',
   },
 
   paymentStatus: {
@@ -449,6 +450,18 @@ export const en: Dictionary = {
     stockEmptyTitle: (status: string) => `No lines (${status})`,
     stockEmptyHintAvailable: 'Add stock lines using the box above.',
     stockEmptyHintOther: 'Lines with this status will appear here.',
+    stockWithdrawTitle: 'Withdraw stock',
+    stockWithdrawHint:
+      'Pull keys out of stock to keep for yourself. Withdrawn lines are no longer sellable and do not count as sold.',
+    stockWithdrawQuantity: 'Quantity',
+    stockWithdrawMode: 'Draw order',
+    stockWithdrawAction: 'Withdraw',
+    stockWithdrawResult: (rut: number, con: number) =>
+      `Withdrew ${rut} line(s) — ${con} sellable left.`,
+    stockWithdrawCopy: 'Copy all',
+    stockWithdrawKeepSafe:
+      'Save them now: once you leave this page, use the "Withdrawn" tab to see them again.',
+    stockRestoreLine: 'Return to stock',
     stockColContent: 'Content',
     stockColDate: 'Added',
     stockColOrder: 'Order',
@@ -691,6 +704,8 @@ export const en: Dictionary = {
       'variant.delete': 'Delete variant',
       'stock.add': 'Add stock',
       'stock.delete': 'Delete stock line',
+      'stock.withdraw': 'Withdraw stock',
+      'stock.restore': 'Return to stock',
       'order.redeliver': 'Redeliver order',
       'order.cancel': 'Cancel order',
       'order.mark_paid': 'Mark order as paid',

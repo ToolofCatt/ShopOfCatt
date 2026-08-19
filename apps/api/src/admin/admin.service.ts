@@ -17,6 +17,7 @@ import {
   type ProductVariantDto,
   type RevenuePointDto,
   type StockItemDto,
+  type WithdrawStockResponse,
   type TranslationStatusDto,
 } from '@webcatt/shared';
 import { diffChanges } from '../audit/audit-diff';
@@ -46,6 +47,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { CreateVariantDto } from './dto/create-variant.dto';
 import { OrdersQueryDto } from './dto/orders-query.dto';
 import { StockQueryDto } from './dto/stock-query.dto';
+import { WithdrawStockDto } from './dto/withdraw-stock.dto';
 import type { SeriesDays } from './dto/stats-series-query.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
@@ -796,6 +798,136 @@ export class AdminService {
     };
   }
 
+
+  /**
+   * Chủ shop tự rút key ra khỏi kho để thu hồi.
+   *
+   * Đi qua ĐÚNG `lockAvailableStock` mà luồng đặt đơn dùng, trong MỘT
+   * transaction. Nếu viết một truy vấn riêng cho việc rút tay thì lượt rút và
+   * một đơn của khách có thể cùng lấy một dòng — khách trả tiền xong mới biết
+   * key đã bị thu hồi, và đó là mất tiền thật.
+   *
+   * Rút được ÍT HƠN yêu cầu là chuyện bình thường (kho không đủ, hoặc vài dòng
+   * đang bị đơn khác giữ): trả về số thực rút thay vì báo lỗi, để chủ shop biết
+   * chính xác mình đang giữ những gì trong tay.
+   */
+  async withdrawStock(
+    actor: User,
+    variantId: string,
+    dto: WithdrawStockDto,
+  ): Promise<WithdrawStockResponse> {
+    const variant = await this.prisma.productVariant.findUnique({
+      where: { id: variantId },
+      select: { id: true, name: true, product: { select: { name: true } } },
+    });
+    if (!variant) {
+      throw new NotFoundException(K.variantNotFound);
+    }
+
+    const lines = await this.prisma.$transaction(async (tx) => {
+      const ids = await this.fulfillment.lockAvailableStock(
+        tx,
+        variantId,
+        dto.quantity,
+        dto.mode ?? 'SEQUENTIAL',
+      );
+      if (ids.length === 0) return [];
+      await tx.stockItem.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'WITHDRAWN', withdrawnAt: new Date() },
+      });
+      const rows = await tx.stockItem.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, content: true },
+      });
+      // Giữ đúng thứ tự đã rút — `findMany` không bảo đảm thứ tự của mảng `in`.
+      const theoId = new Map(rows.map((row) => [row.id, row.content]));
+      return ids.map((id) => ({ id, content: theoId.get(id) as string }));
+    });
+
+    if (lines.length === 0) {
+      throw new BadRequestException(K.adminWithdrawNoStock);
+    }
+
+    const remaining = await this.prisma.stockItem.count({
+      where: { variantId, status: 'AVAILABLE' },
+    });
+    // Nhật ký ghi SỐ LƯỢNG, không ghi nội dung key: nhật ký lưu vĩnh viễn và
+    // hiện ở /admin/audit — nhét key vào đó là rò hàng ra một chỗ thứ hai.
+    await this.audit.log(
+      actor,
+      'stock.withdraw',
+      { type: 'variant', id: variantId },
+      {
+        variantName: variant.name,
+        productName: variant.product.name,
+        withdrawn: lines.length,
+        requested: dto.quantity,
+        mode: dto.mode ?? 'SEQUENTIAL',
+        remaining,
+      },
+    );
+    return { lines, withdrawn: lines.length, remaining };
+  }
+
+  /** Trả một dòng đã rút về lại kho — để một cú bấm lỡ tay không thành vĩnh viễn. */
+  async restoreStock(actor: User, stockId: string): Promise<StockItemDto> {
+    const item = await this.prisma.stockItem.findUnique({
+      where: { id: stockId },
+      select: {
+        id: true,
+        status: true,
+        variantId: true,
+        variant: { select: { name: true, product: { select: { name: true } } } },
+      },
+    });
+    if (!item) {
+      throw new NotFoundException(K.adminStockLineNotFound);
+    }
+    if (item.status !== 'WITHDRAWN') {
+      throw new BadRequestException(K.adminStockNotWithdrawn);
+    }
+
+    /*
+     * `updateMany` có điều kiện trạng thái, không dùng `update` trần: hai lần
+     * bấm đồng thời thì lần thứ hai khớp 0 dòng thay vì ghi đè trạng thái mà
+     * lần đầu đã đổi.
+     */
+    const { count } = await this.prisma.stockItem.updateMany({
+      where: { id: stockId, status: 'WITHDRAWN' },
+      data: { status: 'AVAILABLE', withdrawnAt: null },
+    });
+    if (count === 0) {
+      throw new BadRequestException(K.adminStockNotWithdrawn);
+    }
+
+    await this.audit.log(
+      actor,
+      'stock.restore',
+      { type: 'variant', id: item.variantId },
+      {
+        variantName: item.variant.name,
+        productName: item.variant.product.name,
+      },
+    );
+
+    const sau = await this.prisma.stockItem.findUniqueOrThrow({
+      where: { id: stockId },
+      include: { orderItem: { select: { order: { select: { code: true } } } } },
+    });
+    return {
+      id: sau.id,
+      content: sau.content,
+      status: sau.status,
+      createdAt: sau.createdAt.toISOString(),
+      soldAt: sau.soldAt ? sau.soldAt.toISOString() : null,
+      withdrawnAt: sau.withdrawnAt ? sau.withdrawnAt.toISOString() : null,
+      orderCode: sau.orderItem?.order.code ?? null,
+      variantId: sau.variantId,
+      variantName: item.variant.name,
+    };
+  }
+
   async listStock(
     variantId: string,
     query: StockQueryDto,
@@ -834,6 +966,7 @@ export class AdminService {
       status: row.status,
       createdAt: row.createdAt.toISOString(),
       soldAt: row.soldAt ? row.soldAt.toISOString() : null,
+      withdrawnAt: row.withdrawnAt ? row.withdrawnAt.toISOString() : null,
       orderCode: row.orderItem?.order.code ?? null,
       variantId: row.variantId,
       variantName: variant.name,

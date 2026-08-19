@@ -3,7 +3,7 @@ import { IsIn, IsInt, IsOptional } from 'class-validator';
 import { toPositiveInt } from '../../common/codes';
 import { K } from '../../i18n/messages';
 
-const STOCK_STATUSES = ['AVAILABLE', 'RESERVED', 'SOLD'] as const;
+const STOCK_STATUSES = ['AVAILABLE', 'RESERVED', 'SOLD', 'WITHDRAWN'] as const;
 export type StockStatusFilter = (typeof STOCK_STATUSES)[number];
 
 export class StockQueryDto {

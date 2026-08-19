@@ -31,6 +31,7 @@ import type {
   ProductVariantDto,
   RevenuePointDto,
   StockItemDto,
+  WithdrawStockResponse,
   StoreInsightsDto,
   TranslationStatusDto,
 } from '@webcatt/shared';
@@ -65,6 +66,7 @@ import { OrdersQueryDto } from './dto/orders-query.dto';
 import { InsightsQueryDto } from './dto/insights-query.dto';
 import { StatsSeriesQueryDto } from './dto/stats-series-query.dto';
 import { StockQueryDto } from './dto/stock-query.dto';
+import { WithdrawStockDto } from './dto/withdraw-stock.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 
@@ -332,6 +334,31 @@ export class AdminController {
     @Query() query: StockQueryDto,
   ): Promise<Paginated<StockItemDto>> {
     return this.adminService.listStock(id, query);
+  }
+
+  /**
+   * Rút kho: chủ shop tự lấy key ra khỏi kho để thu hồi.
+   *
+   * `@Post` chứ không `@Delete`: thao tác này TRẢ VỀ nội dung các dòng vừa rút
+   * để chủ shop sao chép, mà thân phản hồi của DELETE thì nhiều lớp trung gian
+   * cắt bỏ.
+   */
+  @Post('variants/:id/withdraw')
+  withdrawStock(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+    @Body() dto: WithdrawStockDto,
+  ): Promise<WithdrawStockResponse> {
+    return this.adminService.withdrawStock(user, id, dto);
+  }
+
+  /** Trả một dòng đã rút về lại kho. */
+  @Post('stock/:id/restore')
+  restoreStockItem(
+    @CurrentUser() user: User,
+    @Param('id') id: string,
+  ): Promise<StockItemDto> {
+    return this.adminService.restoreStock(user, id);
   }
 
   @Delete('stock/:id')

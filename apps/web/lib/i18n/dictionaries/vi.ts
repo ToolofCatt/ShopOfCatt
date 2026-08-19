@@ -327,6 +327,7 @@ export const vi = {
     AVAILABLE: 'Còn hàng',
     RESERVED: 'Đang giữ',
     SOLD: 'Đã bán',
+    WITHDRAWN: 'Đã rút',
   },
 
   paymentStatus: {
@@ -460,6 +461,18 @@ export const vi = {
     stockEmptyTitle: (status: string) => `Không có dòng nào (${status})`,
     stockEmptyHintAvailable: 'Thêm dòng kho bằng ô nhập bên trên.',
     stockEmptyHintOther: 'Các dòng ở trạng thái này sẽ hiển thị tại đây.',
+    stockWithdrawTitle: 'Rút kho',
+    stockWithdrawHint:
+      'Lấy key ra khỏi kho để bạn tự thu hồi. Dòng đã rút không bán được nữa và không tính là đã bán.',
+    stockWithdrawQuantity: 'Số lượng',
+    stockWithdrawMode: 'Thứ tự rút',
+    stockWithdrawAction: 'Rút kho',
+    stockWithdrawResult: (rut: number, con: number) =>
+      `Đã rút ${rut} dòng — còn ${con} dòng bán được.`,
+    stockWithdrawCopy: 'Sao chép tất cả',
+    stockWithdrawKeepSafe:
+      'Lưu lại ngay: sau khi rời trang, muốn xem lại phải vào tab "Đã rút".',
+    stockRestoreLine: 'Trả lại kho',
     stockColContent: 'Nội dung',
     stockColDate: 'Ngày thêm',
     stockColOrder: 'Đơn hàng',
@@ -704,6 +717,8 @@ export const vi = {
       'variant.delete': 'Xóa loại',
       'stock.add': 'Thêm kho',
       'stock.delete': 'Xóa dòng kho',
+      'stock.withdraw': 'Rút kho',
+      'stock.restore': 'Trả lại kho',
       'order.redeliver': 'Giao bù đơn',
       'order.cancel': 'Hủy đơn',
       'order.mark_paid': 'Xác nhận đã thanh toán',

@@ -41,9 +41,18 @@ export class FulfillmentService {
     tx: Prisma.TransactionClient,
     variantId: string,
     limit: number,
+    /**
+     * Ép thứ tự rút cho LƯỢT NÀY, bỏ qua cấu hình của sản phẩm.
+     *
+     * Có để chủ shop tự rút kho chọn được thứ tự ngay lúc rút, mà vẫn đi qua
+     * đúng truy vấn `FOR UPDATE SKIP LOCKED` này — nếu viết một truy vấn riêng
+     * cho việc rút tay thì lượt rút và một đơn của khách có thể cùng lấy một
+     * dòng, và khách trả tiền xong mới biết key đã bị thu hồi.
+     */
+    drawModeOverride?: StockDrawMode,
   ): Promise<string[]> {
     if (limit <= 0) return [];
-    const drawMode = await this.getDrawMode(tx, variantId);
+    const drawMode = drawModeOverride ?? (await this.getDrawMode(tx, variantId));
 
     /*
      * Chỉ mệnh đề ORDER BY thay đổi; phần còn lại — nhất là FOR UPDATE SKIP

@@ -2,12 +2,15 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Inbox, PackagePlus, Trash2 } from 'lucide-react';
-import type {
-  AddStockResponse,
-  Paginated,
-  StockItemDto,
-  StockStatus,
+import { Copy, Inbox, PackageMinus, PackagePlus, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  STOCK_DRAW_MODES,
+  type AddStockResponse,
+  type Paginated,
+  type StockDrawMode,
+  type StockItemDto,
+  type StockStatus,
+  type WithdrawStockResponse,
 } from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -19,7 +22,7 @@ import { Pagination } from '@/components/admin/pagination';
 import { Tabs, type TabItem } from '@/components/admin/tabs';
 
 const PAGE_SIZE = 50;
-const STOCK_TAB_VALUES: StockStatus[] = ['AVAILABLE', 'RESERVED', 'SOLD'];
+const STOCK_TAB_VALUES: StockStatus[] = ['AVAILABLE', 'RESERVED', 'SOLD', 'WITHDRAWN'];
 
 export interface StockManagerProps {
   /** Kho thuộc về một loại sản phẩm, không phải sản phẩm. */
@@ -50,6 +53,14 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
     [content],
   );
 
+  // --- Rút kho ---
+  const [withdrawQty, setWithdrawQty] = useState('1');
+  const [withdrawMode, setWithdrawMode] = useState<StockDrawMode>('SEQUENTIAL');
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawResult, setWithdrawResult] = useState<WithdrawStockResponse | null>(null);
+  const [withdrawError, setWithdrawError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
   // --- Line table ---
   const [tab, setTab] = useState<StockStatus>('AVAILABLE');
   const [page, setPage] = useState(1);
@@ -57,6 +68,7 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
   const [tableLoading, setTableLoading] = useState(true);
   const [tableError, setTableError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [restoringId, setRestoringId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const refreshTable = useCallback(() => setReloadKey((key) => key + 1), []);
@@ -111,6 +123,58 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
     }
   };
 
+  const handleWithdraw = async () => {
+    const quantity = Number(withdrawQty);
+    if (withdrawing || !Number.isInteger(quantity) || quantity < 1) return;
+    setWithdrawing(true);
+    setWithdrawError(null);
+    setWithdrawResult(null);
+    setCopied(false);
+    try {
+      const result = await apiFetch<WithdrawStockResponse>(
+        `/admin/variants/${variantId}/withdraw`,
+        { method: 'POST', body: { quantity, mode: withdrawMode }, token },
+      );
+      setWithdrawResult(result);
+      setPage(1);
+      refreshTable();
+      onStockChanged?.();
+    } catch (err) {
+      setWithdrawError(apiErrorMessage(err, t.common.connectionError));
+    } finally {
+      setWithdrawing(false);
+    }
+  };
+
+  const handleCopyWithdrawn = async () => {
+    if (!withdrawResult) return;
+    const text = withdrawResult.lines.map((line) => line.content).join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  const handleRestore = async (item: StockItemDto) => {
+    if (restoringId) return;
+    setRestoringId(item.id);
+    try {
+      await apiFetch<StockItemDto>(`/admin/stock/${item.id}/restore`, {
+        method: 'POST',
+        token,
+      });
+      if (data && data.items.length === 1 && page > 1) setPage(page - 1);
+      refreshTable();
+      onStockChanged?.();
+    } catch (err) {
+      window.alert(apiErrorMessage(err, t.common.connectionError));
+    } finally {
+      setRestoringId(null);
+    }
+  };
+
   const handleDelete = async (item: StockItemDto) => {
     if (deletingId) return;
     if (!window.confirm(t.admin.stockDeleteConfirm)) return;
@@ -128,8 +192,10 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
     }
   };
 
-  const showOrderColumn = tab !== 'AVAILABLE';
+  // Cột "đơn hàng" chỉ có nghĩa với dòng đã bán / đang giữ cho một đơn.
+  const showOrderColumn = tab === 'RESERVED' || tab === 'SOLD';
   const showDeleteColumn = tab === 'AVAILABLE';
+  const showRestoreColumn = tab === 'WITHDRAWN';
 
   return (
     <div>
@@ -177,6 +243,92 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
         {addError && <p className="text-sm text-red-600">{addError}</p>}
       </div>
 
+      {/*
+        Rút kho: lấy key ra khỏi kho để tự thu hồi. Đi qua đúng truy vấn có khoá
+        mà luồng đặt đơn dùng, nên không bao giờ rút được dòng mà một đơn đang giữ.
+      */}
+      <div className="mt-6 space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+        <div>
+          <p className="text-sm font-medium text-neutral-950">{t.admin.stockWithdrawTitle}</p>
+          <p className="mt-0.5 text-xs text-neutral-500">{t.admin.stockWithdrawHint}</p>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-neutral-700">
+              {t.admin.stockWithdrawQuantity}
+            </span>
+            <input
+              id="stock-withdraw-quantity"
+              type="number"
+              min={1}
+              step={1}
+              inputMode="numeric"
+              value={withdrawQty}
+              onChange={(event) => {
+                setWithdrawQty(event.target.value);
+                setWithdrawError(null);
+              }}
+              className="h-10 w-24 rounded-lg border border-neutral-300 bg-white px-3 text-sm tabular-nums text-neutral-950 focus:border-neutral-950 focus:outline-none focus:ring-2 focus:ring-neutral-950/10"
+            />
+          </label>
+
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-neutral-700">
+              {t.admin.stockWithdrawMode}
+            </span>
+            <Tabs
+              items={STOCK_DRAW_MODES.map((mode) => ({
+                value: mode,
+                label: t.admin.formStockDrawModes[mode],
+              }))}
+              value={withdrawMode}
+              onChange={setWithdrawMode}
+            />
+          </div>
+
+          <Button
+            variant="outline"
+            className="ml-auto"
+            loading={withdrawing}
+            onClick={() => void handleWithdraw()}
+          >
+            {!withdrawing && <PackageMinus strokeWidth={1.75} className="h-4 w-4" />}
+            {t.admin.stockWithdrawAction}
+          </Button>
+        </div>
+
+        {withdrawError && <p className="text-sm text-red-600">{withdrawError}</p>}
+
+        {withdrawResult && (
+          <div className="space-y-2 border-t border-neutral-200 pt-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-medium text-neutral-950">
+                {t.admin.stockWithdrawResult(
+                  withdrawResult.withdrawn,
+                  withdrawResult.remaining,
+                )}
+              </p>
+              <Button size="sm" variant="outline" onClick={() => void handleCopyWithdrawn()}>
+                <Copy strokeWidth={1.75} className="h-3.5 w-3.5" />
+                {copied ? t.common.copied : t.admin.stockWithdrawCopy}
+              </Button>
+            </div>
+            {/*
+              readOnly chứ không disabled: chủ shop vẫn cần bôi đen chọn tay được
+              khi trình duyệt chặn clipboard.
+            */}
+            <textarea
+              readOnly
+              rows={Math.min(10, Math.max(3, withdrawResult.lines.length))}
+              value={withdrawResult.lines.map((line) => line.content).join('\n')}
+              className={cn(TEXTAREA_CLASSES, 'font-mono bg-white')}
+            />
+            <p className="text-xs text-neutral-500">{t.admin.stockWithdrawKeepSafe}</p>
+          </div>
+        )}
+      </div>
+
       {/* Line table */}
       <div className="mt-6 border-t border-neutral-100 pt-5">
         <Tabs items={stockTabs} value={tab} onChange={handleTabChange} />
@@ -213,7 +365,9 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
                           {t.admin.stockColOrder}
                         </th>
                       )}
-                      {showDeleteColumn && <th className="px-4 py-2.5" aria-hidden="true" />}
+                      {(showDeleteColumn || showRestoreColumn) && (
+                        <th className="px-4 py-2.5" aria-hidden="true" />
+                      )}
                     </tr>
                   </thead>
                   <tbody className={tableLoading ? 'divide-y divide-neutral-100 opacity-60' : 'divide-y divide-neutral-100'}>
@@ -223,7 +377,7 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
                           {item.content}
                         </td>
                         <td className="whitespace-nowrap px-4 py-2.5 text-neutral-500">
-                          {formatDate(item.createdAt)}
+                          {formatDate(item.withdrawnAt ?? item.createdAt)}
                         </td>
                         {showOrderColumn && (
                           <td className="whitespace-nowrap px-4 py-2.5">
@@ -237,6 +391,25 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
                             ) : (
                               <span className="text-neutral-400">—</span>
                             )}
+                          </td>
+                        )}
+                        {showRestoreColumn && (
+                          <td className="px-4 py-2.5 text-right">
+                            <button
+                              type="button"
+                              title={t.admin.stockRestoreLine}
+                              aria-label={`${t.admin.stockRestoreLine}: ${item.content}`}
+                              disabled={restoringId !== null}
+                              onClick={() => void handleRestore(item)}
+                              className="inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs font-medium text-neutral-600 transition-colors hover:bg-neutral-100 hover:text-neutral-950 disabled:pointer-events-none disabled:opacity-50"
+                            >
+                              {restoringId === item.id ? (
+                                <Spinner className="h-3.5 w-3.5" />
+                              ) : (
+                                <RotateCcw strokeWidth={1.75} className="h-3.5 w-3.5" />
+                              )}
+                              {t.admin.stockRestoreLine}
+                            </button>
                           </td>
                         )}
                         {showDeleteColumn && (

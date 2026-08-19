@@ -297,6 +297,101 @@ async function rut(variantId: string, soLuong: number): Promise<string[]> {
 }
 
 describe('FulfillmentService trên PostgreSQL thật', () => {
+  itDb('rút kho tay KHÔNG giành được dòng mà một đơn đang giữ', async () => {
+    const { variantId } = await makeKho({ soKey: 6, drawMode: 'SEQUENTIAL' });
+
+    /*
+     * Đây là bài quan trọng nhất của tính năng rút kho tay.
+     *
+     * Một "đơn của khách" giữ 4 dòng và CHƯA commit; cùng lúc chủ shop rút 6
+     * dòng. Nếu việc rút tay đi bằng một truy vấn riêng không có SKIP LOCKED,
+     * nó sẽ lấy trùng dòng của đơn kia — khách trả tiền xong mới biết key đã bị
+     * thu hồi. Với SKIP LOCKED thì lượt rút chỉ được 2 dòng còn lại.
+     */
+    let donDaGiu: () => void = () => {};
+    const dangGiu = new Promise<void>((res) => {
+      donDaGiu = res;
+    });
+    let choRutXong: () => void = () => {};
+    const rutXong = new Promise<void>((res) => {
+      choRutXong = res;
+    });
+
+    const donCuaKhach = prisma.$transaction(async (tx) => {
+      const ids = await service.lockAvailableStock(tx, variantId, 4);
+      donDaGiu();
+      await rutXong;
+      return ids;
+    });
+
+    await dangGiu;
+    const rutTay = await prisma.$transaction(async (tx) => {
+      // Chủ shop chọn thứ tự ngay lúc rút, không theo cấu hình sản phẩm.
+      const ids = await service.lockAvailableStock(tx, variantId, 6, 'RANDOM');
+      await tx.stockItem.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'WITHDRAWN', withdrawnAt: new Date() },
+      });
+      return ids;
+    });
+    choRutXong();
+    const cuaDon = await donCuaKhach;
+
+    expect(cuaDon).toHaveLength(4);
+    expect(rutTay).toHaveLength(2);
+    expect(rutTay.filter((id) => cuaDon.includes(id))).toEqual([]);
+  }, 30_000);
+
+  itDb('dòng đã rút không còn bán được nữa', async () => {
+    const { variantId } = await makeKho({ soKey: 5, drawMode: 'SEQUENTIAL' });
+
+    await prisma.$transaction(async (tx) => {
+      const ids = await service.lockAvailableStock(tx, variantId, 3);
+      await tx.stockItem.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'WITHDRAWN', withdrawnAt: new Date() },
+      });
+    });
+
+    // Chỉ còn 2 dòng bán được, dù kho vẫn có 5 dòng.
+    expect(
+      await prisma.stockItem.count({ where: { variantId, status: 'AVAILABLE' } }),
+    ).toBe(2);
+    expect(await prisma.stockItem.count({ where: { variantId } })).toBe(5);
+
+    const lay = await rut(variantId, 5);
+    expect(lay).toHaveLength(2);
+  });
+
+  itDb('trả lại kho: dòng đã rút bán được trở lại', async () => {
+    const { variantId } = await makeKho({ soKey: 4, drawMode: 'SEQUENTIAL' });
+
+    const daRut = await prisma.$transaction(async (tx) => {
+      const ids = await service.lockAvailableStock(tx, variantId, 2);
+      await tx.stockItem.updateMany({
+        where: { id: { in: ids } },
+        data: { status: 'WITHDRAWN', withdrawnAt: new Date() },
+      });
+      return ids;
+    });
+
+    const { count } = await prisma.stockItem.updateMany({
+      where: { id: daRut[0], status: 'WITHDRAWN' },
+      data: { status: 'AVAILABLE', withdrawnAt: null },
+    });
+    expect(count).toBe(1);
+    expect(
+      await prisma.stockItem.count({ where: { variantId, status: 'AVAILABLE' } }),
+    ).toBe(3);
+
+    // Bấm trả lại lần thứ hai khớp 0 dòng — không ghi đè trạng thái đã đổi.
+    const lai = await prisma.stockItem.updateMany({
+      where: { id: daRut[0], status: 'WITHDRAWN' },
+      data: { status: 'AVAILABLE', withdrawnAt: null },
+    });
+    expect(lai.count).toBe(0);
+  });
+
   itDb('rút TUẦN TỰ: đúng thứ tự nạp vào kho, kể cả khi createdAt giống hệt nhau', async () => {
     const { variantId, thuTuNap } = await makeKho({ soKey: 12, drawMode: 'SEQUENTIAL' });
 
