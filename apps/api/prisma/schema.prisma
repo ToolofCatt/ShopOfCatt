@@ -24,6 +24,15 @@ enum OrderStatus {
   EXPIRED
 }
 
+/// Cách chọn dòng kho khi giữ chỗ cho đơn.
+enum StockDrawMode {
+  /// Cũ trước, mới sau — đúng thứ tự nạp vào kho.
+  SEQUENTIAL
+  /// Ngẫu nhiên. Dùng cho loại hàng mà mỗi key một khác (ví dụ tài khoản còn
+  /// số ngày ngẫu nhiên), để khách trước không vét hết những key "ngon".
+  RANDOM
+}
+
 enum StockStatus {
   AVAILABLE
   RESERVED
@@ -103,6 +112,13 @@ model Product {
   category         String?
   sortOrder        Int     @default(0)
   active           Boolean @default(true)
+
+  /// Cách rút kho khi giữ chỗ cho đơn — áp dụng cho MỌI loại của sản phẩm này.
+  ///
+  /// Đặt ở Product chứ không ở ProductVariant: các loại của cùng một sản phẩm
+  /// là cùng một thứ hàng, chỉ khác gói; để mỗi loại một kiểu rút là chủ shop
+  /// phải nhớ cấu hình ở nhiều chỗ mà chẳng được gì.
+  stockDrawMode    StockDrawMode @default(SEQUENTIAL)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

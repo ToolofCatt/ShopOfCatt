@@ -67,6 +67,8 @@ function toPreviewProduct(input: ProductPreviewInput, fallbackName: string): Pro
     images: input.images,
     category: input.category.trim() || null,
     sortOrder: 0,
+    // Xem trước không rút kho thật — giá trị nào cũng không đổi hiển thị.
+    stockDrawMode: 'SEQUENTIAL',
     active: true,
     availableStock: active.reduce((sum, variant) => sum + variant.availableStock, 0),
     sold: active.reduce((sum, variant) => sum + variant.sold, 0),

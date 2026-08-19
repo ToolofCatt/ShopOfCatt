@@ -241,7 +241,150 @@ async function soldContents(orderItemId: string): Promise<string[]> {
   return rows.map((r) => r.content);
 }
 
+
+/**
+ * Dựng một loại sản phẩm với `soKey` dòng kho AVAILABLE, đặt trước kiểu rút.
+ *
+ * Kho nạp bằng `createMany` — GIỐNG HỆT đường mà trang quản trị đi — nên mọi
+ * dòng có `createdAt` bằng nhau. Đó chính là điều kiện làm lộ ra chuyện "tuần
+ * tự" có thật sự tuần tự hay không.
+ */
+async function makeKho(options: {
+  soKey: number;
+  drawMode: 'SEQUENTIAL' | 'RANDOM';
+}): Promise<{ variantId: string; thuTuNap: string[] }> {
+  const tag = unique('kho');
+  const product = await prisma.product.create({
+    data: { slug: tag, name: `San pham ${tag}`, stockDrawMode: options.drawMode },
+  });
+  const variant = await prisma.productVariant.create({
+    data: { productId: product.id, name: 'Mặc định', price: '10.00' },
+  });
+  const thuTuNap = Array.from({ length: options.soKey }, (_, i) =>
+    `${tag}-KEY-${String(i).padStart(3, '0')}`,
+  );
+  await prisma.stockItem.createMany({
+    data: thuTuNap.map((content) => ({ variantId: variant.id, content })),
+  });
+  return { variantId: variant.id, thuTuNap };
+}
+
+/**
+ * Rút `soLuong` dòng kho rồi trả về NỘI DUNG của chúng, theo đúng thứ tự rút.
+ *
+ * Đánh dấu RESERVED ngay trong cùng transaction — đúng như luồng đặt đơn thật
+ * (`orders.service.ts`). `lockAvailableStock` chỉ KHOÁ chứ không đổi trạng thái,
+ * mà khoá thì nhả khi transaction kết thúc; thiếu bước này thì hai lần rút liên
+ * tiếp cùng trả về một dòng.
+ */
+async function rut(variantId: string, soLuong: number): Promise<string[]> {
+  const ids = await prisma.$transaction(async (tx) => {
+    const lay = await service.lockAvailableStock(tx, variantId, soLuong);
+    if (lay.length > 0) {
+      await tx.stockItem.updateMany({
+        where: { id: { in: lay } },
+        data: { status: 'RESERVED' },
+      });
+    }
+    return lay;
+  });
+  const rows = await prisma.stockItem.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, content: true },
+  });
+  const theoId = new Map(rows.map((r) => [r.id, r.content]));
+  return ids.map((id) => theoId.get(id) as string);
+}
+
 describe('FulfillmentService trên PostgreSQL thật', () => {
+  itDb('rút TUẦN TỰ: đúng thứ tự nạp vào kho, kể cả khi createdAt giống hệt nhau', async () => {
+    const { variantId, thuTuNap } = await makeKho({ soKey: 12, drawMode: 'SEQUENTIAL' });
+
+    // Điều kiện tiên quyết: createMany làm mọi dòng cùng một mốc thời gian.
+    const moc = await prisma.stockItem.findMany({
+      where: { variantId },
+      select: { createdAt: true },
+    });
+    const socMoc = new Set(moc.map((r) => r.createdAt.getTime()));
+    expect(socMoc.size).toBe(1);
+
+    expect(await rut(variantId, 4)).toEqual(thuTuNap.slice(0, 4));
+    expect(await rut(variantId, 3)).toEqual(thuTuNap.slice(4, 7));
+  });
+
+  itDb('rút NGẪU NHIÊN: không bám theo thứ tự nạp', async () => {
+    const { variantId, thuTuNap } = await makeKho({ soKey: 40, drawMode: 'RANDOM' });
+
+    const lay = await rut(variantId, 10);
+    expect(lay).toHaveLength(10);
+    expect(new Set(lay).size).toBe(10); // không trùng nhau
+    expect(new Set(thuTuNap).size).toBe(40);
+    for (const k of lay) expect(thuTuNap).toContain(k);
+
+    /*
+     * Xác suất 10 lần rút đầu tiên trùng đúng 10 key đầu kho là 1/C(40,10)
+     * ≈ 1 trên 847 triệu — nên phép so sánh này không phải là test hay hỏng vặt.
+     */
+    expect(lay).not.toEqual(thuTuNap.slice(0, 10));
+  });
+
+  itDb('rút ngẫu nhiên KHÔNG phá tính an toàn khi hai đơn đặt cùng lúc', async () => {
+    const { variantId } = await makeKho({ soKey: 30, drawMode: 'RANDOM' });
+
+    /*
+     * Hai transaction chạy song song, mỗi bên rút 10 dòng và GIỮ khoá tới khi cả
+     * hai cùng rút xong. Nếu SKIP LOCKED bị đánh mất khi đổi ORDER BY, hai bên
+     * sẽ nhận chung dòng — đúng cái lỗi giao trùng key mà khoá này sinh ra để chặn.
+     */
+    let moKhoa: () => void = () => {};
+    const caHaiDaRut = new Promise<void>((res) => {
+      let dem = 0;
+      moKhoa = () => {
+        dem += 1;
+        if (dem === 2) res();
+      };
+    });
+
+    const mot = async (): Promise<string[]> =>
+      prisma.$transaction(async (tx) => {
+        const ids = await service.lockAvailableStock(tx, variantId, 10);
+        moKhoa();
+        await caHaiDaRut;
+        return ids;
+      });
+
+    const [a, b] = await Promise.all([mot(), mot()]);
+    expect(a).toHaveLength(10);
+    expect(b).toHaveLength(10);
+    const chung = a.filter((id) => b.includes(id));
+    expect(chung).toEqual([]);
+  }, 30_000);
+
+  itDb('rút ngẫu nhiên vẫn vét sạch kho, không bỏ sót dòng nào', async () => {
+    const { variantId, thuTuNap } = await makeKho({ soKey: 15, drawMode: 'RANDOM' });
+
+    const daRut: string[] = [];
+    for (let i = 0; i < 5; i++) daRut.push(...(await rut(variantId, 3)));
+
+    expect(daRut).toHaveLength(15);
+    expect([...daRut].sort()).toEqual([...thuTuNap].sort());
+    expect(await rut(variantId, 3)).toEqual([]);
+  });
+
+  itDb('đổi kiểu rút giữa chừng có hiệu lực ngay, không cần khởi động lại', async () => {
+    const { variantId, thuTuNap } = await makeKho({ soKey: 20, drawMode: 'SEQUENTIAL' });
+    expect(await rut(variantId, 3)).toEqual(thuTuNap.slice(0, 3));
+
+    await prisma.product.updateMany({
+      where: { variants: { some: { id: variantId } } },
+      data: { stockDrawMode: 'RANDOM' },
+    });
+
+    const sau = await rut(variantId, 8);
+    expect(sau).toHaveLength(8);
+    expect(sau).not.toEqual(thuTuNap.slice(3, 11));
+  });
+
   itDb('giao hàng bình thường: dùng dòng RESERVED, đơn thành DELIVERED', async () => {
     const s = await makeScenario({ quantity: 1, reserved: 1, available: 3 });
 

@@ -399,6 +399,16 @@ export const en: Dictionary = {
       'Detailed product description...\n\n- How to activate\n- Warranty policy',
     formSortOrder: 'Sort order',
     formSortOrderHint: 'Lower numbers appear first.',
+    formStockDrawMode: 'Stock draw order',
+    formStockDrawModes: {
+      SEQUENTIAL: 'Sequential',
+      RANDOM: 'Random',
+    },
+    formStockDrawModeHints: {
+      SEQUENTIAL: 'Draw in the order stock was added — oldest keys sell first.',
+      RANDOM:
+        'Each order draws at random. Use it when keys differ from one another, e.g. accounts with a random number of days left.',
+    },
     formActive: 'Visible in the store',
     formActiveHint: 'Turn off to hide the product without deleting it.',
     formImageChoose: 'Choose image',

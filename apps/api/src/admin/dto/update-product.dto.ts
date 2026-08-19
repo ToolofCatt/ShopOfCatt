@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsIn,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -9,6 +10,8 @@ import {
 import {
   PRODUCT_IMAGE_MAX_LENGTH,
   PRODUCT_THUMBNAIL_MAX_LENGTH,
+  STOCK_DRAW_MODES,
+  type StockDrawMode,
 } from '@webcatt/shared';
 import { K } from '../../i18n/messages';
 
@@ -68,4 +71,12 @@ export class UpdateProductDto {
   @IsOptional()
   @IsBoolean({ message: K.adminActiveInvalid })
   active?: boolean;
+
+  /**
+   * Cách rút kho. Danh sách hợp lệ lấy thẳng từ STOCK_DRAW_MODES trong shared,
+   * nên thêm kiểu rút mới ở đó là chỗ này tự nhận.
+   */
+  @IsOptional()
+  @IsIn(STOCK_DRAW_MODES, { message: K.adminStockDrawModeInvalid })
+  stockDrawMode?: StockDrawMode;
 }

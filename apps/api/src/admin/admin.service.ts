@@ -356,6 +356,7 @@ export class AdminService {
         category: normalizeNullable(dto.category) ?? null,
         sortOrder: dto.sortOrder ?? 0,
         active: dto.active ?? true,
+        stockDrawMode: dto.stockDrawMode ?? 'SEQUENTIAL',
         variants: {
           create: {
             name: DEFAULT_VARIANT_NAME,
@@ -428,6 +429,7 @@ export class AdminService {
       data.category = normalizeNullable(dto.category);
     }
     if (dto.sortOrder !== undefined) data.sortOrder = dto.sortOrder;
+    if (dto.stockDrawMode !== undefined) data.stockDrawMode = dto.stockDrawMode;
     if (dto.active !== undefined) data.active = dto.active;
 
     const updated = await this.prisma.product.update({

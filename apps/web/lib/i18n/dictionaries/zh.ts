@@ -390,6 +390,15 @@ export const zh: Dictionary = {
     formDescriptionPlaceholder: '商品详细说明…\n\n- 激活方式\n- 售后政策',
     formSortOrder: '排序',
     formSortOrderHint: '数字越小越靠前。',
+    formStockDrawMode: '库存抽取顺序',
+    formStockDrawModes: {
+      SEQUENTIAL: '顺序',
+      RANDOM: '随机',
+    },
+    formStockDrawModeHints: {
+      SEQUENTIAL: '按入库顺序抽取 —— 先入库的卡密先售出。',
+      RANDOM: '每笔订单随机抽取。适用于每个卡密不同的商品，例如剩余天数随机的账号。',
+    },
     formActive: '在商店中显示',
     formActiveHint: '关闭可暂时隐藏商品而不删除。',
     formImageChoose: '选择图片',

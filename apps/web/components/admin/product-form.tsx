@@ -4,9 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 import {
+  STOCK_DRAW_MODES,
   TRANSLATABLE_LOCALES,
   type ProductDto,
   type ProductImageDto,
+  type StockDrawMode,
 } from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -60,6 +62,9 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
   const [description, setDescription] = useState(product?.description ?? '');
   const [sortOrder, setSortOrder] = useState(product ? String(product.sortOrder) : '0');
   const [active, setActive] = useState(product?.active ?? true);
+  const [stockDrawMode, setStockDrawMode] = useState<StockDrawMode>(
+    product?.stockDrawMode ?? 'SEQUENTIAL',
+  );
 
   /*
    * Ảnh phụ KHÔNG nằm trong biểu mẫu: mỗi thao tác gọi thẳng API và nhận về sản
@@ -106,6 +111,7 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
       name: name.trim(),
       sortOrder: sortOrder.trim() === '' ? 0 : Number(sortOrder),
       active,
+      stockDrawMode,
       shortDescription: optional(shortDescription),
       description: optional(description),
       // Chỉ gửi ảnh khi chủ shop thực sự đổi. Bỏ qua nhánh này là mọi lần bấm
@@ -389,6 +395,39 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
                 invalid={Boolean(fieldErrors.sortOrder)}
                 onChange={(event) => setSortOrder(event.target.value)}
               />
+            </Field>
+
+            {/*
+              Cách rút kho. Chỉ có nghĩa khi một loại hàng có nhiều key KHÁC
+              NHAU về giá trị (ví dụ tài khoản còn số ngày ngẫu nhiên) — lúc đó
+              rút cũ trước khiến khách mua sớm vét hết phần đầu kho.
+            */}
+            <Field label={t.admin.formStockDrawMode} htmlFor="product-draw-mode">
+              <div id="product-draw-mode" className="space-y-2">
+                {STOCK_DRAW_MODES.map((mode) => (
+                  <label
+                    key={mode}
+                    className="flex cursor-pointer items-start gap-3 rounded-lg border border-neutral-200 p-3.5 transition-colors hover:border-neutral-400 has-[:checked]:border-neutral-950 has-[:checked]:bg-neutral-50"
+                  >
+                    <input
+                      type="radio"
+                      name="stock-draw-mode"
+                      value={mode}
+                      checked={stockDrawMode === mode}
+                      onChange={() => setStockDrawMode(mode)}
+                      className="mt-0.5 shrink-0"
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-neutral-950">
+                        {t.admin.formStockDrawModes[mode]}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-neutral-500">
+                        {t.admin.formStockDrawModeHints[mode]}
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
             </Field>
 
             <ToggleRow

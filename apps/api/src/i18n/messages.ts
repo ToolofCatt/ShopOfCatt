@@ -112,6 +112,7 @@ export const K = {
   adminCategoryInvalid: 'admin.category_invalid',
   adminSortOrderInt: 'admin.sort_order_int',
   adminActiveInvalid: 'admin.active_invalid',
+  adminStockDrawModeInvalid: 'admin.stock_draw_mode_invalid',
   adminSlugFailed: 'admin.slug_generate_failed',
   adminSlugExists: 'admin.slug_exists',
   adminProductHasOrders: 'admin.product_has_orders',
@@ -524,6 +525,11 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Thứ tự sắp xếp phải là số nguyên',
     en: 'Sort order must be an integer',
     zh: '排序必须是整数',
+  },
+  [K.adminStockDrawModeInvalid]: {
+    vi: 'Cách rút kho không hợp lệ',
+    en: 'Invalid stock draw mode',
+    zh: '库存抽取方式无效',
   },
   [K.adminActiveInvalid]: {
     vi: 'Trạng thái hiển thị không hợp lệ',

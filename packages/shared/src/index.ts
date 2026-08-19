@@ -143,6 +143,16 @@ export interface ProductVariantDto {
   translations?: VariantTranslations;
 }
 
+/**
+ * Cách rút kho khi giữ chỗ cho đơn.
+ *
+ * `SEQUENTIAL` — cũ trước, đúng thứ tự nạp vào kho.
+ * `RANDOM` — ngẫu nhiên; dùng khi mỗi key một khác (tài khoản còn số ngày ngẫu
+ * nhiên), để khách mua sớm không vét hết phần đầu kho.
+ */
+export const STOCK_DRAW_MODES = ['SEQUENTIAL', 'RANDOM'] as const;
+export type StockDrawMode = (typeof STOCK_DRAW_MODES)[number];
+
 export interface ProductDto {
   id: string;
   slug: string;
@@ -168,6 +178,8 @@ export interface ProductDto {
   category: string | null;
   sortOrder: number;
   active: boolean;
+  /** Cách rút kho khi giữ chỗ — áp dụng cho mọi loại của sản phẩm. */
+  stockDrawMode: StockDrawMode;
   /** Tổng tồn kho / đã bán của mọi loại. */
   availableStock: number;
   sold: number;

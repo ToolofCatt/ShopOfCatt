@@ -37,6 +37,7 @@ export const PRODUCT_SCALARS = {
   category: true,
   sortOrder: true,
   active: true,
+  stockDrawMode: true,
   createdAt: true,
   updatedAt: true,
 } satisfies Prisma.ProductSelect;
@@ -217,6 +218,7 @@ export function toProductDto(
     category: pickNullable(translated?.category, product.category),
     sortOrder: product.sortOrder,
     active: product.active,
+    stockDrawMode: product.stockDrawMode,
     availableStock: variants.reduce((sum, v) => sum + v.availableStock, 0),
     sold: variants.reduce((sum, v) => sum + v.sold, 0),
     variants,

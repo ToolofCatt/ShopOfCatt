@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { OrderStatus } from '@webcatt/shared';
+import type { OrderStatus, StockDrawMode } from '@webcatt/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 export interface MarkPaidResult {
@@ -17,6 +17,23 @@ export class FulfillmentService {
   constructor(private readonly prisma: PrismaService) {}
 
   /**
+   * Cách rút kho của sản phẩm chứa loại này. Đọc riêng một truy vấn nhỏ thay vì
+   * JOIN vào truy vấn khóa bên dưới: `FOR UPDATE` trên câu có JOIN sẽ khóa luôn
+   * cả hàng Product và ProductVariant, biến mọi đơn của cùng một sản phẩm thành
+   * xếp hàng nối đuôi nhau.
+   */
+  private async getDrawMode(
+    tx: Prisma.TransactionClient,
+    variantId: string,
+  ): Promise<StockDrawMode> {
+    const variant = await tx.productVariant.findUnique({
+      where: { id: variantId },
+      select: { product: { select: { stockDrawMode: true } } },
+    });
+    return variant?.product.stockDrawMode ?? 'SEQUENTIAL';
+  }
+
+  /**
    * Khóa (lock) các dòng kho AVAILABLE của một loại sản phẩm — bỏ qua các dòng
    * đang bị transaction khác giữ (SKIP LOCKED).
    */
@@ -26,14 +43,33 @@ export class FulfillmentService {
     limit: number,
   ): Promise<string[]> {
     if (limit <= 0) return [];
-    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    const drawMode = await this.getDrawMode(tx, variantId);
+
+    /*
+     * Chỉ mệnh đề ORDER BY thay đổi; phần còn lại — nhất là FOR UPDATE SKIP
+     * LOCKED — giữ nguyên một bản duy nhất, để không có đường nào chạy mà thiếu
+     * khóa. Hai nhánh đều là chuỗi HẰNG viết sẵn tại đây, không nhận dữ liệu
+     * ngoài, nên `Prisma.sql` ở đây không mở đường tiêm SQL.
+     *
+     * SEQUENTIAL kèm "id" ASC làm khóa phụ: kho nạp bằng `createMany` nên MỌI
+     * key dán cùng một lần có `createdAt` giống hệt nhau (Postgres lấy mốc thời
+     * gian của transaction). Chỉ sắp theo createdAt thì thứ tự giữa chúng là do
+     * Postgres tùy nghi — tức "tuần tự" không thật sự tuần tự. cuid tăng dần
+     * theo thời gian tạo nên nó khôi phục đúng thứ tự dán vào.
+     */
+    const thuTu =
+      drawMode === 'RANDOM'
+        ? Prisma.sql`random()`
+        : Prisma.sql`"createdAt" ASC, "id" ASC`;
+
+    const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
       SELECT "id" FROM "StockItem"
       WHERE "variantId" = ${variantId}
         AND "status" = 'AVAILABLE'::"StockStatus"
-      ORDER BY "createdAt" ASC
+      ORDER BY ${thuTu}
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED
-    `;
+    `);
     return rows.map((row) => row.id);
   }
 

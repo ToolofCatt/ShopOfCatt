@@ -1,4 +1,9 @@
-import type { AiProvider, AuditAction, PaymentMethod } from '@webcatt/shared';
+import type {
+  AiProvider,
+  AuditAction,
+  PaymentMethod,
+  StockDrawMode,
+} from '@webcatt/shared';
 
 /**
  * Từ điển tiếng Việt — nguồn chuẩn (source of truth).
@@ -406,6 +411,16 @@ export const vi = {
       'Mô tả chi tiết sản phẩm...\n\n- Cách kích hoạt\n- Chính sách bảo hành',
     formSortOrder: 'Thứ tự hiển thị',
     formSortOrderHint: 'Số nhỏ hiển thị trước.',
+    formStockDrawMode: 'Cách rút kho',
+    formStockDrawModes: {
+      SEQUENTIAL: 'Tuần tự',
+      RANDOM: 'Ngẫu nhiên',
+    } satisfies Record<StockDrawMode, string>,
+    formStockDrawModeHints: {
+      SEQUENTIAL: 'Rút theo đúng thứ tự đã nạp vào kho — key nạp trước bán trước.',
+      RANDOM:
+        'Mỗi đơn rút ngẫu nhiên. Dùng khi các key không giống nhau, ví dụ tài khoản còn số ngày ngẫu nhiên.',
+    } satisfies Record<StockDrawMode, string>,
     formActive: 'Hiển thị trên cửa hàng',
     formActiveHint: 'Tắt để tạm ẩn sản phẩm mà không xoá.',
     formImageChoose: 'Chọn ảnh',
