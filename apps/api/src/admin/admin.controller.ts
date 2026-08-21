@@ -37,6 +37,10 @@ import type {
 } from '@webcatt/shared';
 import { AnalyticsService } from '../analytics/analytics.service';
 import { AnnouncementService } from '../announcement/announcement.service';
+import {
+  ExchangeRateService,
+  type RateFetchResult,
+} from '../rates/exchange-rate.service';
 import { UpdateAnnouncementDto } from '../announcement/dto/update-announcement.dto';
 import { AuditQueryDto } from '../audit/dto/audit-query.dto';
 import { AuditService } from '../audit/audit.service';
@@ -76,6 +80,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly announcementService: AnnouncementService,
+    private readonly exchangeRates: ExchangeRateService,
     private readonly auditService: AuditService,
     private readonly settingsService: SettingsService,
     private readonly binanceExchange: BinanceExchangeService,
@@ -315,6 +320,19 @@ export class AdminController {
     @Param('id') id: string,
   ): Promise<{ success: boolean }> {
     return this.adminService.deleteVariant(user, id);
+  }
+
+  /**
+   * Lấy tỉ giá NGAY, không chờ vòng hẹn giờ.
+   *
+   * Trả về cả giá trị thô để chủ shop thấy nguồn báo bao nhiêu trước khi cộng
+   * biên. Nguồn lỗi thì `ok: false` và tỉ giá đang dùng được giữ nguyên — không
+   * ném lỗi, vì "giữ tỉ giá cũ" là kết quả đúng chứ không phải thất bại.
+   */
+  @Post('rates/refresh')
+  @HttpCode(HttpStatus.OK)
+  refreshRates(): Promise<RateFetchResult> {
+    return this.exchangeRates.refresh();
   }
 
   // ---------- Kho hàng (theo loại) ----------

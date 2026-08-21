@@ -8,6 +8,7 @@ import {
   type AiProvider,
   type CryptoNetwork,
   type PaymentMethodDto,
+  type StoreRatesDto,
   type StoreReadinessDto,
   type SupportChannelDto,
 } from '@webcatt/shared';
@@ -254,6 +255,20 @@ export class SettingsService {
     return toAdminDto(await this.getSetting());
   }
 
+  /**
+   * Tỉ giá cho trang khách — chỉ để HIỆN giá, không dùng thu tiền.
+   *
+   * Công khai được: tỉ giá vốn đã hiện ngay trên thẻ sản phẩm.
+   */
+  async getPublicRates(): Promise<StoreRatesDto> {
+    const setting = await this.getSetting();
+    return {
+      vndPerUsdt: Number(setting.vndPerUsdt),
+      cnyPerUsdt: Number(setting.cnyPerUsdt),
+      updatedAt: setting.rateUpdatedAt ? setting.rateUpdatedAt.toISOString() : null,
+    };
+  }
+
   /** Thông tin hỗ trợ công khai cho trang đăng nhập. */
   async getSupportInfo(): Promise<{
     supportChannels: SupportChannelDto[];
@@ -360,6 +375,15 @@ export class SettingsService {
       sepayBank,
       sepayAccountHolder: dto.sepayAccountHolder.trim(),
       vndPerUsdt: new Prisma.Decimal(dto.vndPerUsdt.toFixed(2)),
+      cnyPerUsdt:
+        dto.cnyPerUsdt === undefined
+          ? before.cnyPerUsdt
+          : new Prisma.Decimal(dto.cnyPerUsdt.toFixed(4)),
+      rateAuto: dto.rateAuto ?? before.rateAuto,
+      rateMarkupPercent:
+        dto.rateMarkupPercent === undefined
+          ? before.rateMarkupPercent
+          : new Prisma.Decimal(dto.rateMarkupPercent.toFixed(2)),
       // Không gửi = giữ khoá cũ, giống hệt khoá AI.
       sepayApiKey: sepayApiKey === undefined ? before.sepayApiKey : sepayApiKey,
       sepayWebhookSecret:
@@ -412,6 +436,11 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     sepayBank: setting.sepayBank,
     sepayAccountHolder: setting.sepayAccountHolder,
     vndPerUsdt: Number(setting.vndPerUsdt),
+    cnyPerUsdt: Number(setting.cnyPerUsdt),
+    rateAuto: setting.rateAuto,
+    rateMarkupPercent: Number(setting.rateMarkupPercent),
+    rateUpdatedAt: setting.rateUpdatedAt ? setting.rateUpdatedAt.toISOString() : null,
+    rateSource: setting.rateSource,
     // Cố ý KHÔNG trả khoá về — chỉ "có hay không" + bốn ký tự cuối.
     sepayApiKeySet: setting.sepayApiKey.trim() !== '',
     sepayApiKeyHint: setting.sepayApiKey.trim().slice(-4),
@@ -441,6 +470,9 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
     sepayBank: setting.sepayBank,
     sepayAccountHolder: setting.sepayAccountHolder,
     vndPerUsdt: Number(setting.vndPerUsdt),
+    cnyPerUsdt: Number(setting.cnyPerUsdt),
+    rateAuto: setting.rateAuto,
+    rateMarkupPercent: Number(setting.rateMarkupPercent),
     // BOOLEAN, không phải chính khoá — nhật ký lưu vĩnh viễn.
     sepayApiKeySet: setting.sepayApiKey.trim() !== '',
     sepayWebhookSecretSet: setting.sepayWebhookSecret.trim() !== '',

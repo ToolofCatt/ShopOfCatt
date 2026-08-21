@@ -6,6 +6,7 @@ import { AuthModule } from '../auth/auth.module';
 import { CouponsModule } from '../coupons/coupons.module';
 import { LegalModule } from '../legal/legal.module';
 import { OrdersModule } from '../orders/orders.module';
+import { RatesModule } from '../rates/rates.module';
 import { SettingsModule } from '../settings/settings.module';
 import { TranslationModule } from '../translation/translation.module';
 import { AdminController } from './admin.controller';
@@ -22,6 +23,7 @@ import { AdminService } from './admin.service';
     CouponsModule,
     LegalModule,
     AnalyticsModule,
+    RatesModule,
   ],
   controllers: [AdminController],
   providers: [AdminService],

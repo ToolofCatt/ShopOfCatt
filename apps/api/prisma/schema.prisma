@@ -425,7 +425,27 @@ model StoreSetting {
   /// Bao nhiêu VND cho 1 USDT. Giá bán ghi bằng USDT còn ngân hàng báo VND, nên
   /// không có tỉ giá thì không dựng được số tiền để đối chiếu.
   /// 0 = chưa cấu hình ⇒ KHÔNG chào phương thức này (fail-closed).
+  ///
+  /// Đây là tỉ giá ĐANG DÙNG, đã cộng biên. Bật rateAuto thì nó bị ghi lại mỗi
+  /// ngày; tắt thì chủ shop tự nhập.
   vndPerUsdt         Decimal @default(0) @db.Decimal(18, 2)
+
+  /// --- Tỉ giá hiển thị ---
+  /// Bao nhiêu CNY cho 1 USDT — chỉ để HIỆN GIÁ cho khách chọn tiếng Trung,
+  /// không dùng để thu tiền. 0 = không quy đổi, hiện USDT như cũ.
+  cnyPerUsdt         Decimal  @default(0) @db.Decimal(18, 4)
+  /// Tự lấy tỉ giá mỗi ngày từ nguồn công khai.
+  rateAuto           Boolean  @default(false)
+  /// Phần trăm cộng thêm lên tỉ giá thị trường.
+  ///
+  /// Có vì bán USDT ra tiền mặt luôn được giá thấp hơn tỉ giá niêm yết; để 0 là
+  /// cửa hàng chịu phần chênh đó. Cộng cho CẢ VND và CNY để giá quy đổi ở mọi
+  /// ngôn ngữ tương đương nhau.
+  rateMarkupPercent  Decimal  @default(0) @db.Decimal(5, 2)
+  /// Lần lấy tỉ giá thành công gần nhất. null = chưa lần nào.
+  rateUpdatedAt      DateTime?
+  /// Nguồn + giá trị thô của lần lấy gần nhất, để chủ shop soi lại được.
+  rateSource         String   @default("")
 
   /// --- Dịch tự động sang EN/ZH ---
   /// Chuẩn giao thức: "anthropic" hoặc "openai". Chọn "openai" là dùng được gần

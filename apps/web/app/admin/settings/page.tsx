@@ -46,7 +46,7 @@ function StatusRow({ label, value }: { label: string; value: ReactNode }) {
 
 export default function AdminSettingsPage() {
   const { token } = useAuth();
-  const { t } = useI18n();
+  const { t, formatDate } = useI18n();
 
   const [settings, setSettings] = useState<AdminStoreSettingDto | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -61,6 +61,11 @@ export default function AdminSettingsPage() {
   const [sepayBank, setSepayBank] = useState('');
   const [sepayAccountHolder, setSepayAccountHolder] = useState('');
   const [vndPerUsdt, setVndPerUsdt] = useState('0');
+  const [cnyPerUsdt, setCnyPerUsdt] = useState('0');
+  const [rateAuto, setRateAuto] = useState(false);
+  const [rateMarkupPercent, setRateMarkupPercent] = useState('0');
+  const [refreshingRate, setRefreshingRate] = useState(false);
+  const [rateMessage, setRateMessage] = useState<string | null>(null);
   /* Khoá webhook: máy chủ không trả về, nên ô này luôn rỗng khi mở trang. */
   const [sepayApiKey, setSepayApiKey] = useState('');
   const [sepayWebhookSecret, setSepayWebhookSecret] = useState('');
@@ -104,6 +109,9 @@ export default function AdminSettingsPage() {
     setSepayBank(next.sepayBank);
     setSepayAccountHolder(next.sepayAccountHolder);
     setVndPerUsdt(String(next.vndPerUsdt));
+    setCnyPerUsdt(String(next.cnyPerUsdt));
+    setRateAuto(next.rateAuto);
+    setRateMarkupPercent(String(next.rateMarkupPercent));
     setSepayApiKey('');
     setSepayWebhookSecret('');
     setCryptoEnabled(next.cryptoEnabled);
@@ -175,6 +183,37 @@ export default function AdminSettingsPage() {
       setWebhookCopied(true);
     } catch {
       setWebhookCopied(false);
+    }
+  };
+
+  /**
+   * Lấy tỉ giá NGAY. Nguồn lỗi thì API trả `ok: false` và giữ tỉ giá cũ — nên
+   * đây không phải lỗi, chỉ là "chưa cập nhật được".
+   */
+  const handleRefreshRate = async () => {
+    if (refreshingRate) return;
+    setRefreshingRate(true);
+    setRateMessage(null);
+    try {
+      const kq = await apiFetch<{
+        ok: boolean;
+        vndPerUsdt?: number;
+        cnyPerUsdt?: number;
+        reason?: string;
+      }>('/admin/rates/refresh', { method: 'POST', token });
+      if (kq.ok) {
+        // Đọc lại cả cấu hình: tỉ giá vừa được ghi ở phía máy chủ, không phải
+        // do biểu mẫu này gửi lên.
+        const moi = await apiFetch<AdminStoreSettingDto>('/admin/settings', { token });
+        apply(moi);
+        setRateMessage(t.admin.rateRefreshDone);
+      } else {
+        setRateMessage(`${t.admin.rateRefreshFailed} ${kq.reason ?? ''}`.trim());
+      }
+    } catch (err) {
+      setRateMessage(apiErrorMessage(err, t.common.connectionError));
+    } finally {
+      setRefreshingRate(false);
     }
   };
 
@@ -257,6 +296,9 @@ export default function AdminSettingsPage() {
           sepayBank: sepayBank.trim(),
           sepayAccountHolder: sepayAccountHolder.trim(),
           vndPerUsdt: Number(vndPerUsdt) || 0,
+          cnyPerUsdt: Number(cnyPerUsdt) || 0,
+          rateAuto,
+          rateMarkupPercent: Number(rateMarkupPercent) || 0,
           // Rỗng = giữ khoá cũ; máy chủ phân biệt bằng việc KHÔNG gửi trường.
           ...(sepayApiKey.trim() === '' ? {} : { sepayApiKey: sepayApiKey.trim() }),
           ...(sepayWebhookSecret.trim() === ''
@@ -592,6 +634,118 @@ export default function AdminSettingsPage() {
                 </Field>
               </div>
             )}
+
+            {/*
+              Tỉ giá: vừa dùng để dựng số tiền chuyển khoản VND, vừa dùng để hiện
+              giá theo ngôn ngữ khách chọn. Vì thế nó nằm RIÊNG, không nhét trong
+              khối SePay — tắt SePay thì vẫn cần tỉ giá để hiện giá.
+            */}
+            <div className="space-y-3 border-t border-neutral-100 pt-4">
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
+                  {t.admin.rateTitle}
+                </h2>
+                <p className="mt-0.5 text-sm text-neutral-500">{t.admin.rateHint}</p>
+              </div>
+
+              <ToggleRow
+                id="setting-rate-auto"
+                checked={rateAuto}
+                onChange={(checked) => {
+                  setRateAuto(checked);
+                  markDirty();
+                }}
+                label={t.admin.rateAutoLabel}
+                hint={t.admin.rateAutoHint}
+              />
+
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Field
+                  label={t.admin.settingVndRateLabel}
+                  htmlFor="setting-vnd-rate"
+                  hint={rateAuto ? t.admin.rateManagedHint : t.admin.settingVndRateHint}
+                >
+                  <Input
+                    id="setting-vnd-rate"
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={vndPerUsdt}
+                    placeholder="26000"
+                    className="tabular-nums"
+                    onChange={(event) => {
+                      setVndPerUsdt(event.target.value);
+                      markDirty();
+                    }}
+                  />
+                </Field>
+
+                <Field
+                  label={t.admin.rateCnyLabel}
+                  htmlFor="setting-cny-rate"
+                  hint={rateAuto ? t.admin.rateManagedHint : t.admin.rateCnyHint}
+                >
+                  <Input
+                    id="setting-cny-rate"
+                    type="number"
+                    min={0}
+                    step="0.0001"
+                    inputMode="decimal"
+                    value={cnyPerUsdt}
+                    placeholder="7.14"
+                    className="tabular-nums"
+                    onChange={(event) => {
+                      setCnyPerUsdt(event.target.value);
+                      markDirty();
+                    }}
+                  />
+                </Field>
+
+                <Field
+                  label={t.admin.rateMarkupLabel}
+                  htmlFor="setting-rate-markup"
+                  hint={t.admin.rateMarkupHint}
+                >
+                  <Input
+                    id="setting-rate-markup"
+                    type="number"
+                    min={0}
+                    max={50}
+                    step="0.01"
+                    inputMode="decimal"
+                    value={rateMarkupPercent}
+                    placeholder="0"
+                    className="tabular-nums"
+                    onChange={(event) => {
+                      setRateMarkupPercent(event.target.value);
+                      markDirty();
+                    }}
+                  />
+                </Field>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  loading={refreshingRate}
+                  onClick={() => void handleRefreshRate()}
+                >
+                  {t.admin.rateRefreshNow}
+                </Button>
+                <span className="text-xs text-neutral-500">
+                  {settings?.rateUpdatedAt
+                    ? t.admin.rateUpdatedAt(formatDate(settings.rateUpdatedAt))
+                    : t.admin.rateNeverUpdated}
+                </span>
+              </div>
+              {settings?.rateSource && (
+                <p className="font-mono text-[11px] text-neutral-400">{settings.rateSource}</p>
+              )}
+              {rateMessage && <p className="text-sm text-neutral-950">{rateMessage}</p>}
+            </div>
 
             {cryptoEnabled && (
               <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">

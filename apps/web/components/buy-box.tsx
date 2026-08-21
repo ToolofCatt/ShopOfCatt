@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Minus, Plus, Ticket, Wallet, Zap } from 'lucide-react';
 import {
-  formatUsdt,
   type CouponPreviewDto,
   type CreateOrderResponse,
   type PaymentMethod,
@@ -14,6 +13,7 @@ import {
 } from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { usePrices } from '@/lib/prices';
 import { useI18n } from '@/lib/i18n/client';
 import { Button, Card, Input, Label } from '@/components/ui';
 import { VariantSelector } from '@/components/variant-selector';
@@ -23,6 +23,7 @@ export function BuyBox({ product }: { product: ProductDto }) {
   const router = useRouter();
   const { user, token, loading: authLoading } = useAuth();
   const { t } = useI18n();
+  const { price } = usePrices();
 
   // API công khai chỉ trả loại đang bán, vẫn lọc lại cho chắc.
   const variants = useMemo(
@@ -46,11 +47,12 @@ export function BuyBox({ product }: { product: ProductDto }) {
   const availableStock = selected ? selected.availableStock : product.availableStock;
   const maxQuantity = Math.max(1, availableStock);
 
+  const giaChinh = price(selected ? selected.price : product.minPrice);
   const priceLabel = selected
-    ? formatUsdt(selected.price)
+    ? giaChinh.primary
     : product.maxPrice > product.minPrice
-      ? t.product.priceFrom(formatUsdt(product.minPrice))
-      : formatUsdt(product.minPrice);
+      ? t.product.priceFrom(giaChinh.primary)
+      : giaChinh.primary;
 
   const [quantity, setQuantity] = useState(1);
   const [inputValue, setInputValue] = useState('1');
@@ -340,18 +342,30 @@ export function BuyBox({ product }: { product: ProductDto }) {
               <>
                 <div className="flex items-center justify-between text-sm text-neutral-500">
                   <span>{t.product.subtotal}</span>
-                  <span className="tabular-nums">{formatUsdt(subtotal)}</span>
+                  <span className="tabular-nums">{price(subtotal).primary}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm text-neutral-600">
                   <span>{t.product.discount}</span>
-                  <span className="tabular-nums">−{formatUsdt(discount)}</span>
+                  <span className="tabular-nums">−{price(discount).primary}</span>
                 </div>
               </>
             )}
-            <div className="flex items-center justify-between">
+            {/*
+              Tổng cộng: tiền địa phương ở dòng lớn, USDT ở dòng nhỏ. Dòng nhỏ
+              cần thiết ở ĐÂY nhất — đây là con số khách so với trang thanh toán,
+              nơi luôn hiện đúng đơn vị sẽ thu.
+            */}
+            <div className="flex items-start justify-between">
               <span className="text-sm text-neutral-500">{t.product.total}</span>
-              <span className="text-lg font-semibold tabular-nums">
-                {formatUsdt(payable)}
+              <span className="text-right">
+                <span className="block text-lg font-semibold tabular-nums">
+                  {price(payable).primary}
+                </span>
+                {price(payable).secondary && (
+                  <span className="block text-xs tabular-nums text-neutral-400">
+                    ≈ {price(payable).secondary}
+                  </span>
+                )}
               </span>
             </div>
           </div>

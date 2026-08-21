@@ -139,6 +139,30 @@ export class UpdateSettingsDto {
   @Max(10_000_000, { message: K.adminVndRateInvalid })
   vndPerUsdt: number;
 
+  /** CNY cho 1 USDT — chỉ để hiện giá, không dùng thu tiền. 0 = không quy đổi. */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 4 }, { message: K.adminCnyRateInvalid })
+  @Min(0, { message: K.adminCnyRateInvalid })
+  @Max(10_000, { message: K.adminCnyRateInvalid })
+  cnyPerUsdt?: number;
+
+  /** Tự lấy tỉ giá mỗi ngày. */
+  @IsOptional()
+  @IsBoolean({ message: K.adminSettingsFlagInvalid })
+  rateAuto?: boolean;
+
+  /**
+   * Phần trăm cộng thêm lên tỉ giá thị trường.
+   *
+   * Chặn ở 50%: quá mức đó gần như chắc chắn là gõ lệch tay, mà một lần gõ lệch
+   * ở đây là mọi giá hiện cho khách bị đội lên theo.
+   */
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: K.adminRateMarkupInvalid })
+  @Min(0, { message: K.adminRateMarkupInvalid })
+  @Max(50, { message: K.adminRateMarkupInvalid })
+  rateMarkupPercent?: number;
+
   /**
    * Khoá API webhook SePay. Ba trạng thái như khoá AI: không gửi = giữ nguyên,
    * gửi rỗng = xoá, gửi chuỗi = đặt mới.

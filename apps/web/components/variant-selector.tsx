@@ -1,6 +1,7 @@
 'use client';
 
-import { formatUsdt, type ProductVariantDto } from '@webcatt/shared';
+import type { ProductVariantDto } from '@webcatt/shared';
+import { usePrices } from '@/lib/prices';
 import { Badge } from '@/components/ui';
 import { useI18n } from '@/lib/i18n/client';
 import { cn } from '@/lib/cn';
@@ -14,6 +15,7 @@ export interface VariantSelectorProps {
 /** Danh sách loại sản phẩm dạng radio — loại hết hàng bị vô hiệu hóa. */
 export function VariantSelector({ variants, selectedId, onSelect }: VariantSelectorProps) {
   const { t } = useI18n();
+  const { price } = usePrices();
 
   return (
     <div className="space-y-2">
@@ -49,7 +51,7 @@ export function VariantSelector({ variants, selectedId, onSelect }: VariantSelec
                   {variant.name}
                 </span>
                 <span className="mt-0.5 block text-sm font-semibold tabular-nums text-neutral-950">
-                  {formatUsdt(variant.price)}
+                  {price(variant.price).primary}
                 </span>
               </span>
 

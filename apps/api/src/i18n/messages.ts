@@ -181,6 +181,9 @@ export const K = {
   adminSepayApiKeyInvalid: 'admin.sepay_api_key_invalid',
   adminSepayIncomplete: 'admin.sepay_incomplete',
   adminVndRateInvalid: 'admin.vnd_rate_invalid',
+  adminCnyRateInvalid: 'admin.cny_rate_invalid',
+  adminRateMarkupInvalid: 'admin.rate_markup_invalid',
+  adminRateFetchFailed: 'admin.rate_fetch_failed',
   adminAiKeyInvalid: 'admin.ai_key_invalid',
   adminAiProviderInvalid: 'admin.ai_provider_invalid',
   adminAiBaseUrlInvalid: 'admin.ai_base_url_invalid',
@@ -837,6 +840,21 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Bật SePay thì phải có số tài khoản, ngân hàng, tỉ giá VND và khoá API',
     en: 'Enabling SePay requires an account number, bank, VND rate and API key',
     zh: '启用 SePay 需要填写账号、银行、VND 汇率和 API 密钥',
+  },
+  [K.adminCnyRateInvalid]: {
+    vi: 'Tỉ giá CNY phải là số dương, tối đa 4 chữ số thập phân',
+    en: 'The CNY rate must be a positive number with at most 4 decimals',
+    zh: 'CNY 汇率必须为正数，最多四位小数',
+  },
+  [K.adminRateMarkupInvalid]: {
+    vi: 'Biên cộng thêm phải từ 0 đến 50 phần trăm',
+    en: 'The markup must be between 0 and 50 percent',
+    zh: '加价幅度必须在 0 到 50% 之间',
+  },
+  [K.adminRateFetchFailed]: {
+    vi: 'Không lấy được tỉ giá — tỉ giá đang dùng được giữ nguyên',
+    en: 'Could not fetch the rate — the current rate was kept',
+    zh: '未能获取汇率 —— 已保留当前汇率',
   },
   [K.adminVndRateInvalid]: {
     vi: 'Tỉ giá VND phải là số dương, tối đa 2 chữ số thập phân',

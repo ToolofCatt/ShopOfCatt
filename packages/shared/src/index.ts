@@ -276,6 +276,16 @@ export interface AdminStoreSettingDto {
   sepayAccountHolder: string;
   /** Bao nhiêu VND cho 1 USDT; 0 = chưa cấu hình. */
   vndPerUsdt: number;
+  /** Bao nhiêu CNY cho 1 USDT; 0 = không quy đổi. */
+  cnyPerUsdt: number;
+  /** Tự lấy tỉ giá mỗi ngày. */
+  rateAuto: boolean;
+  /** Phần trăm cộng thêm lên tỉ giá thị trường. */
+  rateMarkupPercent: number;
+  /** Lần lấy tỉ giá thành công gần nhất (ISO), `null` = chưa lần nào. */
+  rateUpdatedAt: string | null;
+  /** Nguồn + giá trị thô lần gần nhất — để chủ shop soi lại. */
+  rateSource: string;
   /**
    * Đã lưu khoá API webhook của SePay hay chưa — KHÔNG BAO GIỜ trả về chính khoá.
    */
@@ -745,6 +755,70 @@ export const STOCK_STATUS_LABEL: Record<StockStatus, string> = {
 };
 
 // ---------- Helpers ----------
+/* ---------- Tiền hiển thị theo ngôn ngữ ---------- */
+
+/**
+ * Đơn vị tiền hiện cho khách, chọn theo ngôn ngữ đang xem.
+ *
+ * Giá gốc LUÔN là USDT — đây chỉ là lớp quy đổi để hiển thị. Số tiền thật sự
+ * thu vẫn là USDT (crypto/Binance) hoặc VND (chuyển khoản qua SePay).
+ */
+export type DisplayCurrency = 'USDT' | 'VND' | 'CNY' | 'USD';
+
+/** Tỉ giá cửa hàng đang dùng, trả về cho trang khách. */
+export interface StoreRatesDto {
+  /** VND cho 1 USDT; 0 = chưa có, giao diện hiện USDT như cũ. */
+  vndPerUsdt: number;
+  /** CNY cho 1 USDT; 0 = chưa có. */
+  cnyPerUsdt: number;
+  updatedAt: string | null;
+}
+
+/**
+ * Đổi USDT sang đơn vị hiển thị. `null` = không đổi được, hãy hiện USDT.
+ *
+ * USD coi như 1:1 với USDT: USDT là stablecoin neo vào đô, và cửa hàng cũng
+ * niêm yết theo đô. Thêm một tỉ giá USD riêng chỉ tạo ra hai con số lệch nhau
+ * vài phần nghìn mà chẳng ai cần.
+ */
+export function convertFromUsdt(
+  usdt: number,
+  currency: DisplayCurrency,
+  rates: StoreRatesDto | null,
+): number | null {
+  if (currency === 'USDT' || currency === 'USD') return usdt;
+  if (!rates) return null;
+  const rate = currency === 'VND' ? rates.vndPerUsdt : rates.cnyPerUsdt;
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+  return usdt * rate;
+}
+
+/**
+ * Định dạng một số tiền theo đơn vị của nó.
+ *
+ * VND không có phần lẻ (ngân hàng không chuyển được nhỏ hơn đồng) và làm tròn
+ * LÊN, khớp với cách tính số tiền chuyển khoản ở `usdtToVnd` — hai chỗ lệch nhau
+ * là khách thấy một số trên thẻ sản phẩm và bị đòi số khác ở trang thanh toán.
+ */
+export function formatMoney(amount: number, currency: DisplayCurrency): string {
+  if (currency === 'VND') {
+    return `${Math.ceil(amount).toLocaleString('vi-VN')} ₫`;
+  }
+  if (currency === 'CNY') {
+    return `¥${amount.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+  if (currency === 'USD') {
+    return `$${amount.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  }
+  return formatUsdt(amount);
+}
+
 export function formatUsdt(amount: number): string {
   return `${amount.toLocaleString('en-US', {
     minimumFractionDigits: 2,

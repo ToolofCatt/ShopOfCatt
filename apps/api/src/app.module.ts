@@ -12,6 +12,7 @@ import { HealthModule } from './health/health.module';
 import { ImagesModule } from './images/images.module';
 import { LegalModule } from './legal/legal.module';
 import { OrdersModule } from './orders/orders.module';
+import { RatesModule } from './rates/rates.module';
 import { PaymentsModule } from './payments/payments.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
@@ -35,6 +36,7 @@ import { TranslationModule } from './translation/translation.module';
     SettingsModule,
     CouponsModule,
     OrdersModule,
+    RatesModule,
     PaymentsModule,
     AuditModule,
     AdminModule,

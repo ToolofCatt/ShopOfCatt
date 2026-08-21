@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { formatUsdt, type ProductDto } from '@webcatt/shared';
+import type { ProductDto } from '@webcatt/shared';
+import { usePrices } from '@/lib/prices';
 import { ProductVisual } from '@/components/icon-map';
 import { Badge } from '@/components/ui';
 import { useI18n } from '@/lib/i18n/client';
@@ -9,12 +10,14 @@ import { cn } from '@/lib/cn';
 
 export function ProductCard({ product }: { product: ProductDto }) {
   const { t } = useI18n();
+  const { price } = usePrices();
   const outOfStock = product.availableStock <= 0;
   // Nhiều loại với giá khác nhau → hiển thị "Từ {giá thấp nhất}".
+  const gia = price(product.minPrice);
   const priceLabel =
     product.maxPrice > product.minPrice
-      ? t.product.priceFrom(formatUsdt(product.minPrice))
-      : formatUsdt(product.minPrice);
+      ? t.product.priceFrom(gia.primary)
+      : gia.primary;
 
   return (
     <Link
@@ -65,9 +68,21 @@ export function ProductCard({ product }: { product: ProductDto }) {
         dòng rời khỏi "USDT") và nhãn tồn kho tràn ra ngoài viền thẻ.
       */}
       <div className="flex flex-wrap items-end justify-between gap-x-2 gap-y-1 border-t border-neutral-100 pt-3">
-        <p className="whitespace-nowrap font-semibold tabular-nums text-neutral-950">
-          {priceLabel}
-        </p>
+        {/*
+          Giá theo ngôn ngữ khách chọn, kèm dòng nhỏ USDT bên dưới. Dòng nhỏ nói
+          rõ ĐƠN VỊ THU chứ không phải để so giá — cửa hàng chỉ nhận USDT hoặc
+          VND chuyển khoản, không nhận ¥ hay $ trực tiếp.
+        */}
+        <div className="min-w-0">
+          <p className="whitespace-nowrap font-semibold tabular-nums text-neutral-950">
+            {priceLabel}
+          </p>
+          {gia.secondary && (
+            <p className="whitespace-nowrap text-[11px] tabular-nums text-neutral-400">
+              ≈ {gia.secondary}
+            </p>
+          )}
+        </div>
         <div className="flex flex-col items-end gap-1">
           {/* Hết hàng đã có ruy-băng ở góc — nhắc lại ở đây là thừa. */}
           {!outOfStock && (

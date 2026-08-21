@@ -1,8 +1,11 @@
 import type { Metadata } from 'next';
+import type { StoreRatesDto } from '@webcatt/shared';
 import type { ReactNode } from 'react';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
+import { apiFetch } from '@/lib/api';
 import { AuthProvider } from '@/lib/auth';
+import { RatesProvider } from '@/lib/prices';
 import { I18nProvider } from '@/lib/i18n/client';
 import { LOCALE_HTML_LANG } from '@/lib/i18n/config';
 import { getServerDictionary } from '@/lib/i18n/server';
@@ -43,6 +46,12 @@ export async function generateMetadata(): Promise<Metadata> {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   const { locale } = await getServerDictionary();
+  /*
+    Tỉ giá lấy ở MÁY CHỦ rồi truyền xuống: thẻ sản phẩm hiện giá ngay lúc trang
+    mở. Fetch ở trình duyệt thì giá nhảy từ USDT sang tiền địa phương trước mắt
+    khách. Lỗi thì `null` — giao diện lặng lẽ hiện USDT như trước.
+  */
+  const rates = await apiFetch<StoreRatesDto>('/rates').catch(() => null);
 
   return (
     <html
@@ -51,10 +60,12 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     >
       <body className="flex min-h-screen flex-col bg-white text-neutral-950 antialiased">
         <I18nProvider initialLocale={locale}>
-          <AuthProvider>
-            <Header />
-            <main className="flex-1">{children}</main>
-          </AuthProvider>
+          <RatesProvider rates={rates}>
+            <AuthProvider>
+              <Header />
+              <main className="flex-1">{children}</main>
+            </AuthProvider>
+          </RatesProvider>
         </I18nProvider>
       </body>
     </html>

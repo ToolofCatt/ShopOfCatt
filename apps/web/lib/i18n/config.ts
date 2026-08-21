@@ -1,6 +1,20 @@
+import type { DisplayCurrency } from '@webcatt/shared';
+
 export const LOCALES = ['vi', 'en', 'zh'] as const;
 
 export type Locale = (typeof LOCALES)[number];
+
+/**
+ * Tiền hiện cho khách, theo ngôn ngữ đang xem.
+ *
+ * Giá gốc LUÔN là USDT; đây chỉ là lớp quy đổi để hiển thị. USD coi như 1:1 với
+ * USDT nên tiếng Anh không cần tỉ giá nào.
+ */
+export const CURRENCY_BY_LOCALE = {
+  vi: 'VND',
+  en: 'USD',
+  zh: 'CNY',
+} as const satisfies Record<Locale, DisplayCurrency>;
 
 export const DEFAULT_LOCALE: Locale = 'vi';
 
