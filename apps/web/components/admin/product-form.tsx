@@ -13,6 +13,7 @@ import {
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
+import { usePrices } from '@/lib/prices';
 import { Button, Card, Field, Input, buttonVariants } from '@/components/ui';
 import { TEXTAREA_CLASSES, localeLabel } from '@/components/admin/helpers';
 import { GalleryPicker } from '@/components/admin/gallery-picker';
@@ -39,6 +40,7 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
   const router = useRouter();
   const { token } = useAuth();
   const { t } = useI18n();
+  const { allConversions } = usePrices();
   const isEdit = Boolean(product);
 
   const [name, setName] = useState(product?.name ?? '');
@@ -303,6 +305,12 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
                   label={t.admin.formPrice}
                   htmlFor="product-price"
                   error={fieldErrors.price}
+                  /*
+                    Quy đổi ngay dưới ô nhập: chủ shop gõ giá bằng USDT nhưng
+                    thấy luôn khách ở từng ngôn ngữ sẽ đọc con số nào. Chưa có tỉ
+                    giá thì `undefined` và ô trông y như cũ.
+                  */
+                  hint={allConversions(Number(price)) ?? undefined}
                 >
                   <Input
                     id="product-price"

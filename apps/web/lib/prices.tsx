@@ -42,6 +42,14 @@ export interface DisplayPrice {
 
 export interface PriceFormatter {
   price: (usdt: number) => DisplayPrice;
+  /**
+   * Quy đổi ra MỌI đơn vị cùng lúc — cho ô nhập giá bên quản trị.
+   *
+   * Khác `price`: chủ shop cần thấy hết để biết khách ở từng ngôn ngữ sẽ thấy
+   * con số nào, chứ không chỉ đơn vị ứng với ngôn ngữ mình đang xem.
+   * `null` = chưa có tỉ giá nào, không có gì để hiện.
+   */
+  allConversions: (usdt: number) => string | null;
 }
 
 export function usePrices(): PriceFormatter {
@@ -69,6 +77,16 @@ export function usePrices(): PriceFormatter {
        */
       return { primary: formatMoney(converted, currency), secondary: formatUsdt(usdt) };
     };
-    return { price };
+    const allConversions = (usdt: number): string | null => {
+      if (!Number.isFinite(usdt) || usdt <= 0) return null;
+      const phan: string[] = [];
+      for (const dv of ['VND', 'CNY', 'USD'] as const) {
+        const so = convertFromUsdt(usdt, dv, rates);
+        if (so !== null) phan.push(formatMoney(so, dv));
+      }
+      return phan.length > 0 ? phan.join('  ·  ') : null;
+    };
+
+    return { price, allConversions };
   }, [currency, rates]);
 }
