@@ -6,7 +6,7 @@ import { formatUsdt, type ProductDto, type ProductVariantDto } from '@webcatt/sh
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
-import { usePrices } from '@/lib/prices';
+import { PriceInput } from '@/components/admin/price-input';
 import { cn } from '@/lib/cn';
 import { Badge, Button, Card, Field, Input, Spinner } from '@/components/ui';
 
@@ -36,7 +36,6 @@ interface VariantFormProps {
 /** Biểu mẫu thêm/sửa một loại — dùng chung cho cả hai chế độ. */
 function VariantForm({ initial, submitLabel, onSubmit, onCancel }: VariantFormProps) {
   const { t } = useI18n();
-  const { allConversions } = usePrices();
   const fieldId = useId();
 
   const [name, setName] = useState(initial?.name ?? '');
@@ -95,18 +94,13 @@ function VariantForm({ initial, submitLabel, onSubmit, onCancel }: VariantFormPr
           label={t.admin.formPrice}
           htmlFor={`${fieldId}-price`}
           error={fieldErrors.price}
-          hint={allConversions(Number(price)) ?? undefined}
         >
-          <Input
+          <PriceInput
             id={`${fieldId}-price`}
-            type="number"
-            min={0}
-            step={0.01}
-            inputMode="decimal"
             value={price}
+            onChange={setPrice}
             invalid={Boolean(fieldErrors.price)}
             placeholder="9.99"
-            onChange={(event) => setPrice(event.target.value)}
           />
         </Field>
       </div>

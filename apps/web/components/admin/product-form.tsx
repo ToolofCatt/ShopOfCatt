@@ -13,7 +13,7 @@ import {
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
-import { usePrices } from '@/lib/prices';
+import { PriceInput } from '@/components/admin/price-input';
 import { Button, Card, Field, Input, buttonVariants } from '@/components/ui';
 import { TEXTAREA_CLASSES, localeLabel } from '@/components/admin/helpers';
 import { GalleryPicker } from '@/components/admin/gallery-picker';
@@ -40,7 +40,6 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
   const router = useRouter();
   const { token } = useAuth();
   const { t } = useI18n();
-  const { allConversions } = usePrices();
   const isEdit = Boolean(product);
 
   const [name, setName] = useState(product?.name ?? '');
@@ -305,23 +304,18 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
                   label={t.admin.formPrice}
                   htmlFor="product-price"
                   error={fieldErrors.price}
-                  /*
-                    Quy đổi ngay dưới ô nhập: chủ shop gõ giá bằng USDT nhưng
-                    thấy luôn khách ở từng ngôn ngữ sẽ đọc con số nào. Chưa có tỉ
-                    giá thì `undefined` và ô trông y như cũ.
-                  */
-                  hint={allConversions(Number(price)) ?? undefined}
                 >
-                  <Input
+                  {/*
+                    Nhập được bằng ₫ / ¥ / $ rồi tự đổi sang USDT — chủ shop nghĩ
+                    bằng tiền Việt, không phải USDT. Giá trị `price` vẫn luôn là
+                    USDT nên phần gửi lên không đổi gì.
+                  */}
+                  <PriceInput
                     id="product-price"
-                    type="number"
-                    min={0}
-                    step={0.01}
-                    inputMode="decimal"
                     value={price}
+                    onChange={setPrice}
                     invalid={Boolean(fieldErrors.price)}
                     placeholder="9.99"
-                    onChange={(event) => setPrice(event.target.value)}
                   />
                 </Field>
               )}

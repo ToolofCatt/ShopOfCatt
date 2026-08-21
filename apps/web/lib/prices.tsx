@@ -56,6 +56,11 @@ export interface PriceFormatter {
   allConversions: (usdt: number) => string | null;
 }
 
+/** Tỉ giá thô — ô nhập giá cần tự quy đổi hai chiều, không chỉ định dạng. */
+export function useRates(): StoreRatesDto | null {
+  return useContext(RatesContext);
+}
+
 export function usePrices(): PriceFormatter {
   const { locale } = useI18n();
   const rates = useContext(RatesContext);
