@@ -34,10 +34,14 @@ export function RatesProvider({
 }
 
 export interface DisplayPrice {
-  /** Dòng lớn: tiền địa phương, hoặc USDT khi không quy đổi được. */
+  /**
+   * Giá hiện cho khách, theo đúng đơn vị của ngôn ngữ đang xem.
+   *
+   * CHỈ một dòng — không kèm "≈ x USDT". Chủ shop muốn khách thấy đúng một con
+   * số bằng tiền của họ; số tiền thật sự thu vẫn hiện ở trang thanh toán, nơi
+   * luôn ghi đúng đơn vị sẽ thu.
+   */
   primary: string;
-  /** Dòng nhỏ "≈ 3.50 USDT"; `null` khi dòng lớn đã là USDT. */
-  secondary: string | null;
 }
 
 export interface PriceFormatter {
@@ -67,15 +71,9 @@ export function usePrices(): PriceFormatter {
       // `null` = chưa có tỉ giá cho đơn vị này ⇒ lùi về USDT, không bịa số.
       const converted = convertFromUsdt(usdt, currency, rates);
       if (converted === null || currency === 'USDT') {
-        return { primary: formatUsdt(usdt), secondary: null };
+        return { primary: formatUsdt(usdt) };
       }
-      /*
-       * Dòng phụ vẫn hiện kể cả với USD, dù con số y hệt.
-       *
-       * Không phải để so sánh giá mà để nói rõ ĐƠN VỊ THU: khách thấy "$3.50" dễ
-       * tưởng trả bằng thẻ đô, còn cửa hàng chỉ nhận USDT (hoặc VND chuyển khoản).
-       */
-      return { primary: formatMoney(converted, currency), secondary: formatUsdt(usdt) };
+      return { primary: formatMoney(converted, currency) };
     };
     const allConversions = (usdt: number): string | null => {
       if (!Number.isFinite(usdt) || usdt <= 0) return null;

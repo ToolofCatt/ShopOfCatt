@@ -68,21 +68,10 @@ export function ProductCard({ product }: { product: ProductDto }) {
         dòng rời khỏi "USDT") và nhãn tồn kho tràn ra ngoài viền thẻ.
       */}
       <div className="flex flex-wrap items-end justify-between gap-x-2 gap-y-1 border-t border-neutral-100 pt-3">
-        {/*
-          Giá theo ngôn ngữ khách chọn, kèm dòng nhỏ USDT bên dưới. Dòng nhỏ nói
-          rõ ĐƠN VỊ THU chứ không phải để so giá — cửa hàng chỉ nhận USDT hoặc
-          VND chuyển khoản, không nhận ¥ hay $ trực tiếp.
-        */}
-        <div className="min-w-0">
-          <p className="whitespace-nowrap font-semibold tabular-nums text-neutral-950">
-            {priceLabel}
-          </p>
-          {gia.secondary && (
-            <p className="whitespace-nowrap text-[11px] tabular-nums text-neutral-400">
-              ≈ {gia.secondary}
-            </p>
-          )}
-        </div>
+        {/* Một dòng giá duy nhất, theo đơn vị của ngôn ngữ khách đang xem. */}
+        <p className="whitespace-nowrap font-semibold tabular-nums text-neutral-950">
+          {priceLabel}
+        </p>
         <div className="flex flex-col items-end gap-1">
           {/* Hết hàng đã có ruy-băng ở góc — nhắc lại ở đây là thừa. */}
           {!outOfStock && (

@@ -16,7 +16,14 @@ export const CURRENCY_BY_LOCALE = {
   zh: 'CNY',
 } as const satisfies Record<Locale, DisplayCurrency>;
 
-export const DEFAULT_LOCALE: Locale = 'vi';
+/**
+ * Ngôn ngữ khách thấy khi CHƯA từng chọn.
+ *
+ * Tiếng Anh chứ không phải tiếng Việt, và KHÔNG đoán theo Accept-Language: cửa
+ * hàng bán ra ngoài Việt Nam, tên sản phẩm vốn đã bằng tiếng Anh, nên mặt tiền
+ * mặc định là tiếng Anh. Khách đổi sang VN/ZH thì lựa chọn được lưu vào cookie.
+ */
+export const DEFAULT_LOCALE: Locale = 'en';
 
 /** Cookie giữ ngôn ngữ người dùng chọn (server component đọc được). */
 export const LOCALE_COOKIE = 'wc_locale';
@@ -59,26 +66,3 @@ export function resolveLocale(value: unknown): Locale {
   return isLocale(value) ? value : DEFAULT_LOCALE;
 }
 
-/**
- * Chọn ngôn ngữ từ header Accept-Language của trình duyệt.
- * Dùng khi người dùng chưa từng chọn ngôn ngữ.
- */
-export function localeFromAcceptLanguage(header: string | null | undefined): Locale | null {
-  if (!header) return null;
-  const parts = header
-    .split(',')
-    .map((part) => {
-      const [tag, ...params] = part.trim().split(';');
-      const qParam = params.find((p) => p.trim().startsWith('q='));
-      const quality = qParam ? Number.parseFloat(qParam.split('=')[1]) : 1;
-      return { tag: tag.trim().toLowerCase(), quality: Number.isFinite(quality) ? quality : 0 };
-    })
-    .sort((a, b) => b.quality - a.quality);
-
-  for (const { tag } of parts) {
-    if (tag.startsWith('vi')) return 'vi';
-    if (tag.startsWith('zh')) return 'zh';
-    if (tag.startsWith('en')) return 'en';
-  }
-  return null;
-}

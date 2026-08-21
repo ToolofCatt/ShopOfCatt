@@ -350,22 +350,10 @@ export function BuyBox({ product }: { product: ProductDto }) {
                 </div>
               </>
             )}
-            {/*
-              Tổng cộng: tiền địa phương ở dòng lớn, USDT ở dòng nhỏ. Dòng nhỏ
-              cần thiết ở ĐÂY nhất — đây là con số khách so với trang thanh toán,
-              nơi luôn hiện đúng đơn vị sẽ thu.
-            */}
-            <div className="flex items-start justify-between">
+            <div className="flex items-center justify-between">
               <span className="text-sm text-neutral-500">{t.product.total}</span>
-              <span className="text-right">
-                <span className="block text-lg font-semibold tabular-nums">
-                  {price(payable).primary}
-                </span>
-                {price(payable).secondary && (
-                  <span className="block text-xs tabular-nums text-neutral-400">
-                    ≈ {price(payable).secondary}
-                  </span>
-                )}
+              <span className="text-lg font-semibold tabular-nums">
+                {price(payable).primary}
               </span>
             </div>
           </div>
