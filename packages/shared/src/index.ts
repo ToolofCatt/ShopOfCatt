@@ -282,6 +282,10 @@ export interface AdminStoreSettingDto {
   rateAuto: boolean;
   /** Phần trăm cộng thêm lên tỉ giá thị trường. */
   rateMarkupPercent: number;
+  /** Giờ lấy tỉ giá mỗi ngày, theo giờ Việt Nam (0–23). */
+  rateHour: number;
+  /** Tiền hiện cho khách. */
+  displayCurrency: DisplayCurrencyMode;
   /** Lần lấy tỉ giá thành công gần nhất (ISO), `null` = chưa lần nào. */
   rateUpdatedAt: string | null;
   /** Nguồn + giá trị thô lần gần nhất — để chủ shop soi lại. */
@@ -765,12 +769,24 @@ export const STOCK_STATUS_LABEL: Record<StockStatus, string> = {
  */
 export type DisplayCurrency = 'USDT' | 'VND' | 'CNY' | 'USD';
 
+/**
+ * Chủ shop chọn tiền hiện cho khách.
+ *
+ * `auto` = theo ngôn ngữ đang xem. Các giá trị còn lại ÉP CỨNG một đơn vị cho
+ * mọi ngôn ngữ — dùng khi cửa hàng muốn niêm yết một giá duy nhất, ví dụ luôn
+ * bằng đồng dù khách đang đọc tiếng Anh.
+ */
+export const DISPLAY_CURRENCY_MODES = ['auto', 'VND', 'USD', 'CNY', 'USDT'] as const;
+export type DisplayCurrencyMode = (typeof DISPLAY_CURRENCY_MODES)[number];
+
 /** Tỉ giá cửa hàng đang dùng, trả về cho trang khách. */
 export interface StoreRatesDto {
   /** VND cho 1 USDT; 0 = chưa có, giao diện hiện USDT như cũ. */
   vndPerUsdt: number;
   /** CNY cho 1 USDT; 0 = chưa có. */
   cnyPerUsdt: number;
+  /** Tiền hiện cho khách — `auto` thì suy theo ngôn ngữ. */
+  displayCurrency: DisplayCurrencyMode;
   updatedAt: string | null;
 }
 

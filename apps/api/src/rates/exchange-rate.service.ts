@@ -20,12 +20,12 @@ import { SettingsService } from '../settings/settings.service';
  * sai tiền hàng loạt.
  */
 
-const NGUON = 'https://open.er-api.com/v6/latest/USD';
+export const NGUON = 'https://open.er-api.com/v6/latest/USD';
 const TIMEOUT_MS = 15_000;
-/** Lấy lại mỗi 24 giờ. */
-const CHU_KY_MS = 24 * 60 * 60_000;
 /** Chờ một chút sau khi khởi động rồi mới gọi ra ngoài. */
 const CHO_KHOI_DONG_MS = 20_000;
+/** Việt Nam là UTC+7 quanh năm, không có giờ mùa hè. */
+const VN_OFFSET_MS = 7 * 3_600_000;
 
 /*
  * Khoảng hợp lệ — hàng rào chống "một con số vô lý đi thẳng vào giá bán".
@@ -77,11 +77,13 @@ export class ExchangeRateService implements OnModuleInit, OnModuleDestroy {
       () => {
         void this.refreshIfDue();
       },
-      // Kiểm mỗi giờ thay vì mỗi 24 giờ: máy chủ dựng lại thường xuyên hơn thế,
-      // và nếu chỉ hẹn 24 giờ thì mỗi lần dựng lại là đồng hồ về 0.
+      // Kiểm mỗi giờ rồi tự đối chiếu với giờ hẹn: setInterval không biết
+      // "7 giờ sáng là lúc nào", và máy chủ dựng lại thì mọi hẹn giờ dài đều mất.
       60 * 60_000,
     );
-    this.logger.log('Tự cập nhật tỉ giá: kiểm mỗi giờ, lấy lại mỗi 24 giờ');
+    this.logger.log(
+      'Tự cập nhật tỉ giá: kiểm mỗi giờ, lấy đúng một lần mỗi ngày vào giờ đã hẹn',
+    );
   }
 
   onModuleDestroy(): void {
@@ -89,13 +91,20 @@ export class ExchangeRateService implements OnModuleInit, OnModuleDestroy {
     if (this.timer) clearInterval(this.timer);
   }
 
-  /** Chỉ lấy lại khi đang bật tự động VÀ lần gần nhất đã quá 24 giờ. */
+  /** Chỉ lấy lại khi đang bật tự động VÀ đã tới giờ hẹn của hôm nay. */
   private async refreshIfDue(): Promise<void> {
     try {
       const setting = await this.settings.getSetting();
       if (!setting.rateAuto) return;
-      const lanCuoi = setting.rateUpdatedAt?.getTime() ?? 0;
-      if (Date.now() - lanCuoi < CHU_KY_MS) return;
+      if (
+        !denGioLay(
+          Date.now(),
+          setting.rateHour,
+          setting.rateUpdatedAt?.getTime() ?? null,
+        )
+      ) {
+        return;
+      }
       await this.refresh();
     } catch (error) {
       this.logger.warn(`Không kiểm được tỉ giá: ${moTaLoi(error)}`);
@@ -187,4 +196,40 @@ function round(value: number, digits: number): number {
 
 function moTaLoi(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Giờ Việt Nam (0–23) của một mốc thời gian. */
+export function gioVietNam(nowMs: number): number {
+  return new Date(nowMs + VN_OFFSET_MS).getUTCHours();
+}
+
+/** Ngày Việt Nam dạng "YYYY-MM-DD" — dùng để biết "đã lấy hôm nay chưa". */
+export function ngayVietNam(ms: number): string {
+  return new Date(ms + VN_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/**
+ * Đã tới lúc lấy tỉ giá chưa.
+ *
+ * Đúng MỘT lần mỗi ngày, vào giờ đã hẹn theo giờ Việt Nam. Tính giờ VN thẳng từ
+ * UTC+7 chứ không dùng `getHours()`: `getHours()` phụ thuộc biến môi trường TZ
+ * của tiến trình, mà container này còn không có tzdata — đổi cấu hình triển khai
+ * là giờ cập nhật lệch đi mà không ai biết.
+ *
+ * `chuaLayLanNao` (lastMs = null) thì lấy NGAY, không chờ tới giờ hẹn: cửa hàng
+ * vừa bật tính năng thì phải có tỉ giá ngay, chứ không để trống tới sáng mai.
+ */
+export function denGioLay(
+  nowMs: number,
+  rateHour: number,
+  lastMs: number | null,
+): boolean {
+  if (lastMs === null) return true;
+  if (ngayVietNam(lastMs) === ngayVietNam(nowMs)) return false;
+  return gioVietNam(nowMs) >= clampGio(rateHour);
+}
+
+/** Giờ ngoài 0–23 (sửa tay dưới CSDL) quy về 7 thay vì sinh hành vi lạ. */
+function clampGio(hour: number): number {
+  return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : 7;
 }

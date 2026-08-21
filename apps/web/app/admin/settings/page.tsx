@@ -5,12 +5,14 @@ import { Plus, PlugZap, ServerCrash, ShieldAlert, Trash2 } from 'lucide-react';
 import {
   AI_DEFAULT_MODEL,
   AI_PROVIDERS,
+  DISPLAY_CURRENCY_MODES,
   SUPPORT_CHANNELS_MAX,
   SUPPORT_FIELD_MAX_LENGTH,
   SUPPORT_NOTE_MAX_LENGTH,
   type AdminStoreSettingDto,
   type AiProvider,
   type BinanceStatusDto,
+  type DisplayCurrencyMode,
   type SupportChannelDto,
 } from '@webcatt/shared';
 import { Tabs } from '@/components/admin/tabs';
@@ -64,6 +66,8 @@ export default function AdminSettingsPage() {
   const [cnyPerUsdt, setCnyPerUsdt] = useState('0');
   const [rateAuto, setRateAuto] = useState(false);
   const [rateMarkupPercent, setRateMarkupPercent] = useState('0');
+  const [rateHour, setRateHour] = useState('7');
+  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrencyMode>('auto');
   const [refreshingRate, setRefreshingRate] = useState(false);
   const [rateMessage, setRateMessage] = useState<string | null>(null);
   /* Khoá webhook: máy chủ không trả về, nên ô này luôn rỗng khi mở trang. */
@@ -112,6 +116,8 @@ export default function AdminSettingsPage() {
     setCnyPerUsdt(String(next.cnyPerUsdt));
     setRateAuto(next.rateAuto);
     setRateMarkupPercent(String(next.rateMarkupPercent));
+    setRateHour(String(next.rateHour));
+    setDisplayCurrency(next.displayCurrency);
     setSepayApiKey('');
     setSepayWebhookSecret('');
     setCryptoEnabled(next.cryptoEnabled);
@@ -299,6 +305,8 @@ export default function AdminSettingsPage() {
           cnyPerUsdt: Number(cnyPerUsdt) || 0,
           rateAuto,
           rateMarkupPercent: Number(rateMarkupPercent) || 0,
+          rateHour: Number(rateHour) || 0,
+          displayCurrency,
           // Rỗng = giữ khoá cũ; máy chủ phân biệt bằng việc KHÔNG gửi trường.
           ...(sepayApiKey.trim() === '' ? {} : { sepayApiKey: sepayApiKey.trim() }),
           ...(sepayWebhookSecret.trim() === ''
@@ -648,6 +656,26 @@ export default function AdminSettingsPage() {
                 <p className="mt-0.5 text-sm text-neutral-500">{t.admin.rateHint}</p>
               </div>
 
+              {/*
+                Tiền hiện cho khách. "Theo ngôn ngữ" là mặc định; ép cứng một đơn
+                vị dùng khi cửa hàng muốn niêm yết một giá duy nhất cho mọi khách.
+              */}
+              <Field label={t.admin.displayCurrencyLabel} htmlFor="setting-display-currency">
+                <div id="setting-display-currency">
+                  <Tabs
+                    items={DISPLAY_CURRENCY_MODES.map((value) => ({
+                      value,
+                      label: t.admin.displayCurrencyModes[value],
+                    }))}
+                    value={displayCurrency}
+                    onChange={(value) => {
+                      setDisplayCurrency(value);
+                      markDirty();
+                    }}
+                  />
+                </div>
+              </Field>
+
               <ToggleRow
                 id="setting-rate-auto"
                 checked={rateAuto}
@@ -659,7 +687,7 @@ export default function AdminSettingsPage() {
                 hint={t.admin.rateAutoHint}
               />
 
-              <div className="grid gap-3 sm:grid-cols-3">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Field
                   label={t.admin.settingVndRateLabel}
                   htmlFor="setting-vnd-rate"
@@ -697,6 +725,28 @@ export default function AdminSettingsPage() {
                     className="tabular-nums"
                     onChange={(event) => {
                       setCnyPerUsdt(event.target.value);
+                      markDirty();
+                    }}
+                  />
+                </Field>
+
+                <Field
+                  label={t.admin.rateHourLabel}
+                  htmlFor="setting-rate-hour"
+                  hint={t.admin.rateHourHint}
+                >
+                  <Input
+                    id="setting-rate-hour"
+                    type="number"
+                    min={0}
+                    max={23}
+                    step={1}
+                    inputMode="numeric"
+                    value={rateHour}
+                    placeholder="7"
+                    className="tabular-nums"
+                    onChange={(event) => {
+                      setRateHour(event.target.value);
                       markDirty();
                     }}
                   />
@@ -741,9 +791,11 @@ export default function AdminSettingsPage() {
                     : t.admin.rateNeverUpdated}
                 </span>
               </div>
-              {settings?.rateSource && (
-                <p className="font-mono text-[11px] text-neutral-400">{settings.rateSource}</p>
-              )}
+              {/* Nguồn hiện SẴN, không chờ tới lần lấy đầu — chủ shop cần biết
+                  tỉ giá lấy ở đâu trước khi bật. */}
+              <p className="font-mono text-[11px] text-neutral-400">
+                {settings?.rateSource || t.admin.rateSourceHint}
+              </p>
               {rateMessage && <p className="text-sm text-neutral-950">{rateMessage}</p>}
             </div>
 

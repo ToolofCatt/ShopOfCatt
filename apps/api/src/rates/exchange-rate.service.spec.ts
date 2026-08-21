@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ExchangeRateService } from './exchange-rate.service';
+import {
+  ExchangeRateService,
+  denGioLay,
+  gioVietNam,
+  ngayVietNam,
+} from './exchange-rate.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { SettingsService } from '../settings/settings.service';
 
@@ -161,5 +166,71 @@ describe('ExchangeRateService.refresh — GIỮ tỉ giá cũ', () => {
 
     expect((await b.service.refresh()).ok).toBe(false);
     expect(b.update).not.toHaveBeenCalled();
+  });
+});
+
+/* ---------- lịch lấy tỉ giá: đúng một lần mỗi ngày, vào giờ đã hẹn ---------- */
+
+/** Mốc thời gian ứng với một giờ Việt Nam cụ thể. */
+function gioVN(ngay: string, gio: number): number {
+  return Date.parse(`${ngay}T${String(gio).padStart(2, '0')}:00:00+07:00`);
+}
+
+describe('gioVietNam / ngayVietNam', () => {
+  it('đọc đúng giờ Việt Nam, không phụ thuộc TZ của tiến trình', () => {
+    // 00:30 giờ VN ngày 21 = 17:30 UTC ngày 20.
+    const ms = Date.parse('2026-08-20T17:30:00Z');
+    expect(gioVietNam(ms)).toBe(0);
+    expect(ngayVietNam(ms)).toBe('2026-08-21');
+  });
+
+  it('23:59 giờ VN vẫn là ngày hôm đó', () => {
+    const ms = gioVN('2026-08-21', 23);
+    expect(gioVietNam(ms)).toBe(23);
+    expect(ngayVietNam(ms)).toBe('2026-08-21');
+  });
+});
+
+describe('denGioLay', () => {
+  it('chưa lấy lần nào thì lấy NGAY, không chờ tới giờ hẹn', () => {
+    expect(denGioLay(gioVN('2026-08-21', 3), 7, null)).toBe(true);
+  });
+
+  it('đã lấy hôm nay rồi thì KHÔNG lấy nữa, dù đã qua giờ hẹn', () => {
+    const homNay = gioVN('2026-08-21', 7);
+    expect(denGioLay(gioVN('2026-08-21', 20), 7, homNay)).toBe(false);
+  });
+
+  it('sang ngày mới nhưng CHƯA tới giờ hẹn thì chờ', () => {
+    const homQua = gioVN('2026-08-20', 7);
+    expect(denGioLay(gioVN('2026-08-21', 6), 7, homQua)).toBe(false);
+  });
+
+  it('sang ngày mới và ĐÚNG giờ hẹn thì lấy', () => {
+    const homQua = gioVN('2026-08-20', 7);
+    expect(denGioLay(gioVN('2026-08-21', 7), 7, homQua)).toBe(true);
+  });
+
+  it('bỏ lỡ giờ hẹn (máy chủ tắt) thì lần kiểm sau vẫn lấy', () => {
+    const homQua = gioVN('2026-08-20', 7);
+    expect(denGioLay(gioVN('2026-08-21', 15), 7, homQua)).toBe(true);
+  });
+
+  it('giờ hẹn 0 hoạt động bình thường', () => {
+    const homQua = gioVN('2026-08-20', 0);
+    expect(denGioLay(gioVN('2026-08-21', 0), 0, homQua)).toBe(true);
+    expect(denGioLay(gioVN('2026-08-21', 0), 0, gioVN('2026-08-21', 0))).toBe(false);
+  });
+
+  it('giờ hẹn vô lý (sửa tay dưới CSDL) quy về 7', () => {
+    const homQua = gioVN('2026-08-20', 7);
+    expect(denGioLay(gioVN('2026-08-21', 6), 99, homQua)).toBe(false);
+    expect(denGioLay(gioVN('2026-08-21', 7), 99, homQua)).toBe(true);
+  });
+
+  it('lấy sau nửa đêm giờ VN vẫn tính là ngày mới', () => {
+    // 23:00 ngày 20 giờ VN, rồi 00:30 ngày 21 với giờ hẹn 0.
+    const truoc = gioVN('2026-08-20', 23);
+    expect(denGioLay(Date.parse('2026-08-20T17:30:00Z'), 0, truoc)).toBe(true);
   });
 });

@@ -822,6 +822,17 @@ export const en: Dictionary = {
     settingSepayBankHint: 'Short name such as Vietcombank, MBBank, Techcombank…',
     settingSepayHolderLabel: 'Account holder name',
     settingSepayHolderHint: 'Shown on the QR code. No diacritics.',
+    displayCurrencyLabel: 'Currency shown to customers',
+    displayCurrencyModes: {
+      auto: 'Follow language',
+      VND: 'Always ₫',
+      USD: 'Always $',
+      CNY: 'Always ¥',
+      USDT: 'Always USDT',
+    },
+    rateHourLabel: 'Fetch hour (Vietnam time)',
+    rateHourHint: '0–23. Fetched exactly once a day at this hour.',
+    rateSourceHint: 'Source: open.er-api.com/v6/latest/USD',
     rateTitle: 'Exchange rate',
     rateHint:
       'Used to build the VND transfer amount and to show prices in the chosen language.',

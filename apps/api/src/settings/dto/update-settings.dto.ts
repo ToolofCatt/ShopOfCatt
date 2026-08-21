@@ -4,6 +4,7 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -16,11 +17,13 @@ import {
 } from 'class-validator';
 import {
   AI_PROVIDERS,
+  DISPLAY_CURRENCY_MODES,
   PRODUCT_IMAGE_MAX_LENGTH,
   SUPPORT_CHANNELS_MAX,
   SUPPORT_FIELD_MAX_LENGTH,
   SUPPORT_NOTE_MAX_LENGTH,
   type AiProvider,
+  type DisplayCurrencyMode,
 } from '@webcatt/shared';
 import { K } from '../../i18n/messages';
 
@@ -162,6 +165,18 @@ export class UpdateSettingsDto {
   @Min(0, { message: K.adminRateMarkupInvalid })
   @Max(50, { message: K.adminRateMarkupInvalid })
   rateMarkupPercent?: number;
+
+  /** Giờ lấy tỉ giá mỗi ngày, theo giờ Việt Nam. */
+  @IsOptional()
+  @IsInt({ message: K.adminRateHourInvalid })
+  @Min(0, { message: K.adminRateHourInvalid })
+  @Max(23, { message: K.adminRateHourInvalid })
+  rateHour?: number;
+
+  /** Tiền hiện cho khách. `auto` = theo ngôn ngữ. */
+  @IsOptional()
+  @IsIn(DISPLAY_CURRENCY_MODES, { message: K.adminDisplayCurrencyInvalid })
+  displayCurrency?: DisplayCurrencyMode;
 
   /**
    * Khoá API webhook SePay. Ba trạng thái như khoá AI: không gửi = giữ nguyên,

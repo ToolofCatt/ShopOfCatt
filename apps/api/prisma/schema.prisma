@@ -434,6 +434,9 @@ model StoreSetting {
   /// Bao nhiêu CNY cho 1 USDT — chỉ để HIỆN GIÁ cho khách chọn tiếng Trung,
   /// không dùng để thu tiền. 0 = không quy đổi, hiện USDT như cũ.
   cnyPerUsdt         Decimal  @default(0) @db.Decimal(18, 4)
+  /// Tiền hiện cho khách: "auto" = theo ngôn ngữ (vi→₫, en→$, zh→¥), hoặc ép
+  /// cứng một đơn vị cho mọi ngôn ngữ. "USDT" = tắt quy đổi.
+  displayCurrency    String   @default("auto")
   /// Tự lấy tỉ giá mỗi ngày từ nguồn công khai.
   rateAuto           Boolean  @default(false)
   /// Phần trăm cộng thêm lên tỉ giá thị trường.
@@ -442,6 +445,12 @@ model StoreSetting {
   /// cửa hàng chịu phần chênh đó. Cộng cho CẢ VND và CNY để giá quy đổi ở mọi
   /// ngôn ngữ tương đương nhau.
   rateMarkupPercent  Decimal  @default(0) @db.Decimal(5, 2)
+  /// Giờ lấy tỉ giá mỗi ngày, theo GIỜ VIỆT NAM (0–23).
+  ///
+  /// Giờ cố định chứ không phải "24 tiếng kể từ lần trước": kiểu trôi dần khiến
+  /// chủ shop không bao giờ biết tỉ giá đổi lúc nào, và mỗi lần dựng lại máy chủ
+  /// là mốc thời gian lại nhảy.
+  rateHour           Int      @default(7)
   /// Lần lấy tỉ giá thành công gần nhất. null = chưa lần nào.
   rateUpdatedAt      DateTime?
   /// Nguồn + giá trị thô của lần lấy gần nhất, để chủ shop soi lại được.

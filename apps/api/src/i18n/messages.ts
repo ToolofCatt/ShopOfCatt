@@ -183,6 +183,8 @@ export const K = {
   adminVndRateInvalid: 'admin.vnd_rate_invalid',
   adminCnyRateInvalid: 'admin.cny_rate_invalid',
   adminRateMarkupInvalid: 'admin.rate_markup_invalid',
+  adminRateHourInvalid: 'admin.rate_hour_invalid',
+  adminDisplayCurrencyInvalid: 'admin.display_currency_invalid',
   adminRateFetchFailed: 'admin.rate_fetch_failed',
   adminAiKeyInvalid: 'admin.ai_key_invalid',
   adminAiProviderInvalid: 'admin.ai_provider_invalid',
@@ -845,6 +847,16 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Tỉ giá CNY phải là số dương, tối đa 4 chữ số thập phân',
     en: 'The CNY rate must be a positive number with at most 4 decimals',
     zh: 'CNY 汇率必须为正数，最多四位小数',
+  },
+  [K.adminRateHourInvalid]: {
+    vi: 'Giờ lấy tỉ giá phải là số nguyên từ 0 đến 23',
+    en: 'The fetch hour must be a whole number between 0 and 23',
+    zh: '获取时间必须是 0 到 23 之间的整数',
+  },
+  [K.adminDisplayCurrencyInvalid]: {
+    vi: 'Đơn vị tiền hiển thị không hợp lệ',
+    en: 'Invalid display currency',
+    zh: '显示币种无效',
   },
   [K.adminRateMarkupInvalid]: {
     vi: 'Biên cộng thêm phải từ 0 đến 50 phần trăm',

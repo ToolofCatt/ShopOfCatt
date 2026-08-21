@@ -8,6 +8,8 @@ import {
   type AiProvider,
   type CryptoNetwork,
   type PaymentMethodDto,
+  DISPLAY_CURRENCY_MODES,
+  type DisplayCurrencyMode,
   type StoreRatesDto,
   type StoreReadinessDto,
   type SupportChannelDto,
@@ -265,6 +267,7 @@ export class SettingsService {
     return {
       vndPerUsdt: Number(setting.vndPerUsdt),
       cnyPerUsdt: Number(setting.cnyPerUsdt),
+      displayCurrency: normalizeCurrency(setting.displayCurrency),
       updatedAt: setting.rateUpdatedAt ? setting.rateUpdatedAt.toISOString() : null,
     };
   }
@@ -384,6 +387,8 @@ export class SettingsService {
         dto.rateMarkupPercent === undefined
           ? before.rateMarkupPercent
           : new Prisma.Decimal(dto.rateMarkupPercent.toFixed(2)),
+      rateHour: dto.rateHour ?? before.rateHour,
+      displayCurrency: dto.displayCurrency ?? normalizeCurrency(before.displayCurrency),
       // Không gửi = giữ khoá cũ, giống hệt khoá AI.
       sepayApiKey: sepayApiKey === undefined ? before.sepayApiKey : sepayApiKey,
       sepayWebhookSecret:
@@ -439,6 +444,8 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     cnyPerUsdt: Number(setting.cnyPerUsdt),
     rateAuto: setting.rateAuto,
     rateMarkupPercent: Number(setting.rateMarkupPercent),
+    rateHour: setting.rateHour,
+    displayCurrency: normalizeCurrency(setting.displayCurrency),
     rateUpdatedAt: setting.rateUpdatedAt ? setting.rateUpdatedAt.toISOString() : null,
     rateSource: setting.rateSource,
     // Cố ý KHÔNG trả khoá về — chỉ "có hay không" + bốn ký tự cuối.
@@ -473,6 +480,8 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
     cnyPerUsdt: Number(setting.cnyPerUsdt),
     rateAuto: setting.rateAuto,
     rateMarkupPercent: Number(setting.rateMarkupPercent),
+    rateHour: setting.rateHour,
+    displayCurrency: setting.displayCurrency,
     // BOOLEAN, không phải chính khoá — nhật ký lưu vĩnh viễn.
     sepayApiKeySet: setting.sepayApiKey.trim() !== '',
     sepayWebhookSecretSet: setting.sepayWebhookSecret.trim() !== '',
@@ -509,4 +518,15 @@ function sepayReady(setting: StoreSetting): boolean {
     Number(setting.vndPerUsdt) > 0 &&
     setting.sepayApiKey.trim() !== ''
   );
+}
+
+/**
+ * Cột `displayCurrency` là TEXT tự do, nên bản cũ hoặc một lần sửa tay bằng psql
+ * có thể để lại giá trị lạ. Quy về "auto" thay vì để giao diện rơi vào nhánh nào
+ * không ai lường trước.
+ */
+function normalizeCurrency(value: string): DisplayCurrencyMode {
+  return (DISPLAY_CURRENCY_MODES as readonly string[]).includes(value)
+    ? (value as DisplayCurrencyMode)
+    : 'auto';
 }

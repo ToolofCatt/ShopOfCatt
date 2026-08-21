@@ -3,6 +3,7 @@ import type {
   AuditAction,
   PaymentMethod,
   StockDrawMode,
+  DisplayCurrencyMode,
 } from '@webcatt/shared';
 
 /**
@@ -836,6 +837,17 @@ export const vi = {
     settingSepayBankHint: 'Tên ngắn như Vietcombank, MBBank, Techcombank…',
     settingSepayHolderLabel: 'Tên chủ tài khoản',
     settingSepayHolderHint: 'Hiện trên mã QR cho khách đối chiếu. Không dấu.',
+    displayCurrencyLabel: 'Tiền hiện cho khách',
+    displayCurrencyModes: {
+      auto: 'Theo ngôn ngữ',
+      VND: 'Luôn ₫',
+      USD: 'Luôn $',
+      CNY: 'Luôn ¥',
+      USDT: 'Luôn USDT',
+    } satisfies Record<DisplayCurrencyMode, string>,
+    rateHourLabel: 'Giờ lấy (giờ VN)',
+    rateHourHint: '0–23. Mỗi ngày lấy đúng một lần vào giờ này.',
+    rateSourceHint: 'Nguồn: open.er-api.com/v6/latest/USD',
     rateTitle: 'Tỉ giá',
     rateHint:
       'Dùng để dựng số tiền chuyển khoản VND và để hiện giá theo ngôn ngữ khách chọn.',
