@@ -56,6 +56,15 @@ export default function AdminSettingsPage() {
   const [binanceIdEnabled, setBinanceIdEnabled] = useState(false);
   const [binanceId, setBinanceId] = useState('');
   const [binanceQr, setBinanceQr] = useState('');
+  const [sepayEnabled, setSepayEnabled] = useState(false);
+  const [sepayAccountNumber, setSepayAccountNumber] = useState('');
+  const [sepayBank, setSepayBank] = useState('');
+  const [sepayAccountHolder, setSepayAccountHolder] = useState('');
+  const [vndPerUsdt, setVndPerUsdt] = useState('0');
+  /* Khoá webhook: máy chủ không trả về, nên ô này luôn rỗng khi mở trang. */
+  const [sepayApiKey, setSepayApiKey] = useState('');
+  const [sepayWebhookSecret, setSepayWebhookSecret] = useState('');
+  const [sepayError, setSepayError] = useState<string | null>(null);
   const [cryptoEnabled, setCryptoEnabled] = useState(false);
   const [bep20Address, setBep20Address] = useState('');
   const [trc20Address, setTrc20Address] = useState('');
@@ -90,6 +99,13 @@ export default function AdminSettingsPage() {
     setBinanceIdEnabled(next.binanceIdEnabled);
     setBinanceId(next.binanceId);
     setBinanceQr(next.binanceQr);
+    setSepayEnabled(next.sepayEnabled);
+    setSepayAccountNumber(next.sepayAccountNumber);
+    setSepayBank(next.sepayBank);
+    setSepayAccountHolder(next.sepayAccountHolder);
+    setVndPerUsdt(String(next.vndPerUsdt));
+    setSepayApiKey('');
+    setSepayWebhookSecret('');
     setCryptoEnabled(next.cryptoEnabled);
     setBep20Address(next.bep20Address);
     setTrc20Address(next.trc20Address);
@@ -134,10 +150,39 @@ export default function AdminSettingsPage() {
   const binanceConfigured = status?.configured === true;
   const cryptoToggleDisabled = status !== null && !status.configured;
 
+  /*
+    Địa chỉ webhook phải TUYỆT ĐỐI: chủ shop dán nó vào SePay, và SePay gọi từ
+    ngoài Internet vào — dán một đường dẫn tương đối là webhook không bao giờ tới.
+
+    NEXT_PUBLIC_API_URL đã chứa sẵn "/api" (xem apps/web/.env.example), nên KHÔNG
+    được ghép thêm; và ở production nó có thể chỉ là "/api" khi web với api cùng
+    một tên miền, lúc đó phải mượn origin của trang.
+
+    Tính trong useEffect chứ không tính thẳng: `window` không tồn tại lúc Next
+    dựng sẵn trang trên máy chủ, mà chuỗi khác nhau giữa hai lượt là lỗi hydrate.
+  */
+  const [webhookUrl, setWebhookUrl] = useState('');
+  useEffect(() => {
+    const base = (process.env.NEXT_PUBLIC_API_URL ?? '/api').replace(/\/+$/, '');
+    const goc = base.startsWith('http') ? base : `${window.location.origin}${base}`;
+    setWebhookUrl(`${goc}/payments/sepay/webhook`);
+  }, []);
+
+  const [webhookCopied, setWebhookCopied] = useState(false);
+  const handleCopyWebhookUrl = async () => {
+    try {
+      await navigator.clipboard.writeText(webhookUrl);
+      setWebhookCopied(true);
+    } catch {
+      setWebhookCopied(false);
+    }
+  };
+
   const markDirty = () => {
     setSaved(false);
     setAddressError(null);
     setAiError(null);
+    setSepayError(null);
   };
 
   /** Sửa một ô của kênh liên hệ thứ `index`. */
@@ -173,6 +218,28 @@ export default function AdminSettingsPage() {
       return;
     }
     setAiError(null);
+    /*
+      Bật SePay mà thiếu cấu hình thì báo NGAY tại chỗ. Máy chủ cũng chặn, nhưng
+      để nó chặn thì chủ shop chỉ thấy một dòng lỗi chung ở cuối biểu mẫu.
+
+      Khoá API: ô rỗng nghĩa là "giữ khoá cũ", nên chỉ coi là thiếu khi máy chủ
+      cũng báo chưa có khoá nào.
+    */
+    if (sepayEnabled) {
+      const rate = Number(vndPerUsdt);
+      const thieuKhoa = sepayApiKey.trim() === '' && settings?.sepayApiKeySet !== true;
+      if (
+        sepayAccountNumber.trim() === '' ||
+        sepayBank.trim() === '' ||
+        !Number.isFinite(rate) ||
+        rate <= 0 ||
+        thieuKhoa
+      ) {
+        setSepayError(t.admin.errSepayIncomplete);
+        return;
+      }
+    }
+    setSepayError(null);
     setSaving(true);
     setSaveError(null);
     setSaved(false);
@@ -185,6 +252,16 @@ export default function AdminSettingsPage() {
           binanceIdEnabled,
           binanceId: binanceId.trim(),
           binanceQr,
+          sepayEnabled,
+          sepayAccountNumber: sepayAccountNumber.trim(),
+          sepayBank: sepayBank.trim(),
+          sepayAccountHolder: sepayAccountHolder.trim(),
+          vndPerUsdt: Number(vndPerUsdt) || 0,
+          // Rỗng = giữ khoá cũ; máy chủ phân biệt bằng việc KHÔNG gửi trường.
+          ...(sepayApiKey.trim() === '' ? {} : { sepayApiKey: sepayApiKey.trim() }),
+          ...(sepayWebhookSecret.trim() === ''
+            ? {}
+            : { sepayWebhookSecret: sepayWebhookSecret.trim() }),
           cryptoEnabled,
           bep20Address: bep20Address.trim(),
           trc20Address: trc20Address.trim(),
@@ -288,6 +365,17 @@ export default function AdminSettingsPage() {
                 hint={t.admin.settingBinanceIdHint}
               />
               <ToggleRow
+                id="setting-sepay"
+                checked={sepayEnabled}
+                onChange={(checked) => {
+                  setSepayEnabled(checked);
+                  markDirty();
+                }}
+                label={t.admin.settingSepay}
+                hint={t.admin.settingSepayHint}
+              />
+
+              <ToggleRow
                 id="setting-crypto"
                 checked={cryptoEnabled}
                 disabled={cryptoToggleDisabled}
@@ -343,6 +431,161 @@ export default function AdminSettingsPage() {
                     onChange={(pair) => {
                       // Lấy bản LỚN: mã QR nén mạnh là nhoè, máy quét đọc không ra.
                       setBinanceQr(pair.image);
+                      markDirty();
+                    }}
+                  />
+                </Field>
+              </div>
+            )}
+
+            {sepayEnabled && (
+              <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <Field
+                    label={t.admin.settingSepayAccountLabel}
+                    htmlFor="setting-sepay-account"
+                    error={sepayError}
+                  >
+                    <Input
+                      id="setting-sepay-account"
+                      inputMode="numeric"
+                      value={sepayAccountNumber}
+                      invalid={Boolean(sepayError)}
+                      placeholder="0010000000355"
+                      className="font-mono text-[13px]"
+                      onChange={(event) => {
+                        // Chỉ chữ số: máy chủ cũng chặn, đây là chặn ngay tại ô.
+                        setSepayAccountNumber(event.target.value.replace(/[^0-9-]/g, ''));
+                        markDirty();
+                      }}
+                    />
+                  </Field>
+
+                  <Field
+                    label={t.admin.settingSepayBankLabel}
+                    htmlFor="setting-sepay-bank"
+                    hint={t.admin.settingSepayBankHint}
+                  >
+                    <Input
+                      id="setting-sepay-bank"
+                      value={sepayBank}
+                      placeholder="Vietcombank"
+                      onChange={(event) => {
+                        setSepayBank(event.target.value);
+                        markDirty();
+                      }}
+                    />
+                  </Field>
+
+                  <Field
+                    label={t.admin.settingSepayHolderLabel}
+                    htmlFor="setting-sepay-holder"
+                    hint={t.admin.settingSepayHolderHint}
+                  >
+                    <Input
+                      id="setting-sepay-holder"
+                      value={sepayAccountHolder}
+                      placeholder="NGUYEN VAN A"
+                      onChange={(event) => {
+                        setSepayAccountHolder(event.target.value);
+                        markDirty();
+                      }}
+                    />
+                  </Field>
+
+                  <Field
+                    label={t.admin.settingVndRateLabel}
+                    htmlFor="setting-vnd-rate"
+                    hint={t.admin.settingVndRateHint}
+                  >
+                    <Input
+                      id="setting-vnd-rate"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      inputMode="decimal"
+                      value={vndPerUsdt}
+                      placeholder="26000"
+                      className="tabular-nums"
+                      onChange={(event) => {
+                        setVndPerUsdt(event.target.value);
+                        markDirty();
+                      }}
+                    />
+                  </Field>
+                </div>
+
+                {/*
+                  Địa chỉ webhook: chủ shop phải dán chính xác chuỗi này vào SePay.
+                  Hiện sẵn ở đây để không phải tự ghép tay và gõ sai.
+                */}
+                <Field
+                  label={t.admin.settingSepayWebhookUrl}
+                  htmlFor="setting-sepay-webhook-url"
+                >
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2.5">
+                    <span
+                      id="setting-sepay-webhook-url"
+                      className="break-all font-mono text-[13px] text-neutral-950"
+                    >
+                      {webhookUrl}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={webhookUrl === ''}
+                      onClick={() => void handleCopyWebhookUrl()}
+                    >
+                      {webhookCopied ? t.common.copied : t.common.copy}
+                    </Button>
+                  </div>
+                </Field>
+
+                {settings?.sepayApiKeySet ? (
+                  <p className="font-mono text-sm text-neutral-950">
+                    {t.admin.settingApiKeySaved(settings.sepayApiKeyHint)}
+                  </p>
+                ) : null}
+
+                <Field
+                  label={
+                    settings?.sepayApiKeySet
+                      ? t.admin.settingSepayKeyReplaceLabel
+                      : t.admin.settingSepayKeyLabel
+                  }
+                  htmlFor="setting-sepay-key"
+                  hint={t.admin.settingSepayKeyHint}
+                >
+                  <Input
+                    id="setting-sepay-key"
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={sepayApiKey}
+                    className="font-mono text-[13px]"
+                    onChange={(event) => {
+                      setSepayApiKey(event.target.value);
+                      markDirty();
+                    }}
+                  />
+                </Field>
+
+                <Field
+                  label={t.admin.settingSepaySecretLabel}
+                  htmlFor="setting-sepay-secret"
+                  hint={t.admin.settingSepaySecretHint}
+                >
+                  <Input
+                    id="setting-sepay-secret"
+                    type="password"
+                    autoComplete="off"
+                    spellCheck={false}
+                    value={sepayWebhookSecret}
+                    placeholder={settings?.sepayWebhookSecretSet ? '••••••••' : ''}
+                    className="font-mono text-[13px]"
+                    onChange={(event) => {
+                      setSepayWebhookSecret(event.target.value);
                       markDirty();
                     }}
                   />

@@ -73,6 +73,7 @@ export const vi = {
     buyNow: 'Mua ngay',
     payBinancePay: 'Binance Pay',
     payBinanceId: 'Binance Pay (chuyển tới ID)',
+    paySepay: 'Chuyển khoản ngân hàng',
     payCrypto: (networks: string) => `USDT on-chain (${networks})`,
     payMock: 'Chế độ thử nghiệm',
     noPaymentMethod: 'Cửa hàng tạm chưa nhận thanh toán. Vui lòng quay lại sau.',
@@ -122,6 +123,7 @@ export const vi = {
       binance_id: 'Binance Pay · chuyển tới ID',
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
+      sepay: 'Chuyển khoản ngân hàng',
     } satisfies Record<PaymentMethod, string>,
 
     cryptoTitle: 'Chuyển USDT on-chain',
@@ -136,6 +138,18 @@ export const vi = {
     copyMemo: 'Sao chép mã đơn',
     copyBinanceId: 'Sao chép Binance ID',
     cryptoExactWarning: 'Gửi CHÍNH XÁC số này — hệ thống nhận diện đơn của bạn qua số tiền.',
+    sepayTitle: 'Chuyển khoản ngân hàng',
+    sepayAmountLabel: 'Số tiền phải chuyển',
+    sepayBankLabel: 'Ngân hàng',
+    sepayAccountLabel: 'Số tài khoản',
+    sepayHolderLabel: 'Chủ tài khoản',
+    sepayMemoLabel: 'NỘI DUNG chuyển khoản (bắt buộc)',
+    sepayMemoHint: 'Thiếu nội dung này thì hệ thống không biết tiền của đơn nào.',
+    sepayExactHint: 'Chuyển đúng số tiền này. Thiếu hoặc thừa đều phải chờ đối soát tay.',
+    sepayQrAlt: 'Mã QR chuyển khoản',
+    sepayQrHint: 'Quét bằng app ngân hàng — số tiền và nội dung đã điền sẵn.',
+    sepayRate: (usdt: string) => `Tương đương ${usdt} USDT theo tỉ giá cửa hàng.`,
+    copyAccount: 'Sao chép số tài khoản',
     cryptoQrAlt: 'Mã QR địa chỉ ví nhận',
     cryptoQrHint:
       'Quét để lấy địa chỉ ví. Mã KHÔNG chứa số tiền — bạn vẫn phải nhập đúng số ở trên.',
@@ -342,6 +356,7 @@ export const vi = {
     BINANCE: 'Binance Pay (merchant)',
     BINANCE_ID: 'Binance Pay · chuyển tới ID',
     CRYPTO: 'USDT on-chain',
+    SEPAY: 'Chuyển khoản ngân hàng (SePay)',
   },
 
   admin: {
@@ -774,6 +789,9 @@ export const vi = {
       binanceKeyTitle: 'Binance Pay bật nhưng máy chủ thiếu khoá',
       binanceKeyHint:
         'Thiếu BINANCE_PAY_API_KEY nên khách không thấy phương thức này. Kiểm tra biến môi trường rồi khởi động lại máy chủ.',
+      sepayIncompleteTitle: 'SePay đang bật nhưng thiếu cấu hình',
+      sepayIncompleteHint:
+        'Khách chuyển khoản xong đơn vẫn treo. Điền đủ số tài khoản, ngân hàng, tỉ giá VND và khoá API webhook.',
       noSupportTitle: 'Chưa có kênh liên hệ hỗ trợ',
       noSupportHint:
         'Cửa hàng không gửi email tự động, nên đây là cách DUY NHẤT để khách lấy lại mật khẩu. Bỏ trống là khách mất mật khẩu sẽ mất luôn tài khoản và mọi key đã mua.',
@@ -802,12 +820,31 @@ export const vi = {
     settingBinanceIdValueHint:
       'Chỉ gồm chữ số. Mở app Binance → Pay → phần nhận tiền để xem ID của bạn.',
     errBinanceIdRequired: 'Điền Binance ID trước khi bật',
+    errSepayIncomplete:
+      'Bật SePay thì phải có số tài khoản, ngân hàng, tỉ giá VND và khoá API.',
     errAiModelRequired: 'Chuẩn OpenAI thì phải điền tên model.',
     settingCrypto: 'USDT on-chain (BEP20 / TRC20)',
     settingCryptoHint:
       'Khách chuyển USDT thẳng vào ví Binance của cửa hàng; hệ thống tự đối chiếu lịch sử nạp.',
     settingCryptoDisabledHint:
       'Máy chủ chưa cấu hình khóa API Binance nên chưa bật được thanh toán on-chain.',
+    settingSepay: 'Chuyển khoản ngân hàng (SePay)',
+    settingSepayHint:
+      'Khách chuyển khoản VND, SePay báo về bằng webhook và hệ thống tự giao hàng.',
+    settingSepayAccountLabel: 'Số tài khoản nhận',
+    settingSepayBankLabel: 'Ngân hàng',
+    settingSepayBankHint: 'Tên ngắn như Vietcombank, MBBank, Techcombank…',
+    settingSepayHolderLabel: 'Tên chủ tài khoản',
+    settingSepayHolderHint: 'Hiện trên mã QR cho khách đối chiếu. Không dấu.',
+    settingVndRateLabel: 'Tỉ giá (VND cho 1 USDT)',
+    settingVndRateHint: 'Giá bán ghi bằng USDT, nên cần tỉ giá để ra số tiền VND.',
+    settingSepayKeyLabel: 'Khoá API webhook SePay',
+    settingSepayKeyReplaceLabel: 'Thay khoá webhook mới',
+    settingSepayKeyHint: 'Lấy ở SePay → Webhooks. Để trống = giữ khoá đang dùng.',
+    settingSepaySecretLabel: 'Khoá bí mật HMAC (tuỳ chọn)',
+    settingSepaySecretHint:
+      'Có thì kiểm THÊM chữ ký từng webhook. Để trống = chỉ kiểm khoá API.',
+    settingSepayWebhookUrl: 'Địa chỉ webhook — dán vào SePay',
     settingBep20Label: 'Địa chỉ ví BEP20 (BNB Smart Chain)',
     settingBep20Placeholder: '0x…',
     settingTrc20Label: 'Địa chỉ ví TRC20 (TRON)',
@@ -825,6 +862,10 @@ export const vi = {
     binanceWithdrawWarning: 'Khóa API đang có quyền rút tiền — hãy dùng khóa chỉ-đọc.',
     binanceReadOnlyOk: 'Khóa API không có quyền rút tiền ✓',
 
+    infoSepayBank: 'Ngân hàng',
+    infoSepayAccount: 'Tài khoản nhận',
+    infoSepayAmount: 'Số tiền VND',
+    infoSepayRef: 'Mã giao dịch SePay',
     infoCryptoNetwork: 'Mạng',
     infoCryptoAddress: 'Ví nhận',
     infoCryptoAmount: 'Số tiền on-chain',

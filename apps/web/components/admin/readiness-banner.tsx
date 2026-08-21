@@ -82,6 +82,22 @@ export function ReadinessBanner({
       action: r.goSettings,
     });
   }
+  /*
+    Bật SePay mà thiếu cấu hình là trường hợp NẶNG: khách chuyển khoản xong,
+    webhook tới nhưng bị từ chối (hoặc không dựng được số tiền để đối chiếu), và
+    đơn treo tới lúc hết hạn. Trang tổng quan phải nói ra, không im lặng.
+  */
+  if (readiness.sepayIncomplete) {
+    issues.push({
+      key: 'sepay-incomplete',
+      severity: 'warning',
+      title: r.sepayIncompleteTitle,
+      hint: r.sepayIncompleteHint,
+      href: '/admin/settings',
+      action: r.goSettings,
+    });
+  }
+
   if (readiness.supportChannelsMissing) {
     // Cửa hàng không gửi email tự động, nên đây là đường DUY NHẤT để khách lấy
     // lại mật khẩu. Bỏ trống là khách mất tài khoản kèm mọi key đã mua.

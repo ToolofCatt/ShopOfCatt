@@ -46,6 +46,7 @@ function methodOfPayment(payment: PaymentInfoDto | null): PaymentMethod | null {
   if (payment.mode === 'MOCK') return 'mock';
   if (payment.mode === 'BINANCE') return 'binance_pay';
   if (payment.mode === 'BINANCE_ID') return 'binance_id';
+  if (payment.mode === 'SEPAY') return 'sepay';
   return payment.cryptoNetwork === 'TRC20' ? 'crypto_trc20' : 'crypto_bep20';
 }
 
@@ -380,7 +381,25 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
     payment?.mode === 'BINANCE_ID'
       ? (methods?.find((m) => m.method === 'binance_id')?.qr ?? null)
       : null;
-  const qrSrc = payment?.cryptoQr ?? binanceQr ?? payment?.qrcodeLink ?? null;
+
+  /*
+    Tên chủ tài khoản đọc từ CẤU HÌNH HIỆN TẠI, không chụp vào đơn như số tài
+    khoản và ngân hàng: nó chỉ để khách đối chiếu cho yên tâm, đổi tên hiển thị
+    không làm tiền đi sai chỗ. Chụp thêm một cột nữa chỉ vì chuyện hiển thị là
+    không đáng.
+  */
+  const sepayHolder =
+    payment?.mode === 'SEPAY'
+      ? (methods?.find((m) => m.method === 'sepay')?.accountHolder ?? null)
+      : null;
+  const qrSrc =
+    payment?.cryptoQr ?? binanceQr ?? payment?.sepayQrUrl ?? payment?.qrcodeLink ?? null;
+
+  /** Số VND đã chốt trong đơn, định dạng theo ngôn ngữ đang xem. */
+  const vndText =
+    payment?.vndAmount !== undefined
+      ? new Intl.NumberFormat('vi-VN').format(payment.vndAmount)
+      : '';
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-4">
@@ -563,6 +582,82 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 </p>
               </div>
             </div>
+          ) : payment?.mode === 'SEPAY' ? (
+            /*
+              Chuyển khoản ngân hàng VND. Ba thứ khách cần: SỐ TIỀN, TÀI KHOẢN,
+              và NỘI DUNG. Nội dung là mã đơn — thiếu nó thì bộ khớp không tìm ra
+              đơn nào và tiền nằm đó chờ đối soát tay.
+            */
+            <div className="space-y-3 rounded-lg border border-neutral-200 p-3.5">
+              <div className="flex items-center justify-between gap-2">
+                <p className="flex items-center gap-2 text-sm font-medium">
+                  <Landmark className="h-4 w-4 shrink-0" strokeWidth={1.75} />
+                  {t.checkout.sepayTitle}
+                </p>
+                {payment.sepayBank && <Badge variant="solid">{payment.sepayBank}</Badge>}
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                  {t.checkout.sepayAmountLabel}
+                </p>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                  <span className="break-all font-mono text-2xl font-semibold tabular-nums text-neutral-950">
+                    {vndText}
+                    <span className="ml-1.5 text-sm font-medium text-neutral-500">VND</span>
+                  </span>
+                  <CopyIconButton
+                    text={String(payment.vndAmount ?? '')}
+                    label={t.checkout.copyAmount}
+                  />
+                </div>
+                <p className="flex items-start gap-1.5 text-xs font-medium text-neutral-950">
+                  <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                  {t.checkout.sepayExactHint}
+                </p>
+                {cryptoAmountText && (
+                  <p className="text-xs text-neutral-500">
+                    {t.checkout.sepayRate(cryptoAmountText)}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                  {t.checkout.sepayAccountLabel}
+                </p>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
+                  <span className="break-all font-mono text-lg font-semibold tabular-nums text-neutral-950">
+                    {payment.sepayAccountNumber}
+                  </span>
+                  <CopyIconButton
+                    text={payment.sepayAccountNumber ?? ''}
+                    label={t.checkout.copyAccount}
+                  />
+                </div>
+                {sepayHolder && (
+                  <p className="text-xs text-neutral-500">
+                    {t.checkout.sepayHolderLabel}: {sepayHolder}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5 border-t border-neutral-100 pt-3">
+                <p className="text-xs font-medium uppercase tracking-wide text-neutral-500">
+                  {t.checkout.sepayMemoLabel}
+                </p>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-300 bg-white px-3 py-2.5">
+                  <span className="break-all font-mono text-lg font-semibold text-neutral-950">
+                    {order.code}
+                  </span>
+                  <CopyIconButton text={order.code} label={t.checkout.copyMemo} />
+                </div>
+                <p className="flex items-start gap-1.5 text-xs font-medium text-neutral-950">
+                  <TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+                  {t.checkout.sepayMemoHint}
+                </p>
+              </div>
+            </div>
           ) : payment?.mode === 'CRYPTO' ? (
             <div className="space-y-3 rounded-lg border border-neutral-200 p-3.5">
               <div className="flex items-center justify-between gap-2">
@@ -698,7 +793,11 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 <img
                   src={qrSrc}
                   alt={
-                    payment?.cryptoQr ? t.checkout.cryptoQrAlt : t.checkout.qrAlt(order.code)
+                    payment?.sepayQrUrl
+                      ? t.checkout.sepayQrAlt
+                      : payment?.cryptoQr
+                        ? t.checkout.cryptoQrAlt
+                        : t.checkout.qrAlt(order.code)
                   }
                   className="h-52 w-52"
                 />
@@ -708,8 +807,17 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 tưởng đã xong rồi gửi tròn số là tiền vào ví mà đơn không khớp
                 được, lúc đó phải nhờ admin đối soát tay.
               */}
+              {/*
+                QR của SePay khác QR ví crypto: nó đã chứa SẴN số tiền và nội
+                dung, nên câu nhắc phải khác — nói "mã không chứa số tiền" ở đây
+                là sai và làm khách tự gõ lại.
+              */}
               <p className="max-w-[13rem] text-center text-xs text-neutral-500">
-                {payment?.cryptoQr ? t.checkout.cryptoQrHint : t.checkout.scanQr}
+                {payment?.sepayQrUrl
+                  ? t.checkout.sepayQrHint
+                  : payment?.cryptoQr
+                    ? t.checkout.cryptoQrHint
+                    : t.checkout.scanQr}
               </p>
             </div>
           )}

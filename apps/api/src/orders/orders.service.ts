@@ -45,6 +45,7 @@ import { SettingsService } from '../settings/settings.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { FulfillmentService } from './fulfillment.service';
 import { toOrderDetailDto, toOrderSummaryDto } from './order.mapper';
+import { usdtToVnd } from '../payments/sepay-qr';
 import { K } from '../i18n/messages';
 
 type VariantWithProduct = ProductVariant & { product: Product };
@@ -566,6 +567,38 @@ export class OrdersService {
           cryptoAddress: binanceId,
           cryptoAmount: new Prisma.Decimal(Number(order.totalAmount).toFixed(6)),
           cryptoTxId: null,
+          ...CLEAR_PAY_SESSION,
+        },
+      });
+      return;
+    }
+
+    if (method === 'sepay') {
+      const cauHinh = await this.settings.getSepayConfig();
+      if (!cauHinh.ready) {
+        throw new BadRequestException(K.paymentSepayNotReady);
+      }
+      /*
+       * Số VND được CHỐT ở đây, không tính lại về sau.
+       *
+       * Tỉ giá do chủ shop đặt và có thể đổi bất cứ lúc nào; nếu trang thanh
+       * toán tính lại theo tỉ giá hiện tại thì khách đang xem một số, chuyển
+       * xong lại bị đối chiếu với số khác, và đơn treo.
+       */
+      const vnd = usdtToVnd(Number(order.totalAmount), cauHinh.vndPerUsdt);
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          mode: 'SEPAY',
+          cryptoNetwork: null,
+          // Chụp lại nơi nhận tiền: đổi tài khoản sau đó thì đơn đang chờ vẫn
+          // trỏ đúng chỗ đã báo khách.
+          cryptoAddress: cauHinh.accountNumber,
+          sepayBank: cauHinh.bank,
+          vndAmount: new Prisma.Decimal(vnd),
+          cryptoAmount: new Prisma.Decimal(Number(order.totalAmount).toFixed(6)),
+          cryptoTxId: null,
+          sepayRef: null,
           ...CLEAR_PAY_SESSION,
         },
       });

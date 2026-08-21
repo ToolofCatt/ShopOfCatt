@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { PaymentsController } from './payments.controller';
 import type { BinanceService } from './binance.service';
 import type { PaymentsService } from './payments.service';
+import type { SettingsService } from '../settings/settings.service';
 
 /**
  * Webhook Binance là đường DUY NHẤT bên ngoài có thể tự đánh dấu một đơn đã
@@ -33,28 +34,82 @@ function validHeaders(timestamp: number): Record<string, string> {
 }
 
 interface Stubs {
+  handleSepayWebhook: ReturnType<typeof vi.fn>;
   handleBinanceWebhook: ReturnType<typeof vi.fn>;
   verifyWebhookSignature: ReturnType<typeof vi.fn>;
   controller: PaymentsController;
 }
 
-function build(options: { mock?: boolean; signatureValid?: boolean } = {}): Stubs {
+function build(
+  options: {
+    mock?: boolean;
+    signatureValid?: boolean;
+    /** Khoá API SePay đã lưu trong cấu hình; rỗng = chưa cấu hình. */
+    sepayApiKey?: string;
+    sepayWebhookSecret?: string;
+    sepayResult?: string;
+  } = {},
+): Stubs {
   const handleBinanceWebhook = vi.fn().mockResolvedValue(undefined);
   const verifyWebhookSignature = vi
     .fn()
     .mockResolvedValue(options.signatureValid ?? true);
+  const handleSepayWebhook = vi
+    .fn()
+    .mockResolvedValue(options.sepayResult ?? 'da khop don DH-TEST');
 
   const payments = {
     isMockMode: options.mock ?? false,
     handleBinanceWebhook,
+    handleSepayWebhook,
   } as unknown as PaymentsService;
   const binance = { verifyWebhookSignature } as unknown as BinanceService;
+  const settings = {
+    getSepayConfig: vi.fn().mockResolvedValue({
+      ready: true,
+      accountNumber: '0010000000355',
+      bank: 'Vietcombank',
+      accountHolder: 'NGUYEN VAN A',
+      vndPerUsdt: 26_000,
+      apiKey: options.sepayApiKey ?? SEPAY_KEY,
+      webhookSecret: options.sepayWebhookSecret ?? '',
+    }),
+  } as unknown as SettingsService;
 
   return {
     handleBinanceWebhook,
     verifyWebhookSignature,
-    controller: new PaymentsController(payments, binance),
+    handleSepayWebhook,
+    controller: new PaymentsController(payments, binance, settings),
   };
+}
+
+const SEPAY_KEY = 'khoa-sepay-kiem-thu';
+
+/** Request giả cho webhook SePay — controller chỉ đọc headers + rawBody + body. */
+function sepayReq(options: {
+  authorization?: string;
+  signature?: string;
+  timestamp?: string;
+  body?: Record<string, unknown>;
+} = {}): RawBodyRequest<Request> {
+  const body = options.body ?? {
+    id: 777,
+    transferType: 'in',
+    transferAmount: 92_000,
+    content: 'CT DEN DH-TEST',
+    accountNumber: '0010000000355',
+  };
+  const raw = JSON.stringify(body);
+  return {
+    headers: {
+      authorization: options.authorization ?? `Apikey ${SEPAY_KEY}`,
+      ...(options.signature ? { 'x-sepay-signature': options.signature } : {}),
+      ...(options.timestamp ? { 'x-sepay-timestamp': options.timestamp } : {}),
+    },
+    rawBody: Buffer.from(raw, 'utf8'),
+    body,
+  } as unknown as RawBodyRequest<Request>;
 }
 
 /** Lấy status + body của HttpException mà controller ném ra. */
@@ -192,6 +247,79 @@ describe('POST /payments/binance/webhook', () => {
       'n'.repeat(32),
       raw,
       'c2lnbmF0dXJl',
+    );
+  });
+});
+
+/**
+ * Webhook SePay là đường thứ hai bên ngoài có thể đánh dấu đơn đã thanh toán.
+ * Khoá API là hàng rào duy nhất, nên nhánh "chưa cấu hình khoá" phải từ chối
+ * chứ không được cho qua.
+ */
+describe('PaymentsController — webhook SePay', () => {
+  it('đúng khoá thì nhận và gọi bộ xử lý', async () => {
+    const s = build();
+    await expect(s.controller.sepayWebhook(sepayReq())).resolves.toEqual({
+      success: true,
+    });
+    expect(s.handleSepayWebhook).toHaveBeenCalledTimes(1);
+  });
+
+  it('CHƯA cấu hình khoá thì trả 401, không gọi bộ xử lý', async () => {
+    const s = build({ sepayApiKey: '' });
+    const kq = await catchHttp(() => s.controller.sepayWebhook(sepayReq()));
+    expect(kq.status).toBe(401);
+    expect(s.handleSepayWebhook).not.toHaveBeenCalled();
+  });
+
+  it('sai khoá thì trả 401', async () => {
+    const s = build();
+    const kq = await catchHttp(() =>
+      s.controller.sepayWebhook(sepayReq({ authorization: 'Apikey sai-be-bet' })),
+    );
+    expect(kq.status).toBe(401);
+    expect(s.handleSepayWebhook).not.toHaveBeenCalled();
+  });
+
+  it('thiếu header Authorization thì trả 401', async () => {
+    const s = build();
+    const kq = await catchHttp(() =>
+      s.controller.sepayWebhook(sepayReq({ authorization: '' })),
+    );
+    expect(kq.status).toBe(401);
+  });
+
+  it('phản hồi lỗi KHÔNG nói rõ sai ở bước nào', async () => {
+    const s = build({ sepayApiKey: '' });
+    const kq = await catchHttp(() => s.controller.sepayWebhook(sepayReq()));
+    expect(JSON.stringify(kq.body)).not.toMatch(/chua-cau-hinh|apikey|khoa/i);
+  });
+
+  it('vẫn trả 200 khi giao dịch không khớp đơn nào — SePay khỏi gửi lại mãi', async () => {
+    const s = build({ sepayResult: 'khong khop: khong-thay-ma-don' });
+    await expect(s.controller.sepayWebhook(sepayReq())).resolves.toEqual({
+      success: true,
+    });
+  });
+
+  it('đã lưu khoá bí mật mà webhook thiếu chữ ký thì trả 401', async () => {
+    const s = build({ sepayWebhookSecret: 'bi-mat' });
+    const kq = await catchHttp(() => s.controller.sepayWebhook(sepayReq()));
+    expect(kq.status).toBe(401);
+    expect(s.handleSepayWebhook).not.toHaveBeenCalled();
+  });
+
+  it('truyền nguyên payload xuống bộ xử lý', async () => {
+    const s = build();
+    const body = {
+      id: 999,
+      transferType: 'in',
+      transferAmount: 50_000,
+      content: 'DH-ABC123',
+    };
+    await s.controller.sepayWebhook(sepayReq({ body }));
+    expect(s.handleSepayWebhook).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 999, transferAmount: 50_000 }),
     );
   });
 });

@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
+  Logger,
   Post,
   Req,
   UseGuards,
@@ -15,7 +16,10 @@ import type { OrderStatus } from '@webcatt/shared';
 import type { Request } from 'express';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { SettingsService } from '../settings/settings.service';
 import { BinanceService } from './binance.service';
+import { verifySepayWebhook } from './sepay-auth';
+import type { SepayTransaction } from './sepay-matcher';
 import { MockConfirmDto } from './dto/mock-confirm.dto';
 import {
   PaymentsService,
@@ -43,9 +47,12 @@ const WEBHOOK_MAX_AGE_MS = 5 * 60_000;
 
 @Controller('payments')
 export class PaymentsController {
+  private readonly logger = new Logger(PaymentsController.name);
+
   constructor(
     private readonly paymentsService: PaymentsService,
     private readonly binanceService: BinanceService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   @Post('binance/webhook')
@@ -101,6 +108,59 @@ export class PaymentsController {
     const payload = request.body as BinanceWebhookPayload;
     await this.paymentsService.handleBinanceWebhook(payload);
     return { returnCode: 'SUCCESS', returnMessage: null };
+  }
+
+
+  /**
+   * Webhook SePay: ngân hàng có tiền vào thì SePay đẩy giao dịch tới đây.
+   *
+   * Hai điều khác webhook Binance:
+   *
+   * 1. Xác thực bằng khoá API lưu trong CSDL (chủ shop dán ở /admin/settings),
+   *    không phải chữ ký RSA của nhà cung cấp. Chưa cấu hình khoá thì từ chối
+   *    sạch — fail-closed, vì lúc đó không có gì để đối chiếu.
+   *
+   * 2. Luôn trả 200 khi đã xác thực xong, kể cả lúc không khớp đơn nào. SePay
+   *    gửi lại webhook nếu không nhận được 200, mà một giao dịch không liên quan
+   *    thì gửi lại bao nhiêu lần cũng không khớp. Các trường hợp đó được GHI LOG
+   *    để chủ shop tra, chứ không tạo vòng thử lại vô nghĩa.
+   */
+  @Post('sepay/webhook')
+  @HttpCode(HttpStatus.OK)
+  async sepayWebhook(
+    @Req() request: RawBodyRequest<Request>,
+  ): Promise<{ success: boolean }> {
+    const cauHinh = await this.settingsService.getSepayConfig();
+    const kiem = verifySepayWebhook({
+      authorization: headerValue(request, 'authorization'),
+      signature: headerValue(request, 'x-sepay-signature'),
+      timestamp: headerValue(request, 'x-sepay-timestamp'),
+      // Bytes GỐC: SePay ký trên đó, JSON parse rồi serialize lại là khác chuỗi.
+      rawBody: request.rawBody ? request.rawBody.toString('utf8') : '',
+      apiKey: cauHinh.apiKey,
+      webhookSecret: cauHinh.webhookSecret,
+      nowMs: Date.now(),
+    });
+
+    if (!kiem.ok) {
+      /*
+       * Log ở mức warn kèm LÝ DO, nhưng phản hồi ra ngoài chỉ nói chung chung:
+       * phân biệt "sai khoá" với "chưa cấu hình khoá" là chỉ cho người gọi biết
+       * họ đang ở bước nào.
+       */
+      this.logger.warn(`Webhook SePay bị từ chối: ${kiem.reason}`);
+      throw new HttpException(
+        // Body này do máy đọc — giữ tiếng Anh, không dịch.
+        { success: false, message: 'Unauthorized' },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    const ketQua = await this.paymentsService.handleSepayWebhook(
+      request.body as SepayTransaction,
+    );
+    this.logger.log(`Webhook SePay: ${ketQua}`);
+    return { success: true };
   }
 
   /**

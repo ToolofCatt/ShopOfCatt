@@ -352,9 +352,20 @@ model Payment {
   /// Thanh toán crypto on-chain: "BEP20" | "TRC20". Null với mode BINANCE_ID.
   cryptoNetwork String?
   /// Nơi nhận tiền, chụp lại lúc tạo đơn: địa chỉ ví với CRYPTO, Binance ID với
-  /// BINANCE_ID. Chốt tại đây để chủ shop đổi ví/ID sau đó thì đơn đang chờ vẫn
-  /// trỏ đúng chỗ đã báo khách.
+  /// BINANCE_ID, số tài khoản ngân hàng với SEPAY. Chốt tại đây để chủ shop đổi
+  /// ví/ID/tài khoản sau đó thì đơn đang chờ vẫn trỏ đúng chỗ đã báo khách.
   cryptoAddress String?
+  /// SEPAY: ngân hàng nhận tiền, chụp lại cùng số tài khoản ở trên. Đổi ngân
+  /// hàng mà không chụp lại là khách chuyển vào tài khoản không còn ai theo dõi.
+  sepayBank     String?
+  /// SEPAY: số tiền VND phải chuyển, làm tròn LÊN tới đồng.
+  ///
+  /// Ngân hàng không nhận số lẻ nhỏ hơn đồng, mà đối chiếu thì phải khớp tuyệt
+  /// đối — nên số này được chốt lúc tạo đơn và không tính lại theo tỉ giá mới.
+  vndAmount     Decimal? @db.Decimal(18, 0)
+  /// SEPAY: id giao dịch SePay đã khớp.
+  /// @unique là hàng rào CHỐNG DÙNG LẠI — webhook có thể được gửi lại nhiều lần.
+  sepayRef      String?  @unique
   /// Số USDT DUY NHẤT khách phải gửi để hệ thống khớp đúng đơn (thêm phần lẻ).
   /// Dùng chung cho cả CRYPTO lẫn BINANCE_ID — giao dịch nào cũng không mang mã
   /// đơn, nên số tiền chính là mã đơn.
@@ -395,6 +406,26 @@ model StoreSetting {
   cryptoEnabled     Boolean  @default(false)
   bep20Address      String   @default("")
   trc20Address      String   @default("")
+
+  /// --- SePay: nhận chuyển khoản ngân hàng VND, xác nhận bằng webhook ---
+  sepayEnabled       Boolean @default(false)
+  /// Số tài khoản nhận tiền và ngân hàng (tên ngắn kiểu "Vietcombank", hoặc BIN).
+  sepayAccountNumber String  @default("")
+  sepayBank          String  @default("")
+  /// Tên chủ tài khoản — chỉ để hiện lên mã QR cho khách yên tâm.
+  sepayAccountHolder String  @default("")
+  /// Khoá API mà SePay gửi kèm mỗi webhook (`Authorization: Apikey ...`).
+  ///
+  /// Là BÍ MẬT: không bao giờ nằm trong AdminStoreSettingDto, không vào nhật ký.
+  /// Rỗng = webhook bị từ chối sạch, vì không có gì để đối chiếu.
+  sepayApiKey        String  @default("")
+  /// Khoá bí mật để kiểm HMAC-SHA256 (tuỳ chọn, SePay khuyến nghị).
+  /// Rỗng = chỉ kiểm khoá API. Có = kiểm THÊM chữ ký, không thay thế.
+  sepayWebhookSecret String  @default("")
+  /// Bao nhiêu VND cho 1 USDT. Giá bán ghi bằng USDT còn ngân hàng báo VND, nên
+  /// không có tỉ giá thì không dựng được số tiền để đối chiếu.
+  /// 0 = chưa cấu hình ⇒ KHÔNG chào phương thức này (fail-closed).
+  vndPerUsdt         Decimal @default(0) @db.Decimal(18, 2)
 
   /// --- Dịch tự động sang EN/ZH ---
   /// Chuẩn giao thức: "anthropic" hoặc "openai". Chọn "openai" là dùng được gần

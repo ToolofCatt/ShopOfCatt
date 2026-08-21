@@ -111,6 +111,22 @@ export class SettingsService {
         ...(qr === '' ? {} : { qr }),
       });
     }
+    /*
+     * SePay chỉ được chào khi ĐỦ CẢ BỐN: tài khoản, ngân hàng, tỉ giá và khoá
+     * API. Thiếu tỉ giá thì không dựng được số tiền để đối chiếu; thiếu khoá API
+     * thì webhook bị từ chối và đơn treo tới lúc hết hạn dù khách đã chuyển tiền.
+     */
+    if (setting.sepayEnabled && sepayReady(setting)) {
+      methods.push({
+        method: 'sepay',
+        address: setting.sepayAccountNumber.trim(),
+        bank: setting.sepayBank.trim(),
+        ...(setting.sepayAccountHolder.trim() === ''
+          ? {}
+          : { accountHolder: setting.sepayAccountHolder.trim() }),
+      });
+    }
+
     const bep20 = setting.bep20Address.trim();
     if (setting.cryptoEnabled && bep20 !== '') {
       methods.push({ method: 'crypto_bep20', address: bep20 });
@@ -149,6 +165,7 @@ export class SettingsService {
       activePaymentMethods: methods.map((entry) => entry.method),
       binancePayKeyMissing: setting.binancePayEnabled && binancePayKey === '',
       binanceIdMissing: setting.binanceIdEnabled && setting.binanceId.trim() === '',
+      sepayIncomplete: setting.sepayEnabled && !sepayReady(setting),
       // Bật nhận tiền mà không có khoá đọc thì không có gì đối soát: khách
       // chuyển xong đơn vẫn treo, chủ shop phải tự đánh dấu từng đơn.
       binanceIdNoReconcile:
@@ -207,6 +224,32 @@ export class SettingsService {
     };
   }
 
+  /**
+   * Cấu hình SePay cho luồng đặt đơn và webhook.
+   *
+   * Khoá API là bí mật nên chỉ webhook gọi hàm này; nó không đi qua DTO nào.
+   */
+  async getSepayConfig(): Promise<{
+    ready: boolean;
+    accountNumber: string;
+    bank: string;
+    accountHolder: string;
+    vndPerUsdt: number;
+    apiKey: string;
+    webhookSecret: string;
+  }> {
+    const setting = await this.getSetting();
+    return {
+      ready: setting.sepayEnabled && sepayReady(setting),
+      accountNumber: setting.sepayAccountNumber.trim(),
+      bank: setting.sepayBank.trim(),
+      accountHolder: setting.sepayAccountHolder.trim(),
+      vndPerUsdt: Number(setting.vndPerUsdt),
+      apiKey: setting.sepayApiKey.trim(),
+      webhookSecret: setting.sepayWebhookSecret.trim(),
+    };
+  }
+
   async getAdmin(): Promise<AdminStoreSettingDto> {
     return toAdminDto(await this.getSetting());
   }
@@ -245,6 +288,29 @@ export class SettingsService {
     // chuyển đi đâu được — chặn ngay tại đây thay vì để lộ ra trang thanh toán.
     if (dto.binanceIdEnabled && binanceId === '') {
       throw new BadRequestException(K.adminBinanceIdRequired);
+    }
+
+    const sepayAccountNumber = dto.sepayAccountNumber.trim();
+    const sepayBank = dto.sepayBank.trim();
+    const sepayApiKey = dto.sepayApiKey?.trim();
+    const sepayWebhookSecret = dto.sepayWebhookSecret?.trim();
+    /*
+     * Bật SePay mà thiếu cấu hình thì chặn ngay tại đây thay vì để phương thức
+     * âm thầm không xuất hiện — chủ shop sẽ tưởng đã bật xong.
+     *
+     * Khoá API xét theo giá trị SẼ CÓ sau khi lưu: không gửi trường này nghĩa là
+     * giữ khoá cũ, nên không được coi là thiếu.
+     */
+    const khoaSauKhiLuu =
+      sepayApiKey === undefined ? before0.sepayApiKey.trim() : sepayApiKey;
+    if (
+      dto.sepayEnabled &&
+      (sepayAccountNumber === '' ||
+        sepayBank === '' ||
+        dto.vndPerUsdt <= 0 ||
+        khoaSauKhiLuu === '')
+    ) {
+      throw new BadRequestException(K.adminSepayIncomplete);
     }
 
     const aiApiKey = dto.aiApiKey?.trim();
@@ -289,6 +355,17 @@ export class SettingsService {
       cryptoEnabled: dto.cryptoEnabled,
       bep20Address,
       trc20Address,
+      sepayEnabled: dto.sepayEnabled,
+      sepayAccountNumber,
+      sepayBank,
+      sepayAccountHolder: dto.sepayAccountHolder.trim(),
+      vndPerUsdt: new Prisma.Decimal(dto.vndPerUsdt.toFixed(2)),
+      // Không gửi = giữ khoá cũ, giống hệt khoá AI.
+      sepayApiKey: sepayApiKey === undefined ? before.sepayApiKey : sepayApiKey,
+      sepayWebhookSecret:
+        sepayWebhookSecret === undefined
+          ? before.sepayWebhookSecret
+          : sepayWebhookSecret,
       aiProvider: aiProviderNext,
       aiBaseUrl: aiBaseUrl === undefined ? before.aiBaseUrl : aiBaseUrl,
       aiModel: aiModelNext,
@@ -330,6 +407,15 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     cryptoEnabled: setting.cryptoEnabled,
     bep20Address: setting.bep20Address,
     trc20Address: setting.trc20Address,
+    sepayEnabled: setting.sepayEnabled,
+    sepayAccountNumber: setting.sepayAccountNumber,
+    sepayBank: setting.sepayBank,
+    sepayAccountHolder: setting.sepayAccountHolder,
+    vndPerUsdt: Number(setting.vndPerUsdt),
+    // Cố ý KHÔNG trả khoá về — chỉ "có hay không" + bốn ký tự cuối.
+    sepayApiKeySet: setting.sepayApiKey.trim() !== '',
+    sepayApiKeyHint: setting.sepayApiKey.trim().slice(-4),
+    sepayWebhookSecretSet: setting.sepayWebhookSecret.trim() !== '',
     aiProvider: normalizeProvider(setting.aiProvider),
     aiBaseUrl: setting.aiBaseUrl,
     aiModel: setting.aiModel,
@@ -350,6 +436,14 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
     cryptoEnabled: setting.cryptoEnabled,
     bep20Address: setting.bep20Address,
     trc20Address: setting.trc20Address,
+    sepayEnabled: setting.sepayEnabled,
+    sepayAccountNumber: setting.sepayAccountNumber,
+    sepayBank: setting.sepayBank,
+    sepayAccountHolder: setting.sepayAccountHolder,
+    vndPerUsdt: Number(setting.vndPerUsdt),
+    // BOOLEAN, không phải chính khoá — nhật ký lưu vĩnh viễn.
+    sepayApiKeySet: setting.sepayApiKey.trim() !== '',
+    sepayWebhookSecretSet: setting.sepayWebhookSecret.trim() !== '',
     aiProvider: setting.aiProvider,
     aiBaseUrl: setting.aiBaseUrl,
     aiModel: setting.aiModel,
@@ -370,4 +464,17 @@ function normalizeProvider(value: string): AiProvider {
   return (AI_PROVIDERS as readonly string[]).includes(value)
     ? (value as AiProvider)
     : 'anthropic';
+}
+
+/**
+ * SePay dùng được chưa. Bốn thứ đều BẮT BUỘC, và thiếu thứ nào cũng dẫn tới
+ * cùng một hậu quả: khách chuyển tiền mà đơn không bao giờ được chốt.
+ */
+function sepayReady(setting: StoreSetting): boolean {
+  return (
+    setting.sepayAccountNumber.trim() !== '' &&
+    setting.sepayBank.trim() !== '' &&
+    Number(setting.vndPerUsdt) > 0 &&
+    setting.sepayApiKey.trim() !== ''
+  );
 }

@@ -89,6 +89,7 @@ export function BuyBox({ product }: { product: ProductDto }) {
     const parts: string[] = [];
     if (methods.includes('binance_pay')) parts.push(t.product.payBinancePay);
     if (methods.includes('binance_id')) parts.push(t.product.payBinanceId);
+    if (methods.includes('sepay')) parts.push(t.product.paySepay);
     const networks = [
       methods.includes('crypto_bep20') ? 'BEP20' : null,
       methods.includes('crypto_trc20') ? 'TRC20' : null,

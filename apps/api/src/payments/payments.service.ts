@@ -8,6 +8,11 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@webcatt/shared';
 import { FulfillmentService } from '../orders/fulfillment.service';
+import { SettingsService } from '../settings/settings.service';
+import {
+  matchSepayTransaction,
+  type SepayTransaction,
+} from './sepay-matcher';
 import { PrismaService } from '../prisma/prisma.service';
 import { K } from '../i18n/messages';
 
@@ -27,7 +32,108 @@ export class PaymentsService {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
     private readonly fulfillment: FulfillmentService,
+    private readonly settings: SettingsService,
   ) {}
+
+
+  /**
+   * Xử lý một giao dịch SePay đã qua xác thực.
+   *
+   * Trả về mô tả ngắn để controller ghi log. KHÔNG ném lỗi khi không khớp: SePay
+   * sẽ gửi lại webhook nếu không nhận được 200, và một giao dịch không liên quan
+   * (khách chuyển thiếu, người khác chuyển vào tài khoản) thì gửi lại bao nhiêu
+   * lần cũng vẫn không khớp — chỉ tạo ra một vòng thử lại vô nghĩa.
+   */
+  async handleSepayWebhook(tx: SepayTransaction): Promise<string> {
+    const ref = String(tx.id);
+    if (ref === '' || ref === 'undefined') {
+      return 'bo qua: giao dich khong co id';
+    }
+
+    // Đã ghi nhận rồi thì thôi — webhook được gửi lại là chuyện bình thường.
+    const daCo = await this.prisma.payment.findUnique({
+      where: { sepayRef: ref },
+      select: { orderId: true },
+    });
+    if (daCo) {
+      return `bo qua: giao dich ${ref} da duoc ghi nhan truoc do`;
+    }
+
+    const cauHinh = await this.settings.getSepayConfig();
+
+    /*
+     * Nhận cả đơn ĐÃ HẾT HẠN, không chỉ PENDING.
+     *
+     * Chuyển khoản liên ngân hàng có lúc chậm hơn 30 phút hết hạn đơn. Tiền đã
+     * vào tài khoản rồi thì phải giao hàng — `markPaidAndDeliver` cũng nhận
+     * EXPIRED nên kho được lấy bù nếu dòng cũ đã bị nhả.
+     */
+    const dangCho = await this.prisma.payment.findMany({
+      where: {
+        mode: 'SEPAY',
+        status: 'PENDING',
+        sepayRef: null,
+        order: { status: { in: ['PENDING', 'EXPIRED'] } },
+      },
+      select: {
+        id: true,
+        orderId: true,
+        vndAmount: true,
+        order: { select: { code: true } },
+      },
+    });
+
+    const kq = matchSepayTransaction(
+      tx,
+      dangCho
+        .filter((p) => p.vndAmount !== null)
+        .map((p) => ({
+          orderId: p.orderId,
+          code: p.order.code,
+          expectedVnd: Number(p.vndAmount),
+        })),
+      { expectedAccountNumber: cauHinh.accountNumber },
+    );
+
+    if (!kq.payment) {
+      const themVao =
+        kq.reason === 'sai-so-tien' ? ` (lech ${kq.shortfall} VND)` : '';
+      this.logger.warn(
+        `SePay ${ref}: khong khop — ${kq.reason}${themVao}. ` +
+          `So tien ${tx.transferAmount} VND, noi dung "${tx.content}"`,
+      );
+      return `khong khop: ${kq.reason}`;
+    }
+
+    const payment = dangCho.find((p) => p.orderId === kq.payment?.orderId);
+    if (!payment) return 'khong khop: khong tim lai duoc don';
+
+    /*
+     * Ghi `sepayRef` TRƯỚC khi giao hàng. Ràng buộc @unique là trọng tài: hai
+     * webhook cùng lúc thì chỉ một bên ghi được, bên kia nhận P2002 và dừng —
+     * không giao hàng hai lần.
+     */
+    try {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: { sepayRef: ref, status: 'SUCCESS' },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        return `bo qua: giao dich ${ref} vua duoc mot tien trinh khac ghi nhan`;
+      }
+      throw error;
+    }
+
+    await this.fulfillment.markPaidAndDeliver({ orderId: payment.orderId });
+    this.logger.log(
+      `SePay ${ref}: da khop don ${payment.order.code} — ${tx.transferAmount} VND`,
+    );
+    return `da khop don ${payment.order.code}`;
+  }
 
   /**
    * Chế độ giả lập phải FAIL-CLOSED: chỉ bật khi biến môi trường ghi đúng "true".

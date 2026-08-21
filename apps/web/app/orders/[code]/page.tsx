@@ -76,6 +76,7 @@ function paymentMethodName(payment: PaymentInfoDto, t: Dictionary): string {
   }
   if (payment.mode === 'BINANCE') return t.product.payBinancePay;
   if (payment.mode === 'BINANCE_ID') return t.product.payBinanceId;
+  if (payment.mode === 'SEPAY') return t.product.paySepay;
   return t.product.payMock;
 }
 
@@ -103,7 +104,17 @@ function buildReceipt(
     lines.push(
       `${t.orderDetail.paymentMethodLabel}: ${paymentMethodName(order.payment, t)}`,
     );
-    if (order.payment.cryptoAmount !== undefined) {
+    /*
+      Với SePay khách chuyển VND, không phải USDT — ghi USDT vào biên nhận là
+      một con số khách không hề chuyển, và họ sẽ mang nó đi đối chiếu.
+    */
+    if (order.payment.mode === 'SEPAY' && order.payment.vndAmount !== undefined) {
+      lines.push(
+        `${t.orderDetail.paymentSentAmount}: ${new Intl.NumberFormat('vi-VN').format(
+          order.payment.vndAmount,
+        )} VND`,
+      );
+    } else if (order.payment.cryptoAmount !== undefined) {
       lines.push(
         `${t.orderDetail.paymentSentAmount}: ${formatCryptoAmount(order.payment.cryptoAmount)} USDT`,
       );
@@ -408,7 +419,16 @@ function OrderDetailContent({ code }: { code: string }) {
                   {paymentMethodName(order.payment, t)}
                 </dd>
               </div>
-              {order.payment.cryptoAmount !== undefined && (
+              {order.payment.mode === 'SEPAY' &&
+              order.payment.vndAmount !== undefined ? (
+                <div>
+                  <dt className="text-neutral-500">{t.orderDetail.paymentSentAmount}</dt>
+                  <dd className="mt-0.5 font-medium tabular-nums">
+                    {new Intl.NumberFormat('vi-VN').format(order.payment.vndAmount)} VND
+                  </dd>
+                </div>
+              ) : null}
+              {order.payment.mode !== 'SEPAY' && order.payment.cryptoAmount !== undefined && (
                 <div>
                   <dt className="text-neutral-500">{t.orderDetail.paymentSentAmount}</dt>
                   <dd className="mt-0.5 font-medium tabular-nums">

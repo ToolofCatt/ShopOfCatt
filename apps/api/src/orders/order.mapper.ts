@@ -7,6 +7,7 @@ import type {
   PaymentInfoDto,
   PaymentMode,
 } from '@webcatt/shared';
+import { sepayQrUrl } from '../payments/sepay-qr';
 import { cryptoAddressQr } from './crypto-qr';
 
 export type OrderWithRelations = Order & {
@@ -31,7 +32,9 @@ export function toPaymentInfoDto(
         ? 'BINANCE_ID'
         : payment.mode === 'CRYPTO'
           ? 'CRYPTO'
-          : 'MOCK';
+          : payment.mode === 'SEPAY'
+            ? 'SEPAY'
+            : 'MOCK';
   const dto: PaymentInfoDto = {
     mode,
     status: payment.status,
@@ -47,6 +50,31 @@ export function toPaymentInfoDto(
       dto.cryptoAmount = Number(payment.cryptoAmount);
     }
     if (payment.cryptoTxId) dto.cryptoTxId = payment.cryptoTxId;
+  } else if (mode === 'SEPAY') {
+    if (payment.cryptoAddress) dto.sepayAccountNumber = payment.cryptoAddress;
+    if (payment.sepayBank) dto.sepayBank = payment.sepayBank;
+    if (payment.vndAmount !== null) dto.vndAmount = Number(payment.vndAmount);
+    // Số USDT gốc vẫn trả về để khách đối chiếu với giá niêm yết.
+    if (payment.cryptoAmount !== null) {
+      dto.cryptoAmount = Number(payment.cryptoAmount);
+    }
+    if (payment.sepayRef) dto.sepayRef = payment.sepayRef;
+    /*
+     * QR dựng từ tài khoản + ngân hàng ĐÃ CHỐT TRONG ĐƠN, không phải cấu hình
+     * hiện tại — chủ shop đổi tài khoản sau đó thì đơn đang chờ vẫn trỏ đúng
+     * chỗ đã báo khách.
+     *
+     * NỘI DUNG chuyển khoản là mã đơn, và nó nằm sẵn trong QR: đây là chỗ khách
+     * hay gõ sai nhất, mà gõ sai thì bộ khớp không tìm ra đơn.
+     */
+    if (payment.cryptoAddress && payment.sepayBank && payment.vndAmount !== null) {
+      dto.sepayQrUrl = sepayQrUrl({
+        accountNumber: payment.cryptoAddress,
+        bank: payment.sepayBank,
+        amountVnd: Number(payment.vndAmount),
+        description: orderCode,
+      });
+    }
   } else if (mode === 'CRYPTO') {
     if (payment.cryptoNetwork) {
       dto.cryptoNetwork = payment.cryptoNetwork as CryptoNetwork;

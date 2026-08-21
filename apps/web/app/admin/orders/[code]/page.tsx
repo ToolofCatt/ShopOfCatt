@@ -379,7 +379,38 @@ export default function AdminOrderDetailPage({
                   value={payment.merchantTradeNo ?? t.common.dash}
                   mono
                 />
-                {payment.mode === 'CRYPTO' ? (
+                {payment.mode === 'SEPAY' ? (
+                  /*
+                    Chủ shop cần đúng ba thứ này để tra một đơn SePay trên bảng
+                    điều khiển của ngân hàng: số tiền VND, tài khoản nhận, và id
+                    giao dịch đã khớp.
+                  */
+                  <>
+                    <InfoRow
+                      label={t.admin.infoSepayBank}
+                      value={payment.sepayBank ?? t.common.dash}
+                    />
+                    <InfoRow
+                      label={t.admin.infoSepayAccount}
+                      value={payment.sepayAccountNumber ?? t.common.dash}
+                      mono
+                    />
+                    <InfoRow
+                      label={t.admin.infoSepayAmount}
+                      value={
+                        payment.vndAmount !== undefined
+                          ? `${new Intl.NumberFormat('vi-VN').format(payment.vndAmount)} VND`
+                          : t.common.dash
+                      }
+                      mono
+                    />
+                    <InfoRow
+                      label={t.admin.infoSepayRef}
+                      value={payment.sepayRef ?? t.common.dash}
+                      mono
+                    />
+                  </>
+                ) : payment.mode === 'CRYPTO' ? (
                   <>
                     <InfoRow
                       label={t.admin.infoCryptoNetwork}

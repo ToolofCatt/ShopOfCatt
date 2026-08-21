@@ -84,6 +84,7 @@ export const K = {
   // --- payments: chọn phương thức & crypto on-chain ---
   paymentMethodInvalid: 'payment.method_invalid',
   paymentMethodUnavailable: 'payment.method_unavailable',
+  paymentSepayNotReady: 'payment.sepay_not_ready',
   paymentNoMethodConfigured: 'payment.no_method_configured',
   paymentCryptoAmountUnavailable: 'payment.crypto_amount_unavailable',
   paymentTxIdInvalid: 'payment.txid_invalid',
@@ -174,6 +175,12 @@ export const K = {
   adminSettingsFlagInvalid: 'admin.settings_flag_invalid',
   adminBinanceIdInvalid: 'admin.binance_id_invalid',
   adminBinanceIdRequired: 'admin.binance_id_required',
+  adminSepayAccountInvalid: 'admin.sepay_account_invalid',
+  adminSepayBankInvalid: 'admin.sepay_bank_invalid',
+  adminSepayHolderInvalid: 'admin.sepay_holder_invalid',
+  adminSepayApiKeyInvalid: 'admin.sepay_api_key_invalid',
+  adminSepayIncomplete: 'admin.sepay_incomplete',
+  adminVndRateInvalid: 'admin.vnd_rate_invalid',
   adminAiKeyInvalid: 'admin.ai_key_invalid',
   adminAiProviderInvalid: 'admin.ai_provider_invalid',
   adminAiBaseUrlInvalid: 'admin.ai_base_url_invalid',
@@ -400,6 +407,11 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Cửa hàng chưa bật phương thức thanh toán nào — vui lòng liên hệ quản trị viên',
     en: 'The store has no payment method enabled — please contact the administrator',
     zh: '店铺尚未启用任何付款方式 — 请联系管理员',
+  },
+  [K.paymentSepayNotReady]: {
+    vi: 'Chuyển khoản ngân hàng đang tạm không dùng được. Vui lòng chọn phương thức khác.',
+    en: 'Bank transfer is temporarily unavailable. Please choose another method.',
+    zh: '银行转账暂时不可用，请选择其他方式。',
   },
   [K.paymentMethodUnavailable]: {
     vi: 'Phương thức thanh toán này hiện không khả dụng',
@@ -800,6 +812,36 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Dùng nhà cung cấp theo chuẩn OpenAI thì phải điền tên model',
     en: 'A model name is required when using an OpenAI-compatible provider',
     zh: '使用 OpenAI 兼容服务商时必须填写模型名称',
+  },
+  [K.adminSepayAccountInvalid]: {
+    vi: 'Số tài khoản chỉ gồm chữ số',
+    en: 'The account number must contain digits only',
+    zh: '账号只能包含数字',
+  },
+  [K.adminSepayBankInvalid]: {
+    vi: 'Tên ngân hàng không hợp lệ',
+    en: 'Invalid bank name',
+    zh: '银行名称无效',
+  },
+  [K.adminSepayHolderInvalid]: {
+    vi: 'Tên chủ tài khoản không hợp lệ',
+    en: 'Invalid account holder name',
+    zh: '账户持有人姓名无效',
+  },
+  [K.adminSepayApiKeyInvalid]: {
+    vi: 'Khoá SePay không hợp lệ',
+    en: 'Invalid SePay key',
+    zh: 'SePay 密钥无效',
+  },
+  [K.adminSepayIncomplete]: {
+    vi: 'Bật SePay thì phải có số tài khoản, ngân hàng, tỉ giá VND và khoá API',
+    en: 'Enabling SePay requires an account number, bank, VND rate and API key',
+    zh: '启用 SePay 需要填写账号、银行、VND 汇率和 API 密钥',
+  },
+  [K.adminVndRateInvalid]: {
+    vi: 'Tỉ giá VND phải là số dương, tối đa 2 chữ số thập phân',
+    en: 'The VND rate must be a positive number with at most 2 decimals',
+    zh: 'VND 汇率必须为正数，最多两位小数',
   },
   [K.adminBinanceIdRequired]: {
     vi: 'Bật nhận tiền qua Binance ID thì phải điền Binance ID',

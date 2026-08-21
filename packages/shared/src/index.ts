@@ -14,7 +14,7 @@ export type StockStatus = 'AVAILABLE' | 'RESERVED' | 'SOLD' | 'WITHDRAWN';
  * `BINANCE_ID` = khách chuyển USDT thẳng tới Binance ID cá nhân của chủ shop —
  * chỉ cần khoá đọc là đối soát được, khác hẳn merchant.
  */
-export type PaymentMode = 'MOCK' | 'BINANCE' | 'BINANCE_ID' | 'CRYPTO';
+export type PaymentMode = 'MOCK' | 'BINANCE' | 'BINANCE_ID' | 'CRYPTO' | 'SEPAY';
 
 /** Phương thức thanh toán khách chọn ở trang thanh toán. */
 export type PaymentMethod =
@@ -22,7 +22,9 @@ export type PaymentMethod =
   | 'binance_pay'
   | 'binance_id'
   | 'crypto_bep20'
-  | 'crypto_trc20';
+  | 'crypto_trc20'
+  /** Chuyển khoản ngân hàng VND, SePay báo về bằng webhook. */
+  | 'sepay';
 
 /** Mạng blockchain cho USDT on-chain. */
 export type CryptoNetwork = 'BEP20' | 'TRC20';
@@ -45,6 +47,9 @@ export interface PaymentMethodDto {
    * là phình cả CSDL lẫn 14 bản sao lưu, mà nội dung thì giống nhau mọi đơn.
    */
   qr?: string;
+  /** sepay: ngân hàng và tên chủ tài khoản, để hiện ở trang sản phẩm. */
+  bank?: string;
+  accountHolder?: string;
 }
 
 // ---------- Auth ----------
@@ -264,6 +269,20 @@ export interface AdminStoreSettingDto {
   cryptoEnabled: boolean;
   bep20Address: string;
   trc20Address: string;
+  /** SePay — nhận chuyển khoản ngân hàng VND. */
+  sepayEnabled: boolean;
+  sepayAccountNumber: string;
+  sepayBank: string;
+  sepayAccountHolder: string;
+  /** Bao nhiêu VND cho 1 USDT; 0 = chưa cấu hình. */
+  vndPerUsdt: number;
+  /**
+   * Đã lưu khoá API webhook của SePay hay chưa — KHÔNG BAO GIỜ trả về chính khoá.
+   */
+  sepayApiKeySet: boolean;
+  sepayApiKeyHint: string;
+  /** Đã lưu khoá bí mật HMAC (tuỳ chọn) hay chưa. */
+  sepayWebhookSecretSet: boolean;
   /** Chuẩn giao thức của dịch vụ AI dùng để dịch. */
   aiProvider: AiProvider;
   /** Địa chỉ gốc API; rỗng = dùng địa chỉ mặc định của nhà cung cấp. */
@@ -416,6 +435,20 @@ export interface PaymentInfoDto {
   cryptoQr?: string;
   /** TxID đã khớp (khi đã thanh toán). */
   cryptoTxId?: string;
+  /**
+   * SEPAY mode: nơi nhận tiền, CHỤP LẠI lúc tạo đơn.
+   *
+   * Không có tên chủ tài khoản ở đây: nó chỉ để hiển thị nên đọc từ
+   * `PaymentMethodDto.accountHolder` (cấu hình hiện tại), khỏi chụp thêm một cột.
+   */
+  sepayAccountNumber?: string;
+  sepayBank?: string;
+  /** Số VND phải chuyển, đã chốt lúc tạo đơn. */
+  vndAmount?: number;
+  /** Địa chỉ ảnh VietQR do SePay dựng — đã kèm số tiền và nội dung chuyển. */
+  sepayQrUrl?: string;
+  /** Id giao dịch SePay đã khớp (khi đã thanh toán). */
+  sepayRef?: string;
   /** MOCK mode: relative web path to the fake gateway, e.g. /mock-pay/DH-XXXXXX */
   mockPayUrl?: string;
   /** BINANCE mode fields */
@@ -517,6 +550,13 @@ export interface StoreReadinessDto {
   binancePayKeyMissing: boolean;
   /** Bật chuyển tới Binance ID nhưng chưa điền ID. */
   binanceIdMissing: boolean;
+  /**
+   * Bật SePay nhưng thiếu một trong: số tài khoản, ngân hàng, tỉ giá, khoá API.
+   *
+   * Thiếu khoá API là nặng nhất: khách chuyển tiền xong, webhook tới nhưng bị
+   * từ chối vì không có gì để đối chiếu, và đơn treo tới lúc hết hạn.
+   */
+  sepayIncomplete: boolean;
   /**
    * Đã bật chuyển tới Binance ID nhưng máy chủ thiếu BINANCE_API_KEY.
    *

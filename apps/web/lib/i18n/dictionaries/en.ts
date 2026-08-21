@@ -63,6 +63,7 @@ export const en: Dictionary = {
     buyNow: 'Buy now',
     payBinancePay: 'Binance Pay',
     payBinanceId: 'Binance Pay (send to ID)',
+    paySepay: 'Bank transfer',
     payCrypto: (networks: string) => `USDT on-chain (${networks})`,
     payMock: 'Sandbox mode',
     noPaymentMethod: 'The store is not accepting payments right now. Please check back later.',
@@ -112,6 +113,7 @@ export const en: Dictionary = {
       binance_id: 'Binance Pay · send to ID',
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
+      sepay: 'Bank transfer',
     },
 
     cryptoTitle: 'USDT on-chain transfer',
@@ -126,6 +128,19 @@ export const en: Dictionary = {
     copyMemo: 'Copy order code',
     copyBinanceId: 'Copy Binance ID',
     cryptoExactWarning: 'Send EXACTLY this amount — the system identifies your order by it.',
+    sepayTitle: 'Bank transfer',
+    sepayAmountLabel: 'Amount to transfer',
+    sepayBankLabel: 'Bank',
+    sepayAccountLabel: 'Account number',
+    sepayHolderLabel: 'Account holder',
+    sepayMemoLabel: 'Transfer NOTE (required)',
+    sepayMemoHint: 'Without this note we cannot tell which order the money is for.',
+    sepayExactHint:
+      'Transfer this exact amount. Anything more or less needs a manual check.',
+    sepayQrAlt: 'Bank transfer QR code',
+    sepayQrHint: 'Scan with your banking app — amount and note are filled in.',
+    sepayRate: (usdt: string) => `Equivalent to ${usdt} USDT at the shop rate.`,
+    copyAccount: 'Copy account number',
     cryptoQrAlt: 'QR code of the receiving wallet address',
     cryptoQrHint:
       'Scan to get the wallet address. The code does NOT carry the amount — you still have to enter the exact amount above.',
@@ -332,6 +347,7 @@ export const en: Dictionary = {
     BINANCE: 'Binance Pay (merchant)',
     BINANCE_ID: 'Binance Pay · send to ID',
     CRYPTO: 'USDT on-chain',
+    SEPAY: 'Bank transfer (SePay)',
   },
 
   admin: {
@@ -759,6 +775,9 @@ export const en: Dictionary = {
       binanceKeyTitle: 'Binance Pay is on but the server key is missing',
       binanceKeyHint:
         'BINANCE_PAY_API_KEY is not set, so customers never see this method. Check the environment variable and restart the server.',
+      sepayIncompleteTitle: 'SePay is on but not fully configured',
+      sepayIncompleteHint:
+        'Orders hang even after customers pay. Fill in the account number, bank, VND rate and webhook API key.',
       noSupportTitle: 'No support contact set',
       noSupportHint:
         'The store sends no automatic email, so this is the ONLY way a customer can recover a password. Leave it empty and a locked-out customer loses their account and every key they bought.',
@@ -787,12 +806,31 @@ export const en: Dictionary = {
     settingBinanceIdValueHint:
       'Digits only. Open the Binance app → Pay → receive section to find your ID.',
     errBinanceIdRequired: 'Enter a Binance ID before enabling this',
+    errSepayIncomplete:
+      'Enabling SePay requires an account number, bank, VND rate and API key.',
     errAiModelRequired: 'A model name is required for OpenAI-compatible providers.',
     settingCrypto: 'USDT on-chain (BEP20 / TRC20)',
     settingCryptoHint:
       "Customers send USDT straight to the store's Binance wallet; deposits are matched automatically.",
     settingCryptoDisabledHint:
       'The server has no Binance API key configured, so on-chain payments cannot be enabled.',
+    settingSepay: 'Bank transfer (SePay)',
+    settingSepayHint:
+      'Customers transfer VND; SePay reports it by webhook and delivery is automatic.',
+    settingSepayAccountLabel: 'Receiving account number',
+    settingSepayBankLabel: 'Bank',
+    settingSepayBankHint: 'Short name such as Vietcombank, MBBank, Techcombank…',
+    settingSepayHolderLabel: 'Account holder name',
+    settingSepayHolderHint: 'Shown on the QR code. No diacritics.',
+    settingVndRateLabel: 'Rate (VND per 1 USDT)',
+    settingVndRateHint: 'Prices are in USDT, so a rate is needed to get the VND amount.',
+    settingSepayKeyLabel: 'SePay webhook API key',
+    settingSepayKeyReplaceLabel: 'Replace webhook key',
+    settingSepayKeyHint: 'From SePay → Webhooks. Leave empty to keep the current key.',
+    settingSepaySecretLabel: 'HMAC secret (optional)',
+    settingSepaySecretHint:
+      'When set, each webhook signature is also verified. Empty = API key only.',
+    settingSepayWebhookUrl: 'Webhook URL — paste this into SePay',
     settingBep20Label: 'BEP20 address (BNB Smart Chain)',
     settingBep20Placeholder: '0x…',
     settingTrc20Label: 'TRC20 address (TRON)',
@@ -810,6 +848,10 @@ export const en: Dictionary = {
     binanceWithdrawWarning: 'This API key can withdraw funds — switch to a read-only key.',
     binanceReadOnlyOk: 'API key cannot withdraw funds ✓',
 
+    infoSepayBank: 'Bank',
+    infoSepayAccount: 'Receiving account',
+    infoSepayAmount: 'VND amount',
+    infoSepayRef: 'SePay transaction id',
     infoCryptoNetwork: 'Network',
     infoCryptoAddress: 'Deposit address',
     infoCryptoAmount: 'On-chain amount',

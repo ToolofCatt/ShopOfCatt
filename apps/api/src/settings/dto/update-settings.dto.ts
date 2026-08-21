@@ -9,6 +9,7 @@ import {
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
   Min,
   ValidateNested,
@@ -107,6 +108,51 @@ export class UpdateSettingsDto {
 
   @IsBoolean({ message: K.adminSettingsFlagInvalid })
   cryptoEnabled: boolean;
+
+  /** SePay — nhận chuyển khoản ngân hàng VND. */
+  @IsBoolean({ message: K.adminSettingsFlagInvalid })
+  sepayEnabled: boolean;
+
+  /** Số tài khoản: chữ số, có thể có gạch ngang ở một số ngân hàng. */
+  @IsString({ message: K.adminSepayAccountInvalid })
+  @Matches(/^[0-9-]*$/, { message: K.adminSepayAccountInvalid })
+  @MaxLength(32, { message: K.adminSepayAccountInvalid })
+  sepayAccountNumber: string;
+
+  /** Tên ngắn ngân hàng ("Vietcombank") hoặc mã BIN. */
+  @IsString({ message: K.adminSepayBankInvalid })
+  @MaxLength(50, { message: K.adminSepayBankInvalid })
+  sepayBank: string;
+
+  @IsString({ message: K.adminSepayHolderInvalid })
+  @MaxLength(100, { message: K.adminSepayHolderInvalid })
+  sepayAccountHolder: string;
+
+  /**
+   * Bao nhiêu VND cho 1 USDT.
+   *
+   * `Max` không phải để phòng chủ shop gõ số lớn thật, mà để một lần gõ lệch tay
+   * (thêm ba số 0) không dựng ra số tiền vô nghĩa rồi báo cho khách.
+   */
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: K.adminVndRateInvalid })
+  @Min(0, { message: K.adminVndRateInvalid })
+  @Max(10_000_000, { message: K.adminVndRateInvalid })
+  vndPerUsdt: number;
+
+  /**
+   * Khoá API webhook SePay. Ba trạng thái như khoá AI: không gửi = giữ nguyên,
+   * gửi rỗng = xoá, gửi chuỗi = đặt mới.
+   */
+  @IsOptional()
+  @IsString({ message: K.adminSepayApiKeyInvalid })
+  @MaxLength(200, { message: K.adminSepayApiKeyInvalid })
+  sepayApiKey?: string;
+
+  /** Khoá bí mật HMAC (tuỳ chọn). Cùng ba trạng thái như trên. */
+  @IsOptional()
+  @IsString({ message: K.adminSepayApiKeyInvalid })
+  @MaxLength(200, { message: K.adminSepayApiKeyInvalid })
+  sepayWebhookSecret?: string;
 
   @IsString({ message: K.adminSettingsAddressInvalid })
   bep20Address: string;
