@@ -434,9 +434,6 @@ model StoreSetting {
   /// Bao nhiêu CNY cho 1 USDT — chỉ để HIỆN GIÁ cho khách chọn tiếng Trung,
   /// không dùng để thu tiền. 0 = không quy đổi, hiện USDT như cũ.
   cnyPerUsdt         Decimal  @default(0) @db.Decimal(18, 4)
-  /// Tiền hiện cho khách: "auto" = theo ngôn ngữ (vi→₫, en→$, zh→¥), hoặc ép
-  /// cứng một đơn vị cho mọi ngôn ngữ. "USDT" = tắt quy đổi.
-  displayCurrency    String   @default("auto")
   /// Tự lấy tỉ giá mỗi ngày từ nguồn công khai.
   rateAuto           Boolean  @default(false)
   /// Phần trăm cộng thêm lên tỉ giá thị trường.

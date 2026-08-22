@@ -5,7 +5,6 @@ import {
   convertFromUsdt,
   formatMoney,
   formatUsdt,
-  type DisplayCurrency,
   type StoreRatesDto,
 } from '@webcatt/shared';
 import { CURRENCY_BY_LOCALE } from '@/lib/i18n/config';
@@ -64,18 +63,14 @@ export function useRates(): StoreRatesDto | null {
 export function usePrices(): PriceFormatter {
   const { locale } = useI18n();
   const rates = useContext(RatesContext);
-  /*
-    Chủ shop chọn ép cứng một đơn vị thì dùng đúng đơn vị đó cho MỌI ngôn ngữ —
-    dùng khi cửa hàng muốn niêm yết một giá duy nhất. `auto` mới suy theo ngôn ngữ.
-  */
-  const mode = rates?.displayCurrency ?? 'auto';
-  const currency: DisplayCurrency = mode === 'auto' ? CURRENCY_BY_LOCALE[locale] : mode;
+  // Đơn vị suy THẲNG từ ngôn ngữ khách đang xem, không có cấu hình nào chen vào.
+  const currency = CURRENCY_BY_LOCALE[locale];
 
   return useMemo(() => {
     const price = (usdt: number): DisplayPrice => {
       // `null` = chưa có tỉ giá cho đơn vị này ⇒ lùi về USDT, không bịa số.
       const converted = convertFromUsdt(usdt, currency, rates);
-      if (converted === null || currency === 'USDT') {
+      if (converted === null) {
         return { primary: formatUsdt(usdt) };
       }
       return { primary: formatMoney(converted, currency) };

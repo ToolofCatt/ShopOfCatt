@@ -5,14 +5,12 @@ import { Plus, PlugZap, ServerCrash, ShieldAlert, Trash2 } from 'lucide-react';
 import {
   AI_DEFAULT_MODEL,
   AI_PROVIDERS,
-  DISPLAY_CURRENCY_MODES,
   SUPPORT_CHANNELS_MAX,
   SUPPORT_FIELD_MAX_LENGTH,
   SUPPORT_NOTE_MAX_LENGTH,
   type AdminStoreSettingDto,
   type AiProvider,
   type BinanceStatusDto,
-  type DisplayCurrencyMode,
   type SupportChannelDto,
 } from '@webcatt/shared';
 import { Tabs } from '@/components/admin/tabs';
@@ -67,7 +65,6 @@ export default function AdminSettingsPage() {
   const [rateAuto, setRateAuto] = useState(false);
   const [rateMarkupPercent, setRateMarkupPercent] = useState('0');
   const [rateHour, setRateHour] = useState('7');
-  const [displayCurrency, setDisplayCurrency] = useState<DisplayCurrencyMode>('auto');
   const [refreshingRate, setRefreshingRate] = useState(false);
   const [rateMessage, setRateMessage] = useState<string | null>(null);
   /* Khoá webhook: máy chủ không trả về, nên ô này luôn rỗng khi mở trang. */
@@ -117,7 +114,6 @@ export default function AdminSettingsPage() {
     setRateAuto(next.rateAuto);
     setRateMarkupPercent(String(next.rateMarkupPercent));
     setRateHour(String(next.rateHour));
-    setDisplayCurrency(next.displayCurrency);
     setSepayApiKey('');
     setSepayWebhookSecret('');
     setCryptoEnabled(next.cryptoEnabled);
@@ -306,7 +302,6 @@ export default function AdminSettingsPage() {
           rateAuto,
           rateMarkupPercent: Number(rateMarkupPercent) || 0,
           rateHour: Number(rateHour) || 0,
-          displayCurrency,
           // Rỗng = giữ khoá cũ; máy chủ phân biệt bằng việc KHÔNG gửi trường.
           ...(sepayApiKey.trim() === '' ? {} : { sepayApiKey: sepayApiKey.trim() }),
           ...(sepayWebhookSecret.trim() === ''
@@ -655,26 +650,6 @@ export default function AdminSettingsPage() {
                 </h2>
                 <p className="mt-0.5 text-sm text-neutral-500">{t.admin.rateHint}</p>
               </div>
-
-              {/*
-                Tiền hiện cho khách. "Theo ngôn ngữ" là mặc định; ép cứng một đơn
-                vị dùng khi cửa hàng muốn niêm yết một giá duy nhất cho mọi khách.
-              */}
-              <Field label={t.admin.displayCurrencyLabel} htmlFor="setting-display-currency">
-                <div id="setting-display-currency">
-                  <Tabs
-                    items={DISPLAY_CURRENCY_MODES.map((value) => ({
-                      value,
-                      label: t.admin.displayCurrencyModes[value],
-                    }))}
-                    value={displayCurrency}
-                    onChange={(value) => {
-                      setDisplayCurrency(value);
-                      markDirty();
-                    }}
-                  />
-                </div>
-              </Field>
 
               <ToggleRow
                 id="setting-rate-auto"
