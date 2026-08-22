@@ -2,7 +2,12 @@
 
 import { useId, useState } from 'react';
 import { Layers, Pencil, Plus, Trash2 } from 'lucide-react';
-import { formatUsdt, type ProductDto, type ProductVariantDto } from '@webcatt/shared';
+import {
+  formatMoney,
+  type DisplayCurrency,
+  type ProductDto,
+  type ProductVariantDto,
+} from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
@@ -18,6 +23,8 @@ interface VariantPayload {
   price: number;
   sortOrder: number;
   active: boolean;
+  /** Đơn vị neo của `price`. */
+  priceCurrency: DisplayCurrency;
 }
 
 interface VariantFieldErrors {
@@ -39,7 +46,14 @@ function VariantForm({ initial, submitLabel, onSubmit, onCancel }: VariantFormPr
   const fieldId = useId();
 
   const [name, setName] = useState(initial?.name ?? '');
-  const [price, setPrice] = useState(initial ? String(initial.price) : '');
+  /*
+    Số ĐÃ GÕ + đơn vị neo, không phải USDT: `initial.price` là số USDT dẫn xuất,
+    hiện nó lên là chủ shop mở form sửa liền thấy 3.852522 thay vì 100.000 ₫.
+  */
+  const [price, setPrice] = useState(initial ? String(initial.priceAmount) : '');
+  const [priceCurrency, setPriceCurrency] = useState<DisplayCurrency>(
+    initial?.priceCurrency ?? 'USDT',
+  );
   const [sortOrder, setSortOrder] = useState(String(initial?.sortOrder ?? 0));
   const [active, setActive] = useState(initial?.active ?? true);
 
@@ -69,6 +83,7 @@ function VariantForm({ initial, submitLabel, onSubmit, onCancel }: VariantFormPr
       await onSubmit({
         name: trimmedName,
         price: priceNumber,
+        priceCurrency,
         sortOrder: sortOrderNumber,
         active,
       });
@@ -98,7 +113,11 @@ function VariantForm({ initial, submitLabel, onSubmit, onCancel }: VariantFormPr
           <PriceInput
             id={`${fieldId}-price`}
             value={price}
-            onChange={setPrice}
+            currency={priceCurrency}
+            onChange={(amount, unit) => {
+              setPrice(amount);
+              setPriceCurrency(unit);
+            }}
             invalid={Boolean(fieldErrors.price)}
             placeholder="9.99"
           />
@@ -277,7 +296,9 @@ export function VariantManager({ product, onChanged }: VariantManagerProps) {
                     </p>
                   </div>
                   <p className="whitespace-nowrap font-semibold tabular-nums text-neutral-950">
-                    {formatUsdt(variant.price)}
+                    {/* Số ĐÃ GÕ kèm đơn vị neo — USDT dẫn xuất tự đổi theo
+                        tỉ giá nên hiện nó lên là chủ shop tưởng giá bị sửa. */}
+                    {formatMoney(variant.priceAmount, variant.priceCurrency)}
                   </p>
                   <div className="flex items-center gap-1">
                     <button

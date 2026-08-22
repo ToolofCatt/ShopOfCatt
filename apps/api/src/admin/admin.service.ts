@@ -6,13 +6,18 @@ import {
 } from '@nestjs/common';
 import { Prisma, type User } from '@prisma/client';
 import {
+  DISPLAY_CURRENCIES,
   LOW_STOCK_THRESHOLD,
   PRODUCT_IMAGE_MAX_COUNT,
+  USDT_DECIMALS,
+  floorUsdt,
+  toUsdtFromCurrency,
   type AddStockResponse,
   type AdminOrderDetailDto,
   type AdminStatsDto,
   type OrderSummaryDto,
   type Paginated,
+  type DisplayCurrency,
   type ProductDto,
   type ProductVariantDto,
   type RevenuePointDto,
@@ -345,6 +350,10 @@ export class AdminService {
       throw new ConflictException(K.adminSlugExists);
     }
 
+    // Chốt giá TRƯỚC khi tạo: neo theo ₫ mà chưa có tỉ giá thì phải báo lỗi rõ
+    // ràng, chứ không tạo ra một sản phẩm giá 0 — ai cũng lấy hàng miễn phí.
+    const gia = await this.chotGia(dto.price, dto.priceCurrency);
+
     const product = await this.prisma.product.create({
       data: {
         slug,
@@ -362,7 +371,7 @@ export class AdminService {
         variants: {
           create: {
             name: DEFAULT_VARIANT_NAME,
-            price: new Prisma.Decimal(dto.price),
+            ...gia,
             sortOrder: 0,
             active: true,
           },
@@ -619,7 +628,7 @@ export class AdminService {
       data: {
         productId,
         name: dto.name.trim(),
-        price: new Prisma.Decimal(dto.price),
+        ...(await this.chotGia(dto.price, dto.priceCurrency)),
         sortOrder: dto.sortOrder ?? 0,
         active: dto.active ?? true,
       },
@@ -639,6 +648,36 @@ export class AdminService {
     });
   }
 
+  /**
+   * Chốt giá của một loại hàng: lưu con số chủ shop GÕ VÀO cùng đơn vị của nó,
+   * và suy ra số USDT dùng cho mọi phép tính tiền.
+   *
+   * Neo bằng ₫ / ¥ mà cửa hàng chưa có tỉ giá thì THROW, không âm thầm lưu 0 —
+   * một sản phẩm giá 0 là ai cũng lấy hàng miễn phí.
+   */
+  private async chotGia(
+    soDaGo: number,
+    donVi: DisplayCurrency | undefined,
+  ): Promise<{
+    price: Prisma.Decimal;
+    priceCurrency: DisplayCurrency;
+    priceAmount: Prisma.Decimal;
+  }> {
+    const neo: DisplayCurrency = donVi ?? 'USDT';
+    const rates = await this.settings.getPublicRates();
+    const usdt = toUsdtFromCurrency(soDaGo, neo, rates);
+    if (usdt === null) {
+      throw new BadRequestException(K.adminPriceAnchorNoRate);
+    }
+    return {
+      // Làm tròn XUỐNG: số ₫ hiển thị dùng Math.ceil, nên làm tròn lên ở đây là
+      // khách thấy 100.001 ₫ thay vì 100.000.
+      price: new Prisma.Decimal(floorUsdt(usdt).toFixed(USDT_DECIMALS)),
+      priceCurrency: neo,
+      priceAmount: new Prisma.Decimal(soDaGo.toFixed(2)),
+    };
+  }
+
   async updateVariant(
     actor: User,
     id: string,
@@ -654,7 +693,20 @@ export class AdminService {
 
     const data: Prisma.ProductVariantUpdateInput = {};
     if (dto.name !== undefined) data.name = dto.name.trim();
-    if (dto.price !== undefined) data.price = new Prisma.Decimal(dto.price);
+    if (dto.price !== undefined) {
+      /*
+        Thiếu `priceCurrency` thì GIỮ neo cũ, không mặc định về USDT: trang quản
+        trị cũ (hoặc một script) gửi mỗi `price` mà bị hiểu là USDT sẽ biến giá
+        100.000 thành 100.000 USDT.
+      */
+      Object.assign(
+        data,
+        await this.chotGia(
+          dto.price,
+          dto.priceCurrency ?? layDonViNeo(variant.priceCurrency),
+        ),
+      );
+    }
     if (dto.sortOrder !== undefined) data.sortOrder = dto.sortOrder;
     if (dto.active !== undefined) data.active = dto.active;
 
@@ -671,13 +723,15 @@ export class AdminService {
     const changes = diffChanges(
       {
         name: variant.name,
-        price: Number(variant.price),
+        // Ghi số ĐÃ GÕ kèm đơn vị, không ghi USDT: USDT của một giá neo theo ₫
+        // tự đổi mỗi lần tỉ giá đổi, nhật ký sẽ đầy những thay đổi không ai làm.
+        price: `${Number(variant.priceAmount)} ${variant.priceCurrency}`,
         sortOrder: variant.sortOrder,
         active: variant.active,
       },
       {
         name: updated.name,
-        price: Number(updated.price),
+        price: `${Number(updated.priceAmount)} ${updated.priceCurrency}`,
         sortOrder: updated.sortOrder,
         active: updated.active,
       },
@@ -1248,4 +1302,15 @@ export class AdminService {
     );
     return toProductDto(product, counts, { includeTranslations: true });
   }
+}
+
+/**
+ * Cột `priceCurrency` là TEXT tự do; quy giá trị lạ về USDT — hành vi cũ, an
+ * toàn nhất khi không rõ. Trùng ý với hàm cùng tên trong `product.mapper.ts`,
+ * nhưng để riêng để `admin.service` không phụ thuộc vào tầng mapper.
+ */
+function layDonViNeo(value: string): DisplayCurrency {
+  return (DISPLAY_CURRENCIES as readonly string[]).includes(value)
+    ? (value as DisplayCurrency)
+    : 'USDT';
 }

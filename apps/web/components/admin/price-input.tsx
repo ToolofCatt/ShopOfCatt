@@ -1,10 +1,11 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   convertFromUsdt,
+  floorUsdt,
   formatMoney,
-  formatUsdt,
+  toUsdtFromCurrency,
   type DisplayCurrency,
   type StoreRatesDto,
 } from '@webcatt/shared';
@@ -14,28 +15,29 @@ import { Input } from '@/components/ui';
 import { Tabs } from '@/components/admin/tabs';
 
 /**
- * Ô nhập giá có chọn đơn vị.
+ * Ô nhập giá có chọn đơn vị — và đơn vị đó là cái NEO của giá.
  *
- * Chủ shop nghĩ bằng tiền Việt nhưng CSDL lưu USDT, nên trước đây phải tự chia
- * tỉ giá trong đầu rồi gõ vào. Nay gõ 130268 rồi chọn ₫ là xong.
+ * Con số chủ shop gõ được lưu NGUYÊN VĂN cùng đơn vị của nó; số USDT chỉ là số
+ * dẫn xuất. Nhờ vậy gõ 100.000 ₫ là khách Việt thấy đúng 100.000 ₫ hôm nay và cả
+ * tháng sau, dù tỉ giá đã trôi.
  *
- * Giá trị đi ra ngoài LUÔN là USDT — đơn vị chỉ là lớp nhập liệu. Đổi cách lưu
- * là đổi luôn cách tính tiền của cả hệ thống, không đáng chỉ vì chuyện gõ số.
+ * Trước đây ô này quy ngay sang USDT rồi bỏ con số đã gõ, nên phải có một bộ đệm
+ * `raw` mới gõ được (mỗi ký tự bị đổi qua USDT rồi đổi ngược lại thành "0"). Nay
+ * số đã gõ CHÍNH LÀ dữ liệu nên bộ đệm đó không còn cần.
  */
-
-/** Cột giá là Decimal(18,2) nên USDT chỉ có hai số lẻ. */
-const USDT_DECIMALS = 2;
 
 export interface PriceInputProps {
   id: string;
-  /** Giá bằng USDT, dạng chuỗi — đúng thứ biểu mẫu gửi lên. */
+  /** Số tiền chủ shop gõ, dạng chuỗi — đúng thứ biểu mẫu gửi lên. */
   value: string;
-  onChange: (usdt: string) => void;
+  /** Đơn vị của `value` — cái neo. */
+  currency: DisplayCurrency;
+  onChange: (amount: string, currency: DisplayCurrency) => void;
   invalid?: boolean;
   placeholder?: string;
 }
 
-/** Đơn vị nhập được: USDT luôn có, còn lại phụ thuộc tỉ giá đã cấu hình. */
+/** Đơn vị nhập được: USDT/USD luôn có, ₫ và ¥ cần tỉ giá đã cấu hình. */
 function unitsAvailable(rates: StoreRatesDto | null): DisplayCurrency[] {
   const ds: DisplayCurrency[] = ['USDT', 'USD'];
   if (rates && rates.vndPerUsdt > 0) ds.splice(1, 0, 'VND');
@@ -43,87 +45,72 @@ function unitsAvailable(rates: StoreRatesDto | null): DisplayCurrency[] {
   return ds;
 }
 
-function toUsdt(amount: number, unit: DisplayCurrency, rates: StoreRatesDto | null): number | null {
-  if (unit === 'USDT' || unit === 'USD') return amount;
-  if (!rates) return null;
-  const rate = unit === 'VND' ? rates.vndPerUsdt : rates.cnyPerUsdt;
-  if (!Number.isFinite(rate) || rate <= 0) return null;
-  return amount / rate;
-}
-
-export function PriceInput({ id, value, onChange, invalid, placeholder }: PriceInputProps) {
+export function PriceInput({
+  id,
+  value,
+  currency,
+  onChange,
+  invalid,
+  placeholder,
+}: PriceInputProps) {
   const { t } = useI18n();
   const rates = useRates();
   const units = useMemo(() => unitsAvailable(rates), [rates]);
 
-  const [unit, setUnit] = useState<DisplayCurrency>('USDT');
-  /*
-    Bộ đệm cho những gì đang gõ. `null` = chưa gõ gì, lấy từ `value` mà suy ra.
-
-    Cần bộ đệm vì gõ ở đơn vị khác USDT thì mỗi ký tự bị đổi qua USDT rồi đổi
-    ngược lại — gõ "13" thành 0.00 USDT rồi hiện lại "0", và không gõ tiếp được.
-  */
-  const [raw, setRaw] = useState<string | null>(null);
-
-  const usdtNumber = Number(value);
-  const hienThi =
-    raw ??
-    (value.trim() === '' || !Number.isFinite(usdtNumber)
-      ? value
-      : unit === 'USDT'
-        ? value
-        : String(round(convertFromUsdt(usdtNumber, unit, rates) ?? usdtNumber, unit === 'VND' ? 0 : 2)));
+  const soDaGo = Number(value);
+  const hopLe = value.trim() !== '' && Number.isFinite(soDaGo) && soDaGo > 0;
 
   const doiDonVi = (moi: DisplayCurrency) => {
     /*
-      Đổi đơn vị thì chuyển con số sang đơn vị mới, KHÔNG đổi giá đã lưu — bấm
-      qua lại giữa ₫ và USDT không được làm giá nhảy.
+      Đổi đơn vị thì chuyển con số sang đơn vị mới để chủ shop thấy giá tương
+      đương, KHÔNG giữ nguyên con số — bấm từ ₫ sang USDT mà vẫn để "100000" là
+      giá nhảy lên một trăm nghìn đô.
     */
-    setUnit(moi);
-    if (value.trim() === '' || !Number.isFinite(usdtNumber)) {
-      setRaw(null);
+    if (moi === currency) return;
+    if (!hopLe) {
+      onChange(value, moi);
       return;
     }
-    if (moi === 'USDT') {
-      setRaw(value);
+    const usdt = toUsdtFromCurrency(soDaGo, currency, rates);
+    const doi = usdt === null ? null : convertFromUsdt(usdt, moi, rates);
+    if (doi === null) {
+      onChange(value, moi);
       return;
     }
-    const doi = convertFromUsdt(usdtNumber, moi, rates);
-    setRaw(doi === null ? value : String(round(doi, moi === 'VND' ? 0 : 2)));
-  };
-
-  const goVao = (text: string) => {
-    setRaw(text);
-    if (text.trim() === '') {
-      onChange('');
-      return;
-    }
-    const so = Number(text);
-    if (!Number.isFinite(so)) {
-      onChange(text); // để phần kiểm tra của biểu mẫu báo lỗi như cũ
-      return;
-    }
-    const usdt = toUsdt(so, unit, rates);
-    onChange(usdt === null ? text : usdt.toFixed(USDT_DECIMALS));
+    onChange(String(round(doi, moi === 'VND' ? 0 : 2)), moi);
   };
 
   /*
-    Dòng dưới ô nhập nói RÕ con số sẽ được lưu.
+    Dòng dưới ô nhập liệt kê giá ở MỌI đơn vị, bắt đầu bằng đơn vị đang neo.
 
-    Bắt buộc phải có khi nhập bằng ₫: 100.000 ₫ chia tỉ giá ra 3.8383… USDT, lưu
-    xuống chỉ còn 3.84, và quy ngược lại là 100.045 ₫ — lệch 45 đồng. Không hiện
-    thì chủ shop tưởng mình đặt giá đúng 100.000.
+    Đơn vị neo hiện đúng số đã gõ. Các đơn vị còn lại là số quy đổi và chúng
+    không tròn — không có cách nào một con số tròn ở hai đơn vị cùng lúc. Chủ shop
+    cần thấy hết để biết khách ở từng ngôn ngữ sẽ thấy con số nào.
   */
   const goiY = useMemo(() => {
-    if (!Number.isFinite(usdtNumber) || usdtNumber <= 0) return null;
-    const phan: string[] = [formatUsdt(usdtNumber)];
-    for (const dv of ['VND', 'CNY', 'USD'] as const) {
-      if (dv === unit) continue;
-      const so = convertFromUsdt(usdtNumber, dv, rates);
-      if (so !== null) phan.push(formatMoney(so, dv));
+    if (!hopLe) return null;
+    const usdtTho = toUsdtFromCurrency(soDaGo, currency, rates);
+    if (usdtTho === null) return null;
+    // Làm tròn xuống ĐÚNG như máy chủ sẽ lưu, để dòng gợi ý không hứa một con số
+    // khác với con số thật sau khi bấm Lưu.
+    const usdt = floorUsdt(usdtTho);
+
+    const phan: string[] = [formatMoney(soDaGo, currency)];
+    for (const dv of ['USDT', 'VND', 'CNY', 'USD'] as const) {
+      if (dv === currency) continue;
+      const so = convertFromUsdt(usdt, dv, rates);
+      if (so === null) continue;
+      /*
+        USDT hiện ĐỦ chữ số, không dùng `formatMoney` (hai chữ số).
+
+        Với khách trả crypto thì đây chính là số họ phải chuyển, và bộ đối soát
+        đòi khớp chính xác. Ghi "3.85" trong khi số thật là 3.852198 là mời chủ
+        shop báo cho khách một con số thiếu, rồi đơn treo chờ xử lý tay.
+      */
+      phan.push(dv === 'USDT' ? `${usdtDayDu(so)} USDT` : formatMoney(so, dv));
     }
     return phan.join('  ·  ');
-  }, [usdtNumber, unit, rates]);
+  }, [hopLe, soDaGo, currency, rates]);
 
   return (
     <div className="space-y-2">
@@ -132,25 +119,25 @@ export function PriceInput({ id, value, onChange, invalid, placeholder }: PriceI
           id={id}
           type="number"
           min={0}
-          step={unit === 'VND' ? 1 : 0.01}
+          step={currency === 'VND' ? 1 : 0.01}
           inputMode="decimal"
-          value={hienThi}
+          value={value}
           invalid={invalid}
           placeholder={placeholder}
           className="min-w-0 flex-1"
-          onChange={(event) => goVao(event.target.value)}
+          onChange={(event) => onChange(event.target.value, currency)}
         />
         {units.length > 1 && (
           <Tabs
             items={units.map((u) => ({ value: u, label: UNIT_LABEL[u] }))}
-            value={unit}
+            value={currency}
             onChange={doiDonVi}
           />
         )}
       </div>
       {goiY && (
         <p className="text-xs text-neutral-500">
-          {unit === 'USDT' ? goiY : `${t.admin.priceSaved} ${goiY}`}
+          {t.admin.priceAnchoredAt(UNIT_LABEL[currency])} {goiY}
         </p>
       )}
     </div>
@@ -167,4 +154,10 @@ const UNIT_LABEL: Record<DisplayCurrency, string> = {
 function round(value: number, digits: number): number {
   const f = 10 ** digits;
   return Math.round(value * f) / f;
+}
+
+/** USDT với đủ sáu chữ số, cắt số 0 vô nghĩa ở cuối nhưng giữ tối thiểu hai. */
+function usdtDayDu(usdt: number): string {
+  const [nguyen, le = ''] = usdt.toFixed(6).split('.');
+  return `${nguyen}.${le.replace(/0+$/, '').padEnd(2, '0')}`;
 }

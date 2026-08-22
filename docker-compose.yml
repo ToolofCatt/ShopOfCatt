@@ -67,6 +67,7 @@ services:
       BINANCE_SECRET_KEY: "${BINANCE_SECRET_KEY:-}"
       BINANCE_API_BASE_URL: "${BINANCE_API_BASE_URL:-https://api.binance.com}"
       ORDER_EXPIRE_MINUTES: "${ORDER_EXPIRE_MINUTES:-30}"
+      SEPAY_EXPIRE_MINUTES: "${SEPAY_EXPIRE_MINUTES:-10}"
       # Múi giờ VN — nếu để mặc định (UTC) thì đơn 00:00–07:00 bị tính sang hôm trước
       TZ: "${TZ:-Asia/Ho_Chi_Minh}"
       # Tự động dịch sản phẩm sang EN/ZH (để trống = tắt)

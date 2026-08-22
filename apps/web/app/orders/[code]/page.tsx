@@ -17,7 +17,6 @@ import {
   ServerCrash,
 } from 'lucide-react';
 import {
-  formatUsdt,
   formatUserCode,
   type OrderDetailDto,
   type PaymentInfoDto,
@@ -26,6 +25,7 @@ import {
 import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
+import { usePrices } from '@/lib/prices';
 import type { Dictionary } from '@/lib/i18n';
 import { formatCryptoAmount } from '@/lib/format';
 import { cn } from '@/lib/cn';
@@ -87,6 +87,13 @@ function buildReceipt(
   user: PublicUser | null,
   t: Dictionary,
   formatDate: (value: string | null | undefined) => string,
+  /*
+    Tiền của đơn ĐÃ quy về đơn vị khách đang xem. Truyền vào thay vì tự gọi
+    `formatUsdt`: biên nhận ghi USDT trong khi trên màn hình là ₫ thì khách mang
+    biên nhận đi đối chiếu với sao kê ngân hàng và không thấy con số nào khớp.
+  */
+  tien: { subtotal: string; discount: string; total: string },
+  moiDong: (usdt: number) => string,
 ): string {
   const lines: string[] = [];
   lines.push(wordmarkText());
@@ -137,7 +144,7 @@ function buildReceipt(
       ? `${item.productName} — ${item.variantName}`
       : item.productName;
     lines.push(
-      `${index + 1}. ${name} | ${t.orderDetail.receiptQty} ${item.quantity} × ${item.unitPrice.toFixed(2)} = ${formatUsdt(item.unitPrice * item.quantity)}`,
+      `${index + 1}. ${name} | ${t.orderDetail.receiptQty} ${item.quantity} × ${moiDong(item.unitPrice)} = ${moiDong(item.unitPrice * item.quantity)}`,
     );
     for (const delivered of item.deliveredLines ?? []) {
       lines.push(`   ${delivered}`);
@@ -145,16 +152,14 @@ function buildReceipt(
   });
   lines.push('--------------------------------');
   if (order.discountAmount > 0) {
-    lines.push(
-      `${t.orderDetail.subtotal}: ${formatUsdt(order.subtotalAmount)}`,
-    );
+    lines.push(`${t.orderDetail.subtotal}: ${tien.subtotal}`);
     lines.push(
       `${t.orderDetail.discount}${
         order.couponCode ? ` (${order.couponCode})` : ''
-      }: -${formatUsdt(order.discountAmount)}`,
+      }: -${tien.discount}`,
     );
   }
-  lines.push(`${t.orderDetail.receiptTotal}: ${formatUsdt(order.totalAmount)}`);
+  lines.push(`${t.orderDetail.receiptTotal}: ${tien.total}`);
   return lines.join('\n');
 }
 
@@ -239,6 +244,7 @@ function OrderDetailContent({ code }: { code: string }) {
   const justPaid = searchParams.get('paid') === '1';
   const { user, token, loading: authLoading } = useAuth();
   const { t, formatDate } = useI18n();
+  const { orderMoney, priceUsdt } = usePrices();
 
   const [order, setOrder] = useState<OrderDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -307,6 +313,12 @@ function OrderDetailContent({ code }: { code: string }) {
     );
   }
 
+  /*
+    Ba con số tiền quy về đơn vị khách đang xem, lấy MỘT lượt để hoá đơn cộng
+    khớp — ₫ làm tròn lên nên quy riêng từng số là lệch một đồng.
+  */
+  const tien = orderMoney(order.subtotalAmount, order.discountAmount, order.totalAmount);
+
   const showPaidBanner = justPaid && (order.status === 'PAID' || order.status === 'DELIVERED');
   const partiallyMissing =
     order.status === 'PAID' &&
@@ -342,7 +354,7 @@ function OrderDetailContent({ code }: { code: string }) {
               onClick={() =>
                 downloadTxt(
                   `${t.orderDetail.receiptFileName}-${order.code}.txt`,
-                  buildReceipt(order, user, t, formatDate),
+                  buildReceipt(order, user, t, formatDate, tien, (u) => priceUsdt(u).primary),
                 )
               }
             >
@@ -371,9 +383,7 @@ function OrderDetailContent({ code }: { code: string }) {
             <>
               <div>
                 <dt className="text-neutral-500">{t.orderDetail.subtotal}</dt>
-                <dd className="mt-0.5 font-medium tabular-nums">
-                  {formatUsdt(order.subtotalAmount)}
-                </dd>
+                <dd className="mt-0.5 font-medium tabular-nums">{tien.subtotal}</dd>
               </div>
               <div>
                 <dt className="text-neutral-500">
@@ -382,15 +392,13 @@ function OrderDetailContent({ code }: { code: string }) {
                     <span className="ml-1 font-mono text-xs">({order.couponCode})</span>
                   )}
                 </dt>
-                <dd className="mt-0.5 font-medium tabular-nums">
-                  −{formatUsdt(order.discountAmount)}
-                </dd>
+                <dd className="mt-0.5 font-medium tabular-nums">−{tien.discount}</dd>
               </div>
             </>
           )}
           <div>
             <dt className="text-neutral-500">{t.orderDetail.totalAmount}</dt>
-            <dd className="mt-0.5 font-semibold tabular-nums">{formatUsdt(order.totalAmount)}</dd>
+            <dd className="mt-0.5 font-semibold tabular-nums">{tien.total}</dd>
           </div>
           {order.status === 'PENDING' && (
             <div>
@@ -504,12 +512,12 @@ function OrderDetailContent({ code }: { code: string }) {
                     {item.variantName && <Badge variant="muted">{item.variantName}</Badge>}
                   </p>
                   <p className="mt-0.5 text-sm tabular-nums text-neutral-500">
-                    {formatUsdt(item.unitPrice)} × {item.quantity}
+                    {priceUsdt(item.unitPrice).primary} × {item.quantity}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
                   <p className="font-semibold tabular-nums">
-                    {formatUsdt(item.unitPrice * item.quantity)}
+                    {priceUsdt(item.unitPrice * item.quantity).primary}
                   </p>
                   <Link
                     href={`/products/${item.productSlug}`}

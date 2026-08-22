@@ -1,4 +1,6 @@
 import {
+  cheapestAnchored,
+  formatMoney,
   formatUsdt,
   type PaymentStatus,
   type ProductDto,
@@ -34,10 +36,17 @@ export const SELECT_CLASSES =
 /**
  * Giá hiển thị của sản phẩm nhiều loại: một mức giá thì hiện thẳng,
  * nhiều mức giá thì hiện "Từ {giá thấp nhất}".
+ *
+ * Hiện số ĐÃ GÕ kèm đơn vị neo, không hiện USDT dẫn xuất: một sản phẩm neo theo
+ * ₫ mà danh sách ghi "3.85 USDT" thì không khớp với con số chủ shop vừa nhập,
+ * cũng không khớp với danh sách loại hàng ở trang sửa.
  */
 export function formatProductPrice(product: ProductDto, t: Dictionary): string {
-  if (product.minPrice === product.maxPrice) return formatUsdt(product.minPrice);
-  return t.admin.priceFrom(formatUsdt(product.minPrice));
+  const neo = cheapestAnchored(product.variants);
+  const re = neo
+    ? formatMoney(neo.priceAmount, neo.priceCurrency)
+    : formatUsdt(product.minPrice);
+  return product.minPrice === product.maxPrice ? re : t.admin.priceFrom(re);
 }
 
 /** Nhãn ngôn ngữ của bản dịch tự động. */

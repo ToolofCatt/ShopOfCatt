@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Minus, Plus, Ticket, Wallet, Zap } from 'lucide-react';
 import {
+  cheapestAnchored,
+  roundUsdt,
   type CouponPreviewDto,
   type CreateOrderResponse,
   type PaymentMethod,
@@ -17,13 +19,13 @@ import { usePrices } from '@/lib/prices';
 import { useI18n } from '@/lib/i18n/client';
 import { Button, Card, Input, Label } from '@/components/ui';
 import { VariantSelector } from '@/components/variant-selector';
-import { Tabs } from '@/components/admin/tabs';
+import { PaymentMethodTabs } from '@/components/payment-method-tabs';
 
 export function BuyBox({ product }: { product: ProductDto }) {
   const router = useRouter();
   const { user, token, loading: authLoading } = useAuth();
   const { t } = useI18n();
-  const { price } = usePrices();
+  const { price, priceUsdt } = usePrices();
 
   // API công khai chỉ trả loại đang bán, vẫn lọc lại cho chắc.
   const variants = useMemo(
@@ -47,7 +49,16 @@ export function BuyBox({ product }: { product: ProductDto }) {
   const availableStock = selected ? selected.availableStock : product.availableStock;
   const maxQuantity = Math.max(1, availableStock);
 
-  const giaChinh = price(selected ? selected.price : product.minPrice);
+  /*
+    Loại đang chọn thì hiện theo NEO của chính nó (số tròn); chưa chọn thì lấy
+    neo của loại rẻ nhất, để con số trên thẻ sản phẩm và ở đây khớp nhau.
+  */
+  const neoReNhat = cheapestAnchored(product.variants);
+  const giaChinh = selected
+    ? price(selected)
+    : neoReNhat
+      ? price(neoReNhat)
+      : priceUsdt(product.minPrice);
   const priceLabel = selected
     ? giaChinh.primary
     : product.maxPrice > product.minPrice
@@ -124,9 +135,17 @@ export function BuyBox({ product }: { product: ProductDto }) {
   const [couponError, setCouponError] = useState<string | null>(null);
   const [checkingCoupon, setCheckingCoupon] = useState(false);
 
-  const subtotal = unitPrice * quantity;
+  /*
+    Làm tròn SÁU chữ số, không phải hai.
+
+    Hai chữ số phá giá neo theo ₫: đơn giá 3.852198 USDT (= 100.000 ₫) thành 3.85
+    rồi quy sang ₫ ra 99.943 — đúng lỗi đã thấy trên trang chi tiết, đơn giá ghi
+    100.000 ₫ mà dòng "Tổng cộng" ghi 99.943 ₫. Làm tròn ở đây chỉ để dập rác nhị
+    phân của phép nhân số thực, còn máy chủ tính bằng Decimal nên vốn đã chính xác.
+  */
+  const subtotal = roundUsdt(unitPrice * quantity);
   const discount = coupon ? coupon.discountAmount : 0;
-  const payable = Math.max(0, Math.round((subtotal - discount) * 100) / 100);
+  const payable = Math.max(0, roundUsdt(subtotal - discount));
 
   const clearCoupon = () => {
     setAppliedCode(null);
@@ -342,18 +361,18 @@ export function BuyBox({ product }: { product: ProductDto }) {
               <>
                 <div className="flex items-center justify-between text-sm text-neutral-500">
                   <span>{t.product.subtotal}</span>
-                  <span className="tabular-nums">{price(subtotal).primary}</span>
+                  <span className="tabular-nums">{priceUsdt(subtotal).primary}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm text-neutral-600">
                   <span>{t.product.discount}</span>
-                  <span className="tabular-nums">−{price(discount).primary}</span>
+                  <span className="tabular-nums">−{priceUsdt(discount).primary}</span>
                 </div>
               </>
             )}
             <div className="flex items-center justify-between">
               <span className="text-sm text-neutral-500">{t.product.total}</span>
               <span className="text-lg font-semibold tabular-nums">
-                {price(payable).primary}
+                {priceUsdt(payable).primary}
               </span>
             </div>
           </div>
@@ -395,10 +414,11 @@ export function BuyBox({ product }: { product: ProductDto }) {
       {methods && methods.length > 1 && !outOfStock ? (
         <div className="space-y-2 border-t border-neutral-100 pt-4">
           <Label htmlFor="pay-method">{t.checkout.methodTitle}</Label>
-          <Tabs
-            items={methods.map((m) => ({ value: m, label: t.checkout.methods[m] }))}
+          <PaymentMethodTabs
+            methods={methods}
+            labels={t.checkout.methodsShort}
             value={payMethod ?? methods[0]}
-            onChange={(value) => setPayMethod(value as PaymentMethod)}
+            onChange={setPayMethod}
           />
         </div>
       ) : (

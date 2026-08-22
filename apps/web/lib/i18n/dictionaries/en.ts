@@ -107,6 +107,10 @@ export const en: Dictionary = {
 
     /* ===== v5 — method chooser + on-chain USDT payment ===== */
     methodTitle: 'Payment method',
+    reminderTab: (code: string) => `⚠ Awaiting payment · ${code}`,
+    reminderTitle: 'You have an order awaiting payment',
+    reminderBody: (code: string) =>
+      `Order ${code} has not been paid yet. Click here to reopen the checkout page.`,
     methods: {
       mock: 'Sandbox',
       binance_pay: 'Binance Pay',
@@ -114,6 +118,15 @@ export const en: Dictionary = {
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
       sepay: 'Bank transfer',
+    },
+
+    methodsShort: {
+      mock: 'Sandbox',
+      binance_pay: 'Binance Pay',
+      binance_id: 'Binance ID',
+      crypto_bep20: 'BEP20',
+      crypto_trc20: 'TRC20',
+      sepay: 'Bank',
     },
 
     cryptoTitle: 'USDT on-chain transfer',
@@ -406,6 +419,7 @@ export const en: Dictionary = {
     formSlugAuto: 'generated from name',
     formPrice: 'Price *',
     priceSaved: 'Will save:',
+    priceAnchoredAt: (unit: string) => `Anchored to ${unit} — will save:`,
     formCategory: 'Category',
     formCategoryPlaceholder: 'Software',
     formImage: 'Product image',

@@ -17,11 +17,24 @@ import type { SettingsService } from '../settings/settings.service';
 interface Boi {
   service: ExchangeRateService;
   update: ReturnType<typeof vi.fn>;
+  /** Số câu lệnh SQL tính lại giá đã neo đã được đưa vào transaction. */
+  soCauTinhLai: () => number;
 }
 
 function build(options: { markup?: number; rateAuto?: boolean } = {}): Boi {
   const update = vi.fn().mockResolvedValue({});
-  const prisma = { storeSetting: { update } } as unknown as PrismaService;
+  const executeRaw = vi.fn().mockResolvedValue(0);
+  /*
+    Ghi tỉ giá và tính lại giá đã neo đi CÙNG một `$transaction`, nên bản giả phải
+    có cả `$transaction` và `$executeRaw`. `$transaction` chỉ cần chờ hết mảng —
+    đủ để `update` được gọi thật và các assert bên dưới soi được đối số.
+  */
+  const transaction = vi.fn(async (ops: unknown[]) => Promise.all(ops));
+  const prisma = {
+    storeSetting: { update },
+    $executeRaw: executeRaw,
+    $transaction: transaction,
+  } as unknown as PrismaService;
   const settings = {
     getSetting: vi.fn().mockResolvedValue({
       id: 'main',
@@ -30,7 +43,11 @@ function build(options: { markup?: number; rateAuto?: boolean } = {}): Boi {
       rateUpdatedAt: null,
     }),
   } as unknown as SettingsService;
-  return { service: new ExchangeRateService(prisma, settings), update };
+  return {
+    service: new ExchangeRateService(prisma, settings),
+    update,
+    soCauTinhLai: () => executeRaw.mock.calls.length,
+  };
 }
 
 /** Giả `fetch` toàn cục — dịch vụ gọi ra Internet bằng fetch trần. */
@@ -60,6 +77,33 @@ describe('ExchangeRateService.refresh — đường thành công', () => {
     expect(kq.vndPerUsdt).toBe(26_053.43);
     expect(kq.cnyPerUsdt).toBe(6.7394);
     expect(b.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('tỉ giá đổi thì TÍNH LẠI giá đã neo, trong cùng transaction', async () => {
+    /*
+      Giá neo theo ₫ giữ nguyên con số ₫, nên số USDT tương ứng phải đổi theo tỉ
+      giá mới. Tách ra khỏi transaction ghi tỉ giá là có một khoảng khách mở
+      trang đúng lúc và thấy 100.550 ₫ thay vì 100.000 ₫.
+    */
+    stubFetch({ result: 'success', rates: { VND: 26_000, CNY: 7 } });
+    const b = build({ markup: 0 });
+
+    await b.service.refresh();
+
+    // Hai câu: một cho ₫, một cho ¥. USD/USDT là 1:1 nên không cần tính lại.
+    expect(b.soCauTinhLai()).toBe(2);
+  });
+
+  it('lấy tỉ giá thất bại thì KHÔNG tính lại giá đã neo', async () => {
+    // Giữ tỉ giá cũ mà vẫn tính lại giá là tính bằng một tỉ giá không tồn tại.
+    stubFetch({ result: 'error' });
+    const b = build({ markup: 0 });
+
+    const kq = await b.service.refresh();
+
+    expect(kq.ok).toBe(false);
+    expect(b.update).not.toHaveBeenCalled();
+    expect(b.soCauTinhLai()).toBe(0);
   });
 
   it('cộng biên cho CẢ VND và CNY', async () => {

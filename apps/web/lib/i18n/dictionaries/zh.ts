@@ -105,6 +105,10 @@ export const zh: Dictionary = {
 
     /* ===== v5 —— 付款方式选择 + USDT 链上付款 ===== */
     methodTitle: '付款方式',
+    reminderTab: (code: string) => `⚠ 待付款 · ${code}`,
+    reminderTitle: '您有一笔订单待付款',
+    reminderBody: (code: string) =>
+      `订单 ${code} 尚未付款。点击此处可重新打开付款页面。`,
     methods: {
       mock: '测试模式',
       binance_pay: 'Binance Pay',
@@ -112,6 +116,15 @@ export const zh: Dictionary = {
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
       sepay: '银行转账',
+    },
+
+    methodsShort: {
+      mock: '测试',
+      binance_pay: 'Binance Pay',
+      binance_id: 'Binance ID',
+      crypto_bep20: 'BEP20',
+      crypto_trc20: 'TRC20',
+      sepay: '银行',
     },
 
     cryptoTitle: 'USDT 链上转账',
@@ -397,6 +410,7 @@ export const zh: Dictionary = {
     formSlugAuto: '根据名称自动生成',
     formPrice: '价格 *',
     priceSaved: '将保存：',
+    priceAnchoredAt: (unit: string) => `以 ${unit} 为基准 —— 将保存：`,
     formCategory: '分类',
     formCategoryPlaceholder: '软件',
     formImage: '商品图片',

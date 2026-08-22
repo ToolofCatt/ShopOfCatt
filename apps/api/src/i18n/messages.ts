@@ -98,6 +98,8 @@ export const K = {
   adminNameInvalid: 'admin.name_invalid',
   adminNameRequired: 'admin.name_required',
   adminPriceNumber: 'admin.price_number',
+  adminPriceCurrencyInvalid: 'admin.price_currency_invalid',
+  adminPriceAnchorNoRate: 'admin.price_anchor_no_rate',
   adminPriceMin: 'admin.price_min',
   adminSlugInvalid: 'admin.slug_invalid',
   adminShortDescriptionInvalid: 'admin.short_description_invalid',
@@ -468,6 +470,16 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Tên sản phẩm không được để trống',
     en: 'Product name is required',
     zh: '商品名称不能为空',
+  },
+  [K.adminPriceCurrencyInvalid]: {
+    vi: 'Đơn vị giá không hợp lệ.',
+    en: 'Invalid price currency.',
+    zh: '价格单位无效。',
+  },
+  [K.adminPriceAnchorNoRate]: {
+    vi: 'Chưa có tỉ giá nên không đặt được giá bằng đơn vị này. Vào Cài đặt bấm cập nhật tỉ giá, hoặc nhập giá bằng USDT.',
+    en: 'No exchange rate yet, so a price in this currency cannot be set. Refresh the rate in Settings, or enter the price in USDT.',
+    zh: '尚无汇率，无法用该单位设置价格。请在设置中刷新汇率，或改用 USDT 输入价格。',
   },
   [K.adminPriceNumber]: {
     vi: 'Giá phải là số (tối đa 2 chữ số thập phân)',

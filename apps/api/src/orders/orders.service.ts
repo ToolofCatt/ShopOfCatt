@@ -100,6 +100,21 @@ export class OrdersService {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
   }
 
+  /**
+   * Chuyển khoản ngân hàng có hạn RIÊNG, ngắn hơn: mặc định 10 phút.
+   *
+   * Vì mã VietQR chốt cứng số VND theo tỉ giá lúc tạo, mà bộ đối soát
+   * (`matchSepayTransaction`) đòi số tiền khớp CHÍNH XÁC. Để mã sống 30 phút là
+   * mở cửa cho tình huống tỉ giá đã đổi, khách quét mã cũ, chuyển đúng số in
+   * trên mã nhưng số đó không còn khớp đơn nào — tiền vào tài khoản mà đơn treo,
+   * phải xử lý tay. Napas chạy 24/7 nên 10 phút là quá đủ để chuyển xong.
+   */
+  private get sepayExpireMinutes(): number {
+    const raw = this.config.get<string>('SEPAY_EXPIRE_MINUTES') ?? '10';
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 10;
+  }
+
   private get webUrl(): string {
     return this.config.get<string>('WEB_URL') ?? 'http://localhost:3000';
   }
@@ -466,6 +481,39 @@ export class OrdersService {
   }
 
   /**
+   * Đặt lại hạn thanh toán theo phương thức khách vừa chọn, trả về hạn mới.
+   *
+   * Mốc luôn tính từ `createdAt`, KHÔNG từ thời điểm gọi — nếu tính từ "bây giờ"
+   * thì khách bấm qua lại giữa các phương thức là gia hạn đơn vô thời hạn, giữ
+   * kho mãi không nhả. Hạn của chuyển khoản ngân hàng lấy cái nào đến trước giữa
+   * "createdAt + 30 phút" và "bây giờ + 10 phút", nên đổi sang ngân hàng chỉ có
+   * thể làm hạn NGẮN đi.
+   *
+   * Rời ngân hàng sang phương thức khác thì hạn quay về createdAt + 30 phút:
+   * mốc đó cố định nên vẫn không có cách nào xin thêm giờ.
+   */
+  private async apDungHan(
+    orderId: string,
+    createdAt: Date,
+    method: PaymentMethod,
+  ): Promise<Date> {
+    const han = tinhHanThanhToan({
+      taoLucMs: createdAt.getTime(),
+      bayGioMs: Date.now(),
+      method,
+      phutMacDinh: this.expireMinutes,
+      phutNganHang: this.sepayExpireMinutes,
+    });
+    // Có điều kiện trạng thái: một lần gọi lại muộn không được hồi sinh đơn đã
+    // hết hạn, đã hủy hay đã trả tiền.
+    await this.prisma.order.updateMany({
+      where: { id: orderId, status: 'PENDING' },
+      data: { expiresAt: han },
+    });
+    return han;
+  }
+
+  /**
    * Cấu hình lại Payment của một đơn theo phương thức đã chọn — dùng chung
    * cho tạo đơn và đổi phương thức trên trang thanh toán.
    */
@@ -481,6 +529,10 @@ export class OrdersService {
       throw new InternalServerErrorException(K.paymentSessionMissing);
     }
     const payment = order.payment;
+
+    // Chốt hạn TRƯỚC khi dựng phiên: nhánh binance_pay đọc lại `hetHan` để báo
+    // cho Binance, nên nó phải là giá trị sau khi đã điều chỉnh.
+    const hetHan = await this.apDungHan(order.id, order.createdAt, method);
 
     if (method === 'mock') {
       await this.prisma.payment.update({
@@ -519,9 +571,7 @@ export class OrdersService {
           returnUrl: `${this.webUrl}/orders/${order.code}`,
           cancelUrl: `${this.webUrl}/checkout/${order.code}`,
           webhookUrl: `${this.apiPublicUrl}/api/payments/binance/webhook`,
-          orderExpireTime:
-            order.expiresAt?.getTime() ??
-            Date.now() + this.expireMinutes * 60_000,
+          orderExpireTime: hetHan.getTime(),
         });
       } catch (error) {
         // KHÔNG hủy đơn — đơn vẫn PENDING để khách chọn phương thức khác.
@@ -782,4 +832,27 @@ export class OrdersService {
       K.orderCodeFailed,
     );
   }
+}
+
+/**
+ * Hạn thanh toán của một đơn, theo phương thức khách vừa chọn.
+ *
+ * Hàm THUẦN, tách riêng để kiểm được: nó quyết định kho bị giữ bao lâu, nên một
+ * phép so sánh ngược dấu ở đây là đơn treo giữ kho vô hạn.
+ */
+export function tinhHanThanhToan(opts: {
+  taoLucMs: number;
+  bayGioMs: number;
+  method: PaymentMethod;
+  phutMacDinh: number;
+  phutNganHang: number;
+}): Date {
+  // TRẦN cứng tính từ lúc tạo đơn. Mọi phương thức đều không vượt được mốc này,
+  // nên bấm qua lại giữa các phương thức không bao giờ xin thêm được thời gian.
+  const tran = opts.taoLucMs + opts.phutMacDinh * 60_000;
+  if (opts.method !== 'sepay') {
+    return new Date(tran);
+  }
+  const nganHan = opts.bayGioMs + opts.phutNganHang * 60_000;
+  return new Date(Math.min(tran, nganHan));
 }

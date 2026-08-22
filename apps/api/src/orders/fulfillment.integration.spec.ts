@@ -184,7 +184,12 @@ async function makeScenario(options: {
     data: { slug: tag, name: `San pham ${tag}` },
   });
   const variant = await prisma.productVariant.create({
-    data: { productId: product.id, name: 'Mặc định', price: '10.00' },
+    data: {
+      productId: product.id,
+      name: 'Mặc định',
+      price: '10.00',
+      priceAmount: '10.00',
+    },
   });
   const order = await prisma.order.create({
     data: {
@@ -258,7 +263,12 @@ async function makeKho(options: {
     data: { slug: tag, name: `San pham ${tag}`, stockDrawMode: options.drawMode },
   });
   const variant = await prisma.productVariant.create({
-    data: { productId: product.id, name: 'Mặc định', price: '10.00' },
+    data: {
+      productId: product.id,
+      name: 'Mặc định',
+      price: '10.00',
+      priceAmount: '10.00',
+    },
   });
   const thuTuNap = Array.from({ length: options.soKey }, (_, i) =>
     `${tag}-KEY-${String(i).padStart(3, '0')}`,
@@ -574,7 +584,12 @@ describe('FulfillmentService trên PostgreSQL thật', () => {
       data: { slug: productTag, name: 'Hang sap het' },
     });
     const variant = await prisma.productVariant.create({
-      data: { productId: product.id, name: 'Mặc định', price: '10.00' },
+      data: {
+      productId: product.id,
+      name: 'Mặc định',
+      price: '10.00',
+      priceAmount: '10.00',
+    },
     });
     await prisma.stockItem.create({
       data: { variantId: variant.id, content: 'DONG-KHO-CUOI-CUNG', status: 'AVAILABLE' },

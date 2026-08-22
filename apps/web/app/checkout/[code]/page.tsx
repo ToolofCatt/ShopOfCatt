@@ -18,7 +18,6 @@ import {
   Wallet,
 } from 'lucide-react';
 import {
-  formatUsdt,
   type CheckPaymentDto,
   type OrderDetailDto,
   type PaymentInfoDto,
@@ -28,10 +27,12 @@ import {
 import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
+import { usePendingOrderReminder } from '@/lib/pending-order-reminder';
+import { usePrices } from '@/lib/prices';
+import { PaymentMethodTabs } from '@/components/payment-method-tabs';
 import { formatCryptoAmount } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { Badge, Button, Card, EmptyState, Input, Label, Spinner, buttonVariants } from '@/components/ui';
-import { Tabs } from '@/components/admin/tabs';
 
 function formatCountdown(remainingMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
@@ -136,6 +137,7 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   const router = useRouter();
   const { token, loading: authLoading } = useAuth();
   const { t } = useI18n();
+  const { orderMoney, priceUsdt } = usePrices();
 
   const [order, setOrder] = useState<OrderDetailDto | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -151,6 +153,19 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   const [methods, setMethods] = useState<PaymentMethodDto[] | null>(null);
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
+
+  /*
+    Nhắc khách quay lại khi họ rời tab mà đơn còn chưa trả tiền.
+
+    Gọi ở đây, TRƯỚC các nhánh return sớm bên dưới (đang tải, không thấy đơn, đã
+    hết hạn): React đòi số lần gọi hook giống nhau ở mọi lần render, đặt sau một
+    `return` là app nổ ngay khi trạng thái đổi.
+  */
+  usePendingOrderReminder(order?.status === 'PENDING', {
+    tabTitle: t.checkout.reminderTab(order?.code ?? ''),
+    notifyTitle: t.checkout.reminderTitle,
+    notifyBody: t.checkout.reminderBody(order?.code ?? ''),
+  });
 
   // Xác nhận thủ công bằng TxID (chỉ với thanh toán CRYPTO).
   const [txId, setTxId] = useState('');
@@ -368,6 +383,11 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   }
 
   const payment = order.payment;
+  /*
+    Ba con số tiền quy về đơn vị khách đang xem, lấy một lượt để hoá đơn cộng
+    khớp — ₫ làm tròn lên nên quy riêng từng số là lệch 1 đồng.
+  */
+  const tien = orderMoney(order.subtotalAmount, order.discountAmount, order.totalAmount);
   const mockPayUrl = payment?.mockPayUrl || `/mock-pay/${order.code}`;
   const cryptoAmountText =
     payment?.cryptoAmount !== undefined ? formatCryptoAmount(payment.cryptoAmount) : '';
@@ -414,15 +434,18 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
             <p className="font-mono text-sm text-neutral-500">{order.code}</p>
           </div>
           <div className="text-right">
+            {/*
+              Hiện theo đơn vị khách đang xem, không phải USDT: sản phẩm neo giá
+              theo ₫ thì con số ở đây phải khớp với số in trên mã QR chuyển khoản.
+              Số USDT chính xác vẫn hiện đủ chữ số trong khối thanh toán crypto.
+            */}
             <p className="text-3xl font-semibold tabular-nums tracking-tight">
-              {formatUsdt(order.totalAmount)}
+              {tien.total}
             </p>
             {order.discountAmount > 0 && (
               <p className="text-sm text-neutral-500">
-                <span className="line-through">{formatUsdt(order.subtotalAmount)}</span>{' '}
-                <span className="font-medium text-neutral-950">
-                  −{formatUsdt(order.discountAmount)}
-                </span>
+                <span className="line-through">{tien.subtotal}</span>{' '}
+                <span className="font-medium text-neutral-950">−{tien.discount}</span>
                 {order.couponCode && (
                   <span className="ml-1 font-mono text-xs">({order.couponCode})</span>
                 )}
@@ -461,11 +484,11 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                   <span className="text-neutral-500"> · {item.variantName}</span>
                 )}
                 <span className="block text-xs text-neutral-500">
-                  {formatUsdt(item.unitPrice)} × {item.quantity}
+                  {priceUsdt(item.unitPrice).primary} × {item.quantity}
                 </span>
               </span>
               <span className="shrink-0 tabular-nums text-neutral-950">
-                {formatUsdt(item.unitPrice * item.quantity)}
+                {priceUsdt(item.unitPrice * item.quantity).primary}
               </span>
             </li>
           ))}
@@ -476,16 +499,13 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
             <p className="text-center text-xs font-medium uppercase tracking-wide text-neutral-500">
               {t.checkout.methodTitle}
             </p>
-            <div className="flex justify-center">
-              <Tabs
-                items={methods.map((m) => ({
-                  value: m.method,
-                  label: t.checkout.methods[m.method],
-                }))}
-                value={selectedMethod ?? methods[0].method}
-                onChange={(method) => void handleSelectMethod(method)}
-              />
-            </div>
+            <PaymentMethodTabs
+              methods={methods.map((m) => m.method)}
+              labels={t.checkout.methodsShort}
+              value={selectedMethod ?? methods[0].method}
+              onChange={(method) => void handleSelectMethod(method)}
+              disabled={switching}
+            />
             {switchError && <p className="text-center text-sm text-red-600">{switchError}</p>}
           </div>
         )}

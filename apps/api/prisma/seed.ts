@@ -431,6 +431,9 @@ async function seedProducts(): Promise<void> {
             where: { id: existing.id },
             data: {
               price: seedVariant.price,
+              // Dữ liệu mẫu neo theo USDT, nên số đã gõ chính là số USDT.
+              priceCurrency: 'USDT',
+              priceAmount: seedVariant.price,
               sortOrder: seedVariant.sortOrder,
               active: true,
             },
@@ -440,6 +443,8 @@ async function seedProducts(): Promise<void> {
               productId: product.id,
               name: seedVariant.name,
               price: seedVariant.price,
+              priceCurrency: 'USDT',
+              priceAmount: seedVariant.price,
               sortOrder: seedVariant.sortOrder,
               active: true,
             },

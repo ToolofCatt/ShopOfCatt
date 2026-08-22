@@ -5,7 +5,9 @@ import type {
   ProductVariantTranslation,
 } from '@prisma/client';
 import {
+  DISPLAY_CURRENCIES,
   TRANSLATABLE_LOCALES,
+  type DisplayCurrency,
   type ProductDto,
   type ProductImageDto,
   type ProductTranslations,
@@ -153,6 +155,8 @@ export function toProductVariantDto(
     id: variant.id,
     name: variant.name,
     price: Number(variant.price),
+    priceCurrency: layDonViNeo(variant.priceCurrency),
+    priceAmount: Number(variant.priceAmount),
     sortOrder: variant.sortOrder,
     active: variant.active,
     availableStock: counts.available,
@@ -269,3 +273,14 @@ export const VARIANT_ORDER_BY: Prisma.ProductVariantOrderByWithRelationInput[] =
   { sortOrder: 'asc' },
   { createdAt: 'asc' },
 ];
+
+/**
+ * Cột `priceCurrency` là TEXT tự do, nên một lần sửa tay bằng psql có thể để lại
+ * giá trị lạ. Quy về USDT thay vì để giao diện rơi vào nhánh không ai lường
+ * trước — USDT là hành vi cũ, an toàn nhất khi không rõ.
+ */
+function layDonViNeo(value: string): DisplayCurrency {
+  return (DISPLAY_CURRENCIES as readonly string[]).includes(value)
+    ? (value as DisplayCurrency)
+    : 'USDT';
+}

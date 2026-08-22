@@ -138,8 +138,17 @@ export interface ProductImageDto {
 /** Một "loại" của sản phẩm — có giá và kho riêng. */
 export interface ProductVariantDto {
   id: string;
-  name: string;
+  /**
+   * Giá quy ra USDT — con số DẪN XUẤT, dùng cho mọi phép tính tiền (tổng đơn,
+   * mã giảm giá, thống kê). Khi neo theo ₫ hoặc ¥ thì nó được tính lại mỗi lần
+   * tỉ giá đổi, nên đừng coi nó là con số chủ shop đã gõ.
+   */
   price: number;
+  name: string;
+  /** Đơn vị chủ shop đã gõ giá bằng — cái NEO. */
+  priceCurrency: DisplayCurrency;
+  /** Số tiền đúng như chủ shop đã gõ, theo `priceCurrency`. */
+  priceAmount: number;
   sortOrder: number;
   active: boolean;
   availableStock: number;
@@ -765,7 +774,8 @@ export const STOCK_STATUS_LABEL: Record<StockStatus, string> = {
  * Giá gốc LUÔN là USDT — đây chỉ là lớp quy đổi để hiển thị. Số tiền thật sự
  * thu vẫn là USDT (crypto/Binance) hoặc VND (chuyển khoản qua SePay).
  */
-export type DisplayCurrency = 'USDT' | 'VND' | 'CNY' | 'USD';
+export const DISPLAY_CURRENCIES = ['USDT', 'VND', 'CNY', 'USD'] as const;
+export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
 
 
 /** Tỉ giá cửa hàng đang dùng, trả về cho trang khách. */
@@ -794,6 +804,111 @@ export function convertFromUsdt(
   const rate = currency === 'VND' ? rates.vndPerUsdt : rates.cnyPerUsdt;
   if (!Number.isFinite(rate) || rate <= 0) return null;
   return usdt * rate;
+}
+
+/**
+ * Đổi một số tiền ở đơn vị bất kỳ NGƯỢC về USDT. `null` = không đổi được.
+ *
+ * Là nghịch đảo của `convertFromUsdt`, dùng khi chủ shop gõ giá bằng ₫ / ¥ và
+ * hệ thống phải suy ra con số USDT để tính tiền.
+ */
+export function toUsdtFromCurrency(
+  amount: number,
+  currency: DisplayCurrency,
+  rates: StoreRatesDto | null,
+): number | null {
+  if (currency === 'USDT' || currency === 'USD') return amount;
+  if (!rates) return null;
+  const rate = currency === 'VND' ? rates.vndPerUsdt : rates.cnyPerUsdt;
+  if (!Number.isFinite(rate) || rate <= 0) return null;
+  return amount / rate;
+}
+
+/**
+ * Số chữ số thập phân của cột giá USDT trong CSDL.
+ *
+ * SÁU, không phải hai. Với hai chữ số thì hai mức giá kề nhau cách nhau 0,01
+ * USDT ≈ 260 ₫, nên phần lớn số tròn bằng đồng (100.000) không nằm trên lưới đó
+ * và khách luôn thấy một con số lệch vài chục đồng. Sáu chữ số thu khoảng cách
+ * đó về ~0,026 ₫ — nhỏ hơn một đồng, nên số ₫ quy ngược lại về đúng số đã gõ.
+ */
+export const USDT_DECIMALS = 6;
+
+/**
+ * Làm tròn XUỐNG số USDT về đúng độ chính xác của cột giá.
+ *
+ * Phải là làm tròn xuống: số ₫ hiển thị được tính bằng `Math.ceil` (xem
+ * `formatMoney`), nên nếu USDT bị làm tròn LÊN thì quy ngược lại vượt quá số đã
+ * gõ và khách thấy 100.001 ₫ thay vì 100.000.
+ */
+export function floorUsdt(usdt: number): number {
+  const f = 10 ** USDT_DECIMALS;
+  return Math.floor(usdt * f) / f;
+}
+
+/**
+ * Làm tròn số USDT về đúng độ chính xác của cột giá, chỉ để dập rác nhị phân.
+ *
+ * Khác `sumMoney` (hai chữ số): hai chữ số phá giá neo theo ₫ — 3.852198 thành
+ * 3.85 rồi quy sang ₫ ra 99.943 thay vì 100.000. `sumMoney` vẫn đúng cho thống
+ * kê doanh thu, nhưng KHÔNG dùng được cho tổng của một đơn.
+ */
+export function roundUsdt(usdt: number): number {
+  const f = 10 ** USDT_DECIMALS;
+  return Math.round(usdt * f) / f;
+}
+
+/** Giá của một loại hàng, đủ thông tin để hiện đúng con số chủ shop đã gõ. */
+export interface AnchoredPrice {
+  price: number;
+  priceCurrency: DisplayCurrency;
+  priceAmount: number;
+}
+
+/**
+ * Số tiền hiện cho khách đang xem bằng `viewer`.
+ *
+ * Khách xem đúng đơn vị đã neo ⇒ trả về NGUYÊN số chủ shop đã gõ, không quy đổi
+ * gì. Đó là toàn bộ điểm của việc neo: gõ 100.000 ₫ thì khách Việt thấy đúng
+ * 100.000 ₫ hôm nay và cả tháng sau, dù tỉ giá đã trôi.
+ *
+ * Khách xem đơn vị khác ⇒ quy đổi từ USDT như trước, và con số đó tất nhiên
+ * không tròn — không có cách nào một con số tròn ở hai đơn vị cùng lúc.
+ */
+export function displayPriceAmount(
+  p: AnchoredPrice,
+  viewer: DisplayCurrency,
+  rates: StoreRatesDto | null,
+): { amount: number; currency: DisplayCurrency } {
+  if (viewer === p.priceCurrency) {
+    return { amount: p.priceAmount, currency: viewer };
+  }
+  const doi = convertFromUsdt(p.price, viewer, rates);
+  if (doi === null) {
+    // Không có tỉ giá cho đơn vị khách xem ⇒ lùi về USDT, không bịa số.
+    return { amount: p.price, currency: 'USDT' };
+  }
+  return { amount: doi, currency: viewer };
+}
+
+/**
+ * Neo của loại hàng RẺ NHẤT đang bán — giá hiện trên thẻ sản phẩm.
+ *
+ * Chọn theo USDT vì đó là đơn vị tính tiền chung; nếu các loại neo khác đơn vị
+ * nhau thì "rẻ nhất theo USDT" có thể không phải "rẻ nhất theo ₫", nhưng lệch đó
+ * chỉ xảy ra khi hai loại gần bằng giá và vẫn hiện đúng giá của một loại thật.
+ *
+ * `null` = sản phẩm không có loại nào đang bán ⇒ gọi phải tự lùi về `minPrice`.
+ */
+export function cheapestAnchored(
+  variants: readonly AnchoredPrice[] & readonly { active: boolean }[],
+): AnchoredPrice | null {
+  let re: (AnchoredPrice & { active: boolean }) | null = null;
+  for (const v of variants) {
+    if (!v.active) continue;
+    if (re === null || v.price < re.price) re = v;
+  }
+  return re;
 }
 
 /**

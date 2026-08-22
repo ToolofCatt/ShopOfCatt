@@ -4,10 +4,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { ChevronRight, PackageOpen, ServerCrash } from 'lucide-react';
-import { formatUsdt, type OrderStatus, type OrderSummaryDto } from '@webcatt/shared';
+import type { OrderStatus, OrderSummaryDto } from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
+import { usePrices } from '@/lib/prices';
 import { Button, Card, EmptyState, Spinner, buttonVariants } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/order-status-badge';
 import { Tabs } from '@/components/admin/tabs';
@@ -28,6 +29,7 @@ export default function OrdersPage() {
   const router = useRouter();
   const { token, loading: authLoading } = useAuth();
   const { t, formatDate } = useI18n();
+  const { priceUsdt } = usePrices();
 
   const [orders, setOrders] = useState<OrderSummaryDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -152,7 +154,7 @@ export default function OrdersPage() {
                           )}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
-                          {formatUsdt(order.totalAmount)}
+                          {priceUsdt(order.totalAmount).primary}
                         </td>
                         <td className="px-4 py-3">
                           <OrderStatusBadge status={order.status} />

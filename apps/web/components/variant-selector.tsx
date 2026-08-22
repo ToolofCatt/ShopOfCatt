@@ -51,7 +51,7 @@ export function VariantSelector({ variants, selectedId, onSelect }: VariantSelec
                   {variant.name}
                 </span>
                 <span className="mt-0.5 block text-sm font-semibold tabular-nums text-neutral-950">
-                  {price(variant.price).primary}
+                  {price(variant).primary}
                 </span>
               </span>
 

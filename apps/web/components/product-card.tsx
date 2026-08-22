@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import type { ProductDto } from '@webcatt/shared';
+import { cheapestAnchored, type ProductDto } from '@webcatt/shared';
 import { usePrices } from '@/lib/prices';
 import { ProductVisual } from '@/components/icon-map';
 import { Badge } from '@/components/ui';
@@ -10,10 +10,17 @@ import { cn } from '@/lib/cn';
 
 export function ProductCard({ product }: { product: ProductDto }) {
   const { t } = useI18n();
-  const { price } = usePrices();
+  const { price, priceUsdt } = usePrices();
   const outOfStock = product.availableStock <= 0;
-  // Nhiều loại với giá khác nhau → hiển thị "Từ {giá thấp nhất}".
-  const gia = price(product.minPrice);
+  /*
+    Nhiều loại với giá khác nhau → hiển thị "Từ {giá thấp nhất}".
+
+    Lấy NEO của loại rẻ nhất, không lấy `minPrice` (USDT thuần): chỉ có neo mới
+    hiện được đúng con số tròn chủ shop đã gõ. Không có loại nào đang bán thì
+    mới lùi về `minPrice`.
+  */
+  const neo = cheapestAnchored(product.variants);
+  const gia = neo ? price(neo) : priceUsdt(product.minPrice);
   const priceLabel =
     product.maxPrice > product.minPrice
       ? t.product.priceFrom(gia.primary)

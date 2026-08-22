@@ -117,6 +117,10 @@ export const vi = {
 
     /* ===== v5 — chọn phương thức + thanh toán USDT on-chain ===== */
     methodTitle: 'Phương thức thanh toán',
+    reminderTab: (code: string) => `⚠ Chờ thanh toán · ${code}`,
+    reminderTitle: 'Bạn có đơn hàng cần thanh toán',
+    reminderBody: (code: string) =>
+      `Đơn ${code} vẫn chưa được thanh toán. Bấm vào đây để mở lại trang thanh toán.`,
     methods: {
       mock: 'Giả lập',
       binance_pay: 'Binance Pay',
@@ -124,6 +128,20 @@ export const vi = {
       crypto_bep20: 'USDT · BEP20',
       crypto_trc20: 'USDT · TRC20',
       sepay: 'Chuyển khoản ngân hàng',
+    } satisfies Record<PaymentMethod, string>,
+
+    /*
+      Nhãn NGẮN cho ô chọn phương thức: mỗi phương thức chỉ được một cột
+      hẹp, và đã có biểu tượng đứng cạnh nên không cần nhắc lại "USDT ·"
+      hay "Binance Pay ·". Nhãn dài ở trên vẫn dùng cho tiêu đề và tooltip.
+    */
+    methodsShort: {
+      mock: 'Giả lập',
+      binance_pay: 'Binance Pay',
+      binance_id: 'Binance ID',
+      crypto_bep20: 'BEP20',
+      crypto_trc20: 'TRC20',
+      sepay: 'Ngân hàng',
     } satisfies Record<PaymentMethod, string>,
 
     cryptoTitle: 'Chuyển USDT on-chain',
@@ -416,6 +434,7 @@ export const vi = {
     formSlugAuto: 'tự tạo từ tên',
     formPrice: 'Giá *',
     priceSaved: 'Sẽ lưu:',
+    priceAnchoredAt: (unit: string) => `Neo theo ${unit} — sẽ lưu:`,
     formCategory: 'Danh mục',
     formCategoryPlaceholder: 'Phần mềm',
     formImage: 'Ảnh sản phẩm',

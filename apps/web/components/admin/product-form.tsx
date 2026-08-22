@@ -6,6 +6,7 @@ import { useState, type FormEvent } from 'react';
 import {
   STOCK_DRAW_MODES,
   TRANSLATABLE_LOCALES,
+  type DisplayCurrency,
   type ProductDto,
   type ProductImageDto,
   type StockDrawMode,
@@ -77,6 +78,8 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
   const [galleryError, setGalleryError] = useState<string | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<ProductFieldErrors>({});
+  /* Đơn vị NEO của giá loại "Mặc định" sắp tạo — mặc định USDT như trước. */
+  const [priceCurrency, setPriceCurrency] = useState<DisplayCurrency>('USDT');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -126,7 +129,10 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
       category: optional(category),
     };
     // Giá chỉ gửi khi tạo mới: API dùng nó để tạo loại "Mặc định".
-    if (!isEdit) body.price = Number(price);
+    if (!isEdit) {
+      body.price = Number(price);
+      body.priceCurrency = priceCurrency;
+    }
     // Slug is never nullable: send only when provided (create auto-generates from name).
     if (slug.trim()) body.slug = slug.trim();
     for (const key of Object.keys(body)) {
@@ -306,14 +312,18 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
                   error={fieldErrors.price}
                 >
                   {/*
-                    Nhập được bằng ₫ / ¥ / $ rồi tự đổi sang USDT — chủ shop nghĩ
-                    bằng tiền Việt, không phải USDT. Giá trị `price` vẫn luôn là
-                    USDT nên phần gửi lên không đổi gì.
+                    Đơn vị chọn ở đây là cái NEO của giá: gõ 100.000 rồi chọn ₫
+                    thì khách Việt thấy đúng 100.000 ₫ mãi về sau, không trôi
+                    theo tỉ giá.
                   */}
                   <PriceInput
                     id="product-price"
                     value={price}
-                    onChange={setPrice}
+                    currency={priceCurrency}
+                    onChange={(amount, unit) => {
+                      setPrice(amount);
+                      setPriceCurrency(unit);
+                    }}
                     invalid={Boolean(fieldErrors.price)}
                     placeholder="9.99"
                   />
@@ -465,6 +475,7 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
               thumbnail: imagePick ? imagePick.thumbnail : (product?.thumbnail ?? ''),
               images,
               price,
+              priceCurrency,
               variants: product?.variants ?? [],
             }}
           />

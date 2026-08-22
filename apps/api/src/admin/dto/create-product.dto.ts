@@ -10,9 +10,11 @@ import {
   Min,
 } from 'class-validator';
 import {
+  DISPLAY_CURRENCIES,
   PRODUCT_IMAGE_MAX_LENGTH,
   PRODUCT_THUMBNAIL_MAX_LENGTH,
   STOCK_DRAW_MODES,
+  type DisplayCurrency,
   type StockDrawMode,
 } from '@webcatt/shared';
 import { K } from '../../i18n/messages';
@@ -23,12 +25,22 @@ export class CreateProductDto {
   name: string;
 
   /** Giá của loại mặc định ("Mặc định") được tạo cùng sản phẩm. */
+  /**
+   * Số tiền chủ shop GÕ VÀO, theo `priceCurrency`. Hai chữ số thập phân là đủ
+   * cho mọi đơn vị chủ shop gõ; con số USDT sáu chữ số là do máy chủ suy ra,
+   * không nhận từ client.
+   */
   @IsNumber(
     { maxDecimalPlaces: 2 },
     { message: K.adminPriceNumber },
   )
   @Min(0, { message: K.adminPriceMin })
   price: number;
+
+  /** Đơn vị của `price`. Thiếu thì coi như USDT, giữ nguyên hành vi cũ. */
+  @IsOptional()
+  @IsIn(DISPLAY_CURRENCIES, { message: K.adminPriceCurrencyInvalid })
+  priceCurrency?: DisplayCurrency;
 
   @IsOptional()
   @IsString({ message: K.adminSlugInvalid })

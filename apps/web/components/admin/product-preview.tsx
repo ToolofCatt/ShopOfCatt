@@ -1,6 +1,12 @@
 'use client';
 
-import type { ProductDto, ProductImageDto, ProductVariantDto } from '@webcatt/shared';
+import {
+  toUsdtFromCurrency,
+  type DisplayCurrency,
+  type ProductDto,
+  type ProductImageDto,
+  type ProductVariantDto,
+} from '@webcatt/shared';
 import { ProductCard } from '@/components/product-card';
 import { ProductDetail } from '@/components/product-detail';
 import { useI18n } from '@/lib/i18n/client';
@@ -24,6 +30,8 @@ export interface ProductPreviewInput {
   images: ProductImageDto[];
   /** Chỉ có ở chế độ tạo mới: giá của loại "Mặc định" sắp được tạo. */
   price: string;
+  /** Đơn vị neo của giá đó. */
+  priceCurrency: DisplayCurrency;
   /** Chế độ sửa: các loại có thật; chế độ tạo mới thì rỗng. */
   variants: ProductVariantDto[];
 }
@@ -31,11 +39,16 @@ export interface ProductPreviewInput {
 /** Loại giả cho chế độ tạo mới, để khối giá và tồn kho có gì đó mà hiển thị. */
 function previewVariants(input: ProductPreviewInput): ProductVariantDto[] {
   if (input.variants.length > 0) return input.variants;
+  const soDaGo = Number(input.price) || 0;
   return [
     {
       id: 'preview',
       name: 'Mặc định',
-      price: Number(input.price) || 0,
+      // `price` (USDT) chỉ dùng để so xem loại nào rẻ nhất; con số khách thấy
+      // đến từ `priceAmount` + `priceCurrency`, nên xem trước không cần tỉ giá.
+      price: toUsdtFromCurrency(soDaGo, input.priceCurrency, null) ?? soDaGo,
+      priceCurrency: input.priceCurrency,
+      priceAmount: soDaGo,
       sortOrder: 0,
       active: true,
       availableStock: 10,

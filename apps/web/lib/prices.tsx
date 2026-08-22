@@ -3,8 +3,10 @@
 import { createContext, useContext, useMemo, type ReactNode } from 'react';
 import {
   convertFromUsdt,
+  displayPriceAmount,
   formatMoney,
   formatUsdt,
+  type AnchoredPrice,
   type StoreRatesDto,
 } from '@webcatt/shared';
 import { CURRENCY_BY_LOCALE } from '@/lib/i18n/config';
@@ -44,7 +46,27 @@ export interface DisplayPrice {
 }
 
 export interface PriceFormatter {
-  price: (usdt: number) => DisplayPrice;
+  /**
+   * Giá của một loại hàng, theo đúng NEO của nó.
+   *
+   * Khách xem đúng đơn vị đã neo ⇒ hiện nguyên con số chủ shop đã gõ (số tròn).
+   * Xem đơn vị khác ⇒ quy đổi từ USDT.
+   */
+  price: (p: AnchoredPrice) => DisplayPrice;
+  /** Giá thuần USDT — dùng cho những chỗ chỉ có con số, không có neo. */
+  priceUsdt: (usdt: number) => DisplayPrice;
+  /**
+   * Ba con số tiền của một đơn, quy về đơn vị khách đang xem.
+   *
+   * Trả về cả ba cùng lúc chứ không quy từng số riêng lẻ, vì ₫ làm tròn LÊN:
+   * quy riêng thì hoá đơn không cộng khớp (100.000 − 9.847 ≠ 90.153). Ở đây số
+   * giảm giá được lấy bằng HIỆU của hai số đã làm tròn, nên bao giờ cũng khớp.
+   */
+  orderMoney: (
+    subtotalUsdt: number,
+    discountUsdt: number,
+    totalUsdt: number,
+  ) => { subtotal: string; discount: string; total: string };
   /**
    * Quy đổi ra MỌI đơn vị cùng lúc — cho ô nhập giá bên quản trị.
    *
@@ -67,13 +89,43 @@ export function usePrices(): PriceFormatter {
   const currency = CURRENCY_BY_LOCALE[locale];
 
   return useMemo(() => {
-    const price = (usdt: number): DisplayPrice => {
+    const price = (p: AnchoredPrice): DisplayPrice => {
+      const { amount, currency: dv } = displayPriceAmount(p, currency, rates);
+      return { primary: formatMoney(amount, dv) };
+    };
+    const priceUsdt = (usdt: number): DisplayPrice => {
       // `null` = chưa có tỉ giá cho đơn vị này ⇒ lùi về USDT, không bịa số.
       const converted = convertFromUsdt(usdt, currency, rates);
       if (converted === null) {
         return { primary: formatUsdt(usdt) };
       }
       return { primary: formatMoney(converted, currency) };
+    };
+    const orderMoney = (
+      subtotalUsdt: number,
+      discountUsdt: number,
+      totalUsdt: number,
+    ) => {
+      const st = convertFromUsdt(subtotalUsdt, currency, rates);
+      const tt = convertFromUsdt(totalUsdt, currency, rates);
+      if (st === null || tt === null) {
+        // Không quy đổi được ⇒ hiện USDT y như trước, không bịa số.
+        return {
+          subtotal: formatUsdt(subtotalUsdt),
+          discount: formatUsdt(discountUsdt),
+          total: formatUsdt(totalUsdt),
+        };
+      }
+      // Làm tròn về đúng độ chính xác sẽ HIỆN, rồi mới trừ.
+      const chot = (v: number) =>
+        currency === 'VND' ? Math.ceil(v) : Math.round(v * 100) / 100;
+      const s = chot(st);
+      const t = chot(tt);
+      return {
+        subtotal: formatMoney(s, currency),
+        discount: formatMoney(s - t, currency),
+        total: formatMoney(t, currency),
+      };
     };
     const allConversions = (usdt: number): string | null => {
       if (!Number.isFinite(usdt) || usdt <= 0) return null;
@@ -85,6 +137,6 @@ export function usePrices(): PriceFormatter {
       return phan.length > 0 ? phan.join('  ·  ') : null;
     };
 
-    return { price, allConversions };
+    return { price, priceUsdt, orderMoney, allConversions };
   }, [currency, rates]);
 }

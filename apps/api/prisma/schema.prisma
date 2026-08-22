@@ -195,7 +195,21 @@ model ProductVariant {
   productId String
   product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
   name      String
-  price     Decimal @db.Decimal(18, 2)
+
+  /// Giá quy ra USDT — con số DẪN XUẤT, dùng cho mọi phép tính tiền. Khi neo
+  /// theo ₫ / ¥ thì nó được tính lại mỗi lần tỉ giá đổi.
+  ///
+  /// SÁU chữ số thập phân, không phải hai: với hai chữ số thì hai mức giá kề
+  /// nhau cách nhau ~260 ₫, nên số tròn bằng đồng không nằm trên lưới đó được.
+  price Decimal @db.Decimal(18, 6)
+
+  /// Đơn vị chủ shop đã gõ giá bằng: "USDT" | "VND" | "USD" | "CNY" — cái NEO.
+  priceCurrency String @default("USDT")
+
+  /// Số tiền đúng như chủ shop đã gõ, theo `priceCurrency`. Đây mới là NGUỒN
+  /// SỰ THẬT của giá; `price` được suy ra từ nó.
+  priceAmount Decimal @db.Decimal(18, 2)
+
   sortOrder Int     @default(0)
   active    Boolean @default(true)
 
@@ -262,12 +276,16 @@ model Order {
   userId String
   user   User        @relation(fields: [userId], references: [id])
   status OrderStatus @default(PENDING)
-  /// Tiền hàng trước khi giảm giá
-  subtotalAmount Decimal @default(0) @db.Decimal(18, 2)
+  /// Tiền hàng trước khi giảm giá.
+  ///
+  /// SÁU chữ số thập phân, khớp với `ProductVariant.price`: cắt về hai chữ số ở
+  /// đây là phá luôn giá neo theo ₫ — đơn 100.000 ₫ thành 3.85 USDT rồi quy
+  /// ngược lại ra 99.943 ₫, đúng cái lỗi mà việc neo giá sinh ra để chữa.
+  subtotalAmount Decimal @default(0) @db.Decimal(18, 6)
   /// Số tiền được giảm bởi mã giảm giá
-  discountAmount Decimal @default(0) @db.Decimal(18, 2)
+  discountAmount Decimal @default(0) @db.Decimal(18, 6)
   /// Số tiền khách phải trả = subtotalAmount - discountAmount
-  totalAmount Decimal @db.Decimal(18, 2)
+  totalAmount Decimal @db.Decimal(18, 6)
   couponId    String?
   coupon      Coupon? @relation(fields: [couponId], references: [id], onDelete: SetNull)
   /// Ảnh chụp mã đã dùng — vẫn đọc được nếu mã bị xóa
@@ -324,7 +342,8 @@ model OrderItem {
   /// Ảnh chụp tại thời điểm đặt hàng — không đổi khi sản phẩm bị sửa/xóa
   productName String
   variantName String          @default("")
-  unitPrice   Decimal         @db.Decimal(18, 2)
+  /// Ảnh chụp giá USDT lúc đặt — sáu chữ số như `ProductVariant.price`.
+  unitPrice   Decimal         @db.Decimal(18, 6)
   quantity    Int
   stockItems  StockItem[]
 
@@ -341,7 +360,7 @@ model Payment {
   mode            String        @default("MOCK")
   merchantTradeNo String        @unique
   prepayId        String?
-  amount          Decimal       @db.Decimal(18, 2)
+  amount          Decimal       @db.Decimal(18, 6)
   currency        String        @default("USDT")
   status          PaymentStatus @default(PENDING)
   checkoutUrl     String?
