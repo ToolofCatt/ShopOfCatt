@@ -58,9 +58,14 @@ export function ProductCard({ product }: { product: ProductDto }) {
       />
 
       {/*
-        `flex-1` ở khối chữ (chứ không ở giá): giá phải dính ngay dưới tên/mô tả,
-        còn khoảng trống khi thẻ này thấp hơn thẻ bên cạnh thì dồn xuống phía
-        dưới. Đảo lại là giá bị đẩy rời khỏi tên, mỗi thẻ một độ cao khác nhau.
+        `flex-1` ở khối chữ + `mt-auto` ở giá: giá tụt xuống sát đường kẻ ngang,
+        khoảng trống dồn lên chỗ mô tả.
+
+        Đây là cách duy nhất để giá của mọi thẻ trên cùng một hàng nằm cùng một
+        đường: tên dài 1 hay 2 dòng, có mô tả hay không đều được. Đặt chiều cao
+        cứng cho mô tả cũng ra kết quả tương tự nhưng vỡ ngay khi tên xuống 2
+        dòng — mà lưới thì luôn kéo các thẻ cùng hàng cao bằng nhau, nên neo giá
+        từ dưới lên là đủ.
       */}
       <div className="flex flex-1 flex-col gap-1">
         {product.category && (
@@ -78,7 +83,7 @@ export function ProductCard({ product }: { product: ProductDto }) {
           không có nó thì giá bị ngắt làm đôi ("10.50" xuống dòng rời khỏi
           "USDT").
         */}
-        <p className="mt-1 whitespace-nowrap font-semibold tabular-nums text-neutral-950">
+        <p className="mt-auto pt-2 whitespace-nowrap font-semibold tabular-nums text-neutral-950">
           {priceLabel}
         </p>
       </div>
