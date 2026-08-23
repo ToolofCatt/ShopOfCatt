@@ -5,7 +5,6 @@ import { RefreshCw } from 'lucide-react';
 import {
   TELEGRAM_GREETING_MAX_LENGTH,
   type AdminStoreSettingDto,
-  type TelegramPreviewDto,
   type TelegramStatusDto,
 } from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
@@ -14,31 +13,9 @@ import { useI18n } from '@/lib/i18n/client';
 import { cn } from '@/lib/cn';
 import { Button, Card, Field, Input, Spinner } from '@/components/ui';
 import { PageHeader } from '@/components/admin/page-header';
-import { Tabs } from '@/components/admin/tabs';
+import { TelegramSimulator } from '@/components/admin/telegram-simulator';
 import { ToggleRow } from '@/components/admin/toggle-row';
 import { TEXTAREA_CLASSES } from '@/components/admin/helpers';
-
-type PreviewLang = 'vi' | 'en' | 'zh';
-
-/**
- * Text ở đây do CHÍNH renderer của bot dựng (API /admin/telegram/preview):
- * mọi nội dung từ CSDL đã qua escapeHtml, thẻ duy nhất là <b>/<i> do renderer
- * tự thêm — nên đổ thẳng vào innerHTML được. KHÔNG dùng hàm này cho bất kỳ
- * chuỗi nào khác.
- */
-function tgHtml(text: string): { __html: string } {
-  return { __html: text.replace(/\n/g, '<br/>') };
-}
-
-/** Một bong bóng tin nhắn kiểu Telegram (nền tối, góc bo, đuôi trái). */
-function TgBubble({ html }: { html: string }) {
-  return (
-    <div
-      className="max-w-[400px] rounded-xl rounded-bl-sm bg-[#182533] px-3.5 py-2.5 text-[13.5px] leading-relaxed text-neutral-100 [overflow-wrap:anywhere] [&_b]:font-semibold [&_i]:italic"
-      dangerouslySetInnerHTML={tgHtml(html)}
-    />
-  );
-}
 
 export default function AdminTelegramPage() {
   const { token } = useAuth();
@@ -46,7 +23,6 @@ export default function AdminTelegramPage() {
 
   const [settings, setSettings] = useState<AdminStoreSettingDto | null>(null);
   const [status, setStatus] = useState<TelegramStatusDto | null>(null);
-  const [preview, setPreview] = useState<TelegramPreviewDto | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const [enabled, setEnabled] = useState(false);
@@ -58,10 +34,8 @@ export default function AdminTelegramPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const [previewLang, setPreviewLang] = useState<PreviewLang>('vi');
-  /** 'storefront' hoặc productId đang mở chi tiết — mô phỏng edit-tại-chỗ của bot. */
-  const [previewView, setPreviewView] = useState<string>('storefront');
-  const [previewLoading, setPreviewLoading] = useState(false);
+  /** Tăng sau mỗi lần lưu → trình giả lập chạy lại cuộc trò chuyện từ đầu. */
+  const [simKey, setSimKey] = useState(0);
 
   const applySettings = (next: AdminStoreSettingDto) => {
     setSettings(next);
@@ -80,26 +54,6 @@ export default function AdminTelegramPage() {
     }
   }, [token]);
 
-  const refreshPreview = useCallback(
-    async (lang: PreviewLang, page: number) => {
-      if (!token) return;
-      setPreviewLoading(true);
-      try {
-        const next = await apiFetch<TelegramPreviewDto>(
-          `/admin/telegram/preview?lang=${lang}&page=${page}`,
-          { token },
-        );
-        setPreview(next);
-        setPreviewView('storefront');
-      } catch (err) {
-        setLoadError(apiErrorMessage(err, t.common.connectionError));
-      } finally {
-        setPreviewLoading(false);
-      }
-    },
-    [token, t],
-  );
-
   useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -108,7 +62,6 @@ export default function AdminTelegramPage() {
         const [nextSettings] = await Promise.all([
           apiFetch<AdminStoreSettingDto>('/admin/settings', { token }),
           refreshStatus(),
-          refreshPreview('vi', 1),
         ]);
         if (!cancelled) applySettings(nextSettings);
       } catch (err) {
@@ -146,8 +99,8 @@ export default function AdminTelegramPage() {
       });
       applySettings(next);
       setSaved(true);
-      // Lời chào / công tắc thông báo đổi là bản xem trước phải đổi theo.
-      void refreshPreview(previewLang, preview?.storefront.page ?? 1);
+      // Lời chào / công tắc thông báo đổi là bản xem trước phải diễn lại theo.
+      setSimKey((key) => key + 1);
       void refreshStatus();
     } catch (err) {
       setFormError(apiErrorMessage(err, t.common.connectionError));
@@ -155,31 +108,6 @@ export default function AdminTelegramPage() {
       setSaving(false);
     }
   };
-
-  /** Bấm nút trong khung xem trước — mô phỏng đúng điều hướng của bot. */
-  const onPreviewButton = (callbackData: string) => {
-    if (!preview) return;
-    if (callbackData.startsWith('p:')) {
-      const productId = callbackData.split(':')[1];
-      if (preview.details[productId]) setPreviewView(productId);
-      return;
-    }
-    if (callbackData.startsWith('c:')) {
-      const page = Number(callbackData.split(':')[1]);
-      if (page === preview.storefront.page) {
-        setPreviewView('storefront');
-      } else {
-        void refreshPreview(previewLang, page);
-      }
-    }
-  };
-
-  const currentMessage =
-    preview === null
-      ? null
-      : previewView === 'storefront'
-        ? preview.storefront
-        : (preview.details[previewView] ?? preview.storefront);
 
   const statusText =
     status === null
@@ -282,6 +210,20 @@ export default function AdminTelegramPage() {
                 }}
               />
             </Field>
+
+            {/* Hướng dẫn tạo bot — cho chủ shop chưa từng đụng @BotFather. */}
+            {!settings.telegramBotTokenSet && (
+              <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-3 py-2.5">
+                <p className="text-xs font-medium text-neutral-950">
+                  {t.admin.telegramGuideTitle}
+                </p>
+                <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-xs text-neutral-600">
+                  <li>{t.admin.telegramGuideStep1}</li>
+                  <li>{t.admin.telegramGuideStep2}</li>
+                  <li>{t.admin.telegramGuideStep3}</li>
+                </ol>
+              </div>
+            )}
           </div>
 
           <ToggleRow
@@ -322,7 +264,7 @@ export default function AdminTelegramPage() {
           </div>
         </Card>
 
-        {/* ------------------------------ Xem trước ------------------------------ */}
+        {/* ------------------------------ Giả lập ------------------------------ */}
         <Card className="space-y-4 p-6">
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
@@ -330,67 +272,7 @@ export default function AdminTelegramPage() {
             </h2>
             <p className="mt-0.5 text-sm text-neutral-500">{t.admin.telegramPreviewHint}</p>
           </div>
-
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-medium uppercase tracking-wider text-neutral-500">
-              {t.admin.telegramPreviewLang}
-            </span>
-            <Tabs<PreviewLang>
-              items={[
-                { value: 'vi', label: 'VI' },
-                { value: 'en', label: 'EN' },
-                { value: 'zh', label: 'ZH' },
-              ]}
-              value={previewLang}
-              onChange={(lang) => {
-                setPreviewLang(lang);
-                void refreshPreview(lang, 1);
-              }}
-            />
-          </div>
-
-          {/* Khung chat giả lập nền tối của Telegram. */}
-          <div className="relative space-y-3 rounded-2xl bg-[#0e1621] p-4">
-            {previewLoading && (
-              <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/40">
-                <Spinner />
-              </div>
-            )}
-
-            {preview?.announcement && previewView === 'storefront' && (
-              <TgBubble html={preview.announcement} />
-            )}
-
-            {currentMessage && (
-              <div className="max-w-[400px] space-y-1.5">
-                <TgBubble html={currentMessage.text} />
-                {/*
-                  Bàn phím inline — bấm được thật: nút sản phẩm mở chi tiết
-                  (thay tại chỗ như bot editMessageText), nút quay lại/trang
-                  điều hướng đúng như trong Telegram.
-                */}
-                {currentMessage.keyboard.length > 0 && (
-                  <div className="space-y-1">
-                    {currentMessage.keyboard.map((row, rowIndex) => (
-                      <div key={rowIndex} className="flex gap-1">
-                        {row.map((button) => (
-                          <button
-                            key={button.callbackData}
-                            type="button"
-                            onClick={() => onPreviewButton(button.callbackData)}
-                            className="min-w-0 flex-1 truncate rounded-lg bg-white/10 px-3 py-2 text-center text-[13px] font-medium text-white/90 transition hover:bg-white/20"
-                            title={button.text}
-                          >
-                            {button.text}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          <TelegramSimulator botName={status?.botUsername ?? null} refreshKey={simKey} />
         </Card>
       </div>
     </div>
