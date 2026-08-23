@@ -914,6 +914,8 @@ export const vi = {
     telegramSimToday: 'Hôm nay',
     telegramSimBotName: 'Bot cửa hàng',
     telegramSimBotTag: 'bot',
+    telegramSimBuyNote:
+      'Nút mua/thanh toán chỉ hoạt động trong Telegram thật — giả lập này không tạo đơn để khỏi đụng kho.',
     telegramGuideTitle: 'Chưa có bot? Tạo trong một phút:',
     telegramGuideStep1: 'Mở Telegram, tìm @BotFather, nhắn /newbot.',
     telegramGuideStep2: 'Đặt tên hiển thị và tên @username cho bot.',

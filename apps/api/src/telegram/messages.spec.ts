@@ -38,12 +38,17 @@ describe('botDict', () => {
     for (const lang of ['vi', 'en', 'zh'] as const satisfies readonly BotLang[]) {
       const dict = botDict(lang);
       for (const [key, value] of Object.entries(dict)) {
-        const text =
+        // Ba dạng khoá: chuỗi, hàm, và bảng tra (methodNames/orderStatusNames).
+        const texts: string[] =
           typeof value === 'function'
-            ? (value as (...args: (string | number)[]) => string)(1, 2)
-            : value;
-        expect(text, `${lang}.${key}`).toBeTypeOf('string');
-        expect(text.length, `${lang}.${key}`).toBeGreaterThan(0);
+            ? [(value as (...args: (string | number)[]) => string)(1, 2)]
+            : typeof value === 'object'
+              ? Object.values(value as Record<string, string>)
+              : [value];
+        for (const text of texts) {
+          expect(text, `${lang}.${key}`).toBeTypeOf('string');
+          expect(text.length, `${lang}.${key}`).toBeGreaterThan(0);
+        }
       }
     }
   });

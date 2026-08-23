@@ -895,6 +895,8 @@ export const en: Dictionary = {
     telegramSimToday: 'Today',
     telegramSimBotName: 'Store bot',
     telegramSimBotTag: 'bot',
+    telegramSimBuyNote:
+      'Buy/payment buttons only work in real Telegram — this simulator never creates orders, so stock stays untouched.',
     telegramGuideTitle: 'No bot yet? Create one in a minute:',
     telegramGuideStep1: 'Open Telegram, find @BotFather, send /newbot.',
     telegramGuideStep2: 'Pick a display name and a @username for the bot.',

@@ -11,5 +11,7 @@ import { PaymentsService } from './payments.service';
   imports: [OrdersModule, BinanceModule, AuthModule, SettingsModule],
   controllers: [PaymentsController],
   providers: [PaymentsService],
+  // Bot Telegram dùng confirmMock cho cổng giả lập (in-process, không qua HTTP).
+  exports: [PaymentsService],
 })
 export class PaymentsModule {}

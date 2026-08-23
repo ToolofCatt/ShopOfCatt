@@ -191,10 +191,11 @@ describe('renderStorefront', () => {
     { label: 'Kênh <tin>', value: 'https://t.me/cattshop' },
   ];
 
-  it('mỗi sản phẩm một hàng nút, callback đúng dạng', () => {
+  it('mỗi sản phẩm một hàng nút + hàng "Đơn của tôi", callback đúng dạng', () => {
     const view = renderStorefront([product()], 'vi', RATES, support);
-    expect(view.keyboard).toHaveLength(1);
+    expect(view.keyboard).toHaveLength(2); // 1 sản phẩm + hàng "Đơn của tôi"
     expect(view.keyboard[0][0].callback_data).toBe('p:ckqq1234567890abcdefghijk:1');
+    expect(view.keyboard[1][0].callback_data).toBe('o');
     expect(view.totalPages).toBe(1);
   });
 
@@ -214,10 +215,12 @@ describe('renderStorefront', () => {
     expect(macDinh.text).toContain('Chào bạn đã đến với cửa hàng');
   });
 
-  it('danh sách rỗng → câu báo trống, bàn phím rỗng', () => {
+  it('danh sách rỗng → câu báo trống, chỉ còn nút "Đơn của tôi"', () => {
     const view = renderStorefront([], 'vi', RATES, []);
     expect(view.text).toContain('chưa có sản phẩm');
-    expect(view.keyboard).toHaveLength(0);
+    // Vẫn còn "Đơn của tôi": khách của cửa hàng tạm hết hàng vẫn cần xem key cũ.
+    expect(view.keyboard).toHaveLength(1);
+    expect(view.keyboard[0][0].callback_data).toBe('o');
   });
 
   it('phân trang: 35 sản phẩm → 2 trang, hàng điều hướng đúng đầu/cuối, page vượt kẹp về cuối', () => {
@@ -226,14 +229,15 @@ describe('renderStorefront', () => {
     );
     const p1 = renderStorefront(many, 'vi', RATES, []);
     expect(p1.totalPages).toBe(2);
-    expect(p1.keyboard).toHaveLength(PAGE_MAX_ITEMS + 1); // 30 nút + hàng điều hướng
-    const nav1 = p1.keyboard[p1.keyboard.length - 1].map((b) => b.callback_data);
+    // 30 nút sản phẩm + hàng điều hướng + hàng "Đơn của tôi"
+    expect(p1.keyboard).toHaveLength(PAGE_MAX_ITEMS + 2);
+    const nav1 = p1.keyboard[p1.keyboard.length - 2].map((b) => b.callback_data);
     expect(nav1).toEqual(['c:1', 'c:2']); // trang đầu không có "Trang trước"
 
     const p2 = renderStorefront(many, 'vi', RATES, [], 2);
-    const nav2 = p2.keyboard[p2.keyboard.length - 1].map((b) => b.callback_data);
+    const nav2 = p2.keyboard[p2.keyboard.length - 2].map((b) => b.callback_data);
     expect(nav2).toEqual(['c:1', 'c:2']); // trang cuối không có "Trang sau"
-    expect(p2.keyboard).toHaveLength(5 + 1);
+    expect(p2.keyboard).toHaveLength(5 + 2);
 
     const kep = renderStorefront(many, 'vi', RATES, [], 99);
     expect(kep.page).toBe(2);
@@ -284,7 +288,12 @@ describe('renderProductDetail', () => {
     expect(text).toContain('• <b>OEM</b> — 180.000 ₫ — Hết hàng');
     expect(text).toContain('Còn 0');
     expect(text).not.toContain('Đã bán');
-    expect(keyboard[0][0].callback_data).toBe('c:3');
+    // Nút Mua: CHỈ loại còn hàng (Retail) — OEM hết hàng không chào nút hỏng.
+    const data = keyboard.flat().map((b) => b.callback_data);
+    expect(data).toContain('b:v1:ckqq1234567890abcdefghijk:3');
+    expect(data.filter((d) => d.startsWith('b:'))).toHaveLength(1);
+    // Nút quay lại luôn ở hàng cuối.
+    expect(keyboard[keyboard.length - 1][0].callback_data).toBe('c:3');
   });
 
   it('tên/mô tả được escape; mô tả 10k ký tự vẫn dưới trần 4096 và kết bằng …', () => {

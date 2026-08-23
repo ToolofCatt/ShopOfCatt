@@ -859,6 +859,7 @@ export const zh: Dictionary = {
     telegramSimToday: '今天',
     telegramSimBotName: '商店机器人',
     telegramSimBotTag: 'bot',
+    telegramSimBuyNote: '购买/付款按钮仅在真实 Telegram 中可用——模拟器不会创建订单，以免占用库存。',
     telegramGuideTitle: '还没有机器人？一分钟创建：',
     telegramGuideStep1: '打开 Telegram，搜索 @BotFather，发送 /newbot。',
     telegramGuideStep2: '为机器人设置显示名称和 @username。',

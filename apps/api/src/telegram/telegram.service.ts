@@ -5,6 +5,10 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { AnnouncementService } from '../announcement/announcement.service';
+import { isMessageKey, parseMessage, translate } from '../i18n/messages';
+import { OrdersService } from '../orders/orders.service';
+import { PaymentsService } from '../payments/payments.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { SettingsService } from '../settings/settings.service';
 import {
@@ -12,12 +16,24 @@ import {
   renderAnnouncement,
   renderProductDetail,
   renderStorefront,
+  type BotCallback,
   type StorefrontView,
 } from './catalog-view';
+import {
+  renderMethodChooser,
+  renderOrderDelivered,
+  renderOrderList,
+  renderOrderView,
+  renderPaymentInstructions,
+  renderQuantityPicker,
+  type BotView,
+} from './order-view';
+import { TelegramUsersService } from './telegram-users.service';
 import { botDict, botLang, type BotLang } from './messages';
 import {
   TelegramApiError,
   tgCall,
+  tgDisplayName,
   type TgCallbackQuery,
   type TgInlineKeyboard,
   type TgMessage,
@@ -50,6 +66,13 @@ const CALLBACK_COOLDOWN_MS = 500;
 
 /** Chống rò bộ nhớ: bảng cooldown đầy thì xoá trắng thay vì lớn mãi. */
 const COOLDOWN_MAX_ENTRIES = 5_000;
+
+/**
+ * Mỗi chat tối đa bấy nhiêu đơn PENDING. Đơn PENDING giữ chỗ KHO THẬT tới khi
+ * hết hạn, mà tạo chat Telegram gần như miễn phí — không chặn là một kẻ phá
+ * đặt loạt đơn không trả tiền và khoá sạch kho khỏi tay khách thật.
+ */
+const MAX_PENDING_PER_CHAT = 2;
 
 /**
  * Bot Telegram bán hàng — khung Giai đoạn 1 (xem docs/BOT-TELEGRAM.md).
@@ -97,6 +120,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly settings: SettingsService,
     private readonly products: ProductsService,
     private readonly announcements: AnnouncementService,
+    private readonly orders: OrdersService,
+    private readonly payments: PaymentsService,
+    private readonly users: TelegramUsersService,
+    private readonly prisma: PrismaService,
   ) {}
 
   onModuleInit(): void {
@@ -295,6 +322,16 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const dict = botDict(lang);
     const chatId = message.chat.id;
     try {
+      if (message.text.trim().startsWith('/orders')) {
+        const user = await this.users.findByChat(chatId);
+        const [orders, rates] = await Promise.all([
+          user ? this.orders.listOwn(user.id) : Promise.resolve([]),
+          this.settings.getPublicRates(),
+        ]);
+        const view = renderOrderList(orders, lang, rates);
+        await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+        return;
+      }
       const data = await this.loadStorefront(lang);
       if (data.sendAnnouncement && message.text.trim().startsWith('/start')) {
         const announcement = renderAnnouncement(
@@ -368,64 +405,299 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
     const lang = botLang(cb.from.language_code);
     const dict = botDict(lang);
-    let data: Awaited<ReturnType<TelegramService['loadStorefront']>>;
-    try {
-      data = await this.loadStorefront(lang);
-    } catch (err) {
-      this.logger.warn(`Tải dữ liệu cho callback trượt: ${errText(err)}`);
-      await answer({ text: dict.tryAgain });
-      return;
-    }
+    const chatId = message.chat.id;
 
-    let view: { text: string; keyboard: StorefrontView['keyboard'] };
-    if (parsed.kind === 'catalog') {
-      view = renderStorefront(
-        data.products, lang, data.rates, data.support, parsed.page, data.greeting,
-      );
-      await answer();
-    } else {
-      const product = data.products.find((p) => p.id === parsed.productId);
-      if (!product) {
-        // Sản phẩm vừa bị tắt/xoá giữa hai cú bấm — báo khách rồi vẽ lại danh
-        // sách để cái nút mồ côi biến mất.
-        await answer({ text: dict.productGone, show_alert: true });
-        view = renderStorefront(
-          data.products, lang, data.rates, data.support, parsed.backPage, data.greeting,
+    /** Sửa tin hiện tại thành `view`; kèm ảnh (QR) thì gửi ảnh thành tin MỚI. */
+    const edit = async (view: { text: string; keyboard: TgInlineKeyboard }) => {
+      try {
+        await tgCall(
+          token,
+          'editMessageText',
+          {
+            chat_id: chatId,
+            message_id: message.message_id,
+            text: view.text,
+            parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
+            reply_markup: { inline_keyboard: view.keyboard },
+          },
+          15_000,
+          stop,
         );
-      } else {
-        view = renderProductDetail(product, lang, data.rates, data.support, parsed.backPage);
-        await answer();
+      } catch (err) {
+        // Bấm lại đúng nút đang mở: Telegram trả 400 "message is not modified"
+        // — không phải lỗi, nuốt trong im lặng thay vì rác log.
+        if (
+          err instanceof TelegramApiError &&
+          err.message.includes('message is not modified')
+        ) {
+          return;
+        }
+        // Tin quá cũ (Telegram khoá sửa sau ~48h) hay chat bị chặn — kệ, vòng
+        // poll phải sống tiếp.
+        this.logger.warn(`editMessageText trượt (chat ${chatId}): ${errText(err)}`);
       }
-    }
+    };
 
     try {
-      await tgCall(
-        token,
-        'editMessageText',
-        {
-          chat_id: message.chat.id,
-          message_id: message.message_id,
-          text: view.text,
-          parse_mode: 'HTML',
-          link_preview_options: { is_disabled: true },
-          reply_markup: { inline_keyboard: view.keyboard },
-        },
-        15_000,
+      await this.runCallback(token, parsed, {
+        chatId,
+        from: cb.from,
+        lang,
+        answer,
+        edit,
         stop,
-      );
+      });
     } catch (err) {
-      // Bấm lại đúng nút đang mở: Telegram trả 400 "message is not modified" —
-      // không phải lỗi, nuốt trong im lặng thay vì rác log.
-      if (
-        err instanceof TelegramApiError &&
-        err.message.includes('message is not modified')
-      ) {
+      /*
+       * Lỗi nghiệp vụ từ service (hết hàng, đơn không tồn tại, mock đang tắt…)
+       * mang KHOÁ i18n — dịch cho khách xem thay vì im lặng. Lỗi lạ thì câu
+       * chung chung; cả hai đều KHÔNG được giết vòng poll.
+       */
+      await answer({ text: this.botErrorText(err, lang), show_alert: true });
+    }
+  }
+
+  /** Ngữ cảnh một cú bấm — gom lại cho các nhánh khỏi 6 tham số lẻ. */
+  private async runCallback(
+    token: string,
+    parsed: BotCallback,
+    ctx: {
+      chatId: number;
+      from: TgUser;
+      lang: BotLang;
+      answer: (payload?: Record<string, unknown>) => Promise<void>;
+      edit: (view: { text: string; keyboard: TgInlineKeyboard }) => Promise<void>;
+      stop: AbortSignal;
+    },
+  ): Promise<void> {
+    const { chatId, lang, answer, edit, stop } = ctx;
+    const dict = botDict(lang);
+
+    switch (parsed.kind) {
+      case 'catalog': {
+        const data = await this.loadStorefront(lang);
+        await answer();
+        await edit(
+          renderStorefront(
+            data.products, lang, data.rates, data.support, parsed.page, data.greeting,
+          ),
+        );
         return;
       }
-      // Tin quá cũ (Telegram khoá sửa sau ~48h) hay chat bị chặn — kệ, vòng
-      // poll phải sống tiếp.
-      this.logger.warn(`editMessageText trượt (chat ${message.chat.id}): ${errText(err)}`);
+      case 'product': {
+        const data = await this.loadStorefront(lang);
+        const product = data.products.find((p) => p.id === parsed.productId);
+        if (!product) {
+          // Sản phẩm vừa bị tắt/xoá giữa hai cú bấm — báo khách rồi vẽ lại
+          // danh sách để cái nút mồ côi biến mất.
+          await answer({ text: dict.productGone, show_alert: true });
+          await edit(
+            renderStorefront(
+              data.products, lang, data.rates, data.support, parsed.backPage, data.greeting,
+            ),
+          );
+          return;
+        }
+        await answer();
+        await edit(
+          renderProductDetail(product, lang, data.rates, data.support, parsed.backPage),
+        );
+        return;
+      }
+      case 'buy': {
+        const data = await this.loadStorefront(lang);
+        const product = data.products.find((p) => p.id === parsed.productId);
+        const variant = product?.variants.find((v) => v.id === parsed.variantId);
+        if (!product || !variant || variant.availableStock <= 0) {
+          await answer({ text: dict.variantSoldOut, show_alert: true });
+          return;
+        }
+        await answer();
+        await edit(renderQuantityPicker(product, variant, lang, data.rates, parsed.backPage));
+        return;
+      }
+      case 'qty': {
+        const user = await this.users.findOrCreate(chatId, tgDisplayName(ctx.from));
+        const pending = await this.prisma.order.count({
+          where: { userId: user.id, status: 'PENDING' },
+        });
+        if (pending >= MAX_PENDING_PER_CHAT) {
+          await answer({ text: dict.tooManyPending(pending), show_alert: true });
+          return;
+        }
+        const created = await this.orders.create(user, {
+          items: [{ variantId: parsed.variantId, quantity: parsed.qty }],
+        });
+        const [methods, rates] = await Promise.all([
+          this.settings.getEnabledMethods(),
+          this.settings.getPublicRates(),
+        ]);
+        await answer();
+        const phut = minutesLeft(created.order.expiresAt);
+        if (methods.length > 1) {
+          await edit(renderMethodChooser(created.order, methods, lang, rates, phut));
+          return;
+        }
+        // Chỉ một phương thức — create() đã áp nó sẵn, vào thẳng hướng dẫn.
+        await this.showInstructions(token, created.order, lang, rates, methods, ctx);
+        return;
+      }
+      case 'method': {
+        const user = await this.requireUser(chatId);
+        const [order, rates, methods] = await Promise.all([
+          this.orders.selectPayment(user.id, parsed.orderCode, parsed.method),
+          this.settings.getPublicRates(),
+          this.settings.getEnabledMethods(),
+        ]);
+        await answer();
+        await this.showInstructions(token, order, lang, rates, methods, ctx);
+        return;
+      }
+      case 'check': {
+        const user = await this.requireUser(chatId);
+        const result = await this.orders.checkPayment(user.id, parsed.orderCode);
+        if (result.delivered) {
+          const detail = await this.orders.getOwnDetail(user.id, parsed.orderCode);
+          await answer();
+          await edit(renderOrderDelivered(detail, lang));
+          return;
+        }
+        if (result.status === 'PAID') {
+          await answer({ text: dict.checkPaidWaitDelivery, show_alert: true });
+          return;
+        }
+        if (result.status === 'PENDING') {
+          await answer({ text: dict.checkStillPending, show_alert: true });
+          return;
+        }
+        // EXPIRED/CANCELLED — vẽ lại trạng thái cuối để nút thanh toán biến mất.
+        const detail = await this.orders.getOwnDetail(user.id, parsed.orderCode);
+        const rates = await this.settings.getPublicRates();
+        await answer();
+        await edit(renderOrderView(detail, lang, rates, null));
+        return;
+      }
+      case 'mockConfirm': {
+        const user = await this.requireUser(chatId);
+        const result = await this.payments.confirmMock(user.id, parsed.orderCode);
+        if (result.status === 'DELIVERED') {
+          const detail = await this.orders.getOwnDetail(user.id, parsed.orderCode);
+          await answer();
+          await edit(renderOrderDelivered(detail, lang));
+          return;
+        }
+        await answer({ text: dict.checkPaidWaitDelivery, show_alert: true });
+        return;
+      }
+      case 'cancelOrder': {
+        const user = await this.requireUser(chatId);
+        await this.orders.cancel(user.id, parsed.orderCode);
+        await answer();
+        await edit({
+          text: escapeText(dict.orderCancelled(parsed.orderCode)),
+          keyboard: [
+            [
+              {
+                text: dict.btnBackToShop,
+                callback_data: 'c:1',
+              },
+            ],
+          ],
+        });
+        return;
+      }
+      case 'orders': {
+        const user = await this.users.findByChat(chatId);
+        const [list, rates] = await Promise.all([
+          user ? this.orders.listOwn(user.id) : Promise.resolve([]),
+          this.settings.getPublicRates(),
+        ]);
+        await answer();
+        await edit(renderOrderList(list, lang, rates));
+        return;
+      }
+      case 'order': {
+        const user = await this.requireUser(chatId);
+        const [detail, rates, methods] = await Promise.all([
+          this.orders.getOwnDetail(user.id, parsed.orderCode),
+          this.settings.getPublicRates(),
+          this.settings.getEnabledMethods(),
+        ]);
+        await answer();
+        // Xem lại đơn PENDING thì KHÔNG gửi lại ảnh QR — dội ảnh mỗi lần mở là spam.
+        const view = renderOrderView(
+          detail, lang, rates, minutesLeft(detail.expiresAt), sepayHolder(methods),
+        );
+        await edit({ text: view.text, keyboard: view.keyboard });
+        return;
+      }
     }
+  }
+
+  /**
+   * Hướng dẫn thanh toán sau khi tạo đơn/đổi phương thức: sửa tin hiện tại
+   * thành hướng dẫn; SePay thì gửi THÊM ảnh QR thành tin mới (editMessageText
+   * không đổi được tin chữ thành tin ảnh).
+   */
+  private async showInstructions(
+    token: string,
+    order: Parameters<typeof renderPaymentInstructions>[0],
+    lang: BotLang,
+    rates: Parameters<typeof renderPaymentInstructions>[2],
+    methods: { method: string; accountHolder?: string }[],
+    ctx: {
+      chatId: number;
+      edit: (view: { text: string; keyboard: TgInlineKeyboard }) => Promise<void>;
+      stop: AbortSignal;
+    },
+  ): Promise<void> {
+    const view = renderPaymentInstructions(
+      order, lang, rates, minutesLeft(order.expiresAt), sepayHolder(methods),
+    );
+    await ctx.edit({ text: view.text, keyboard: view.keyboard });
+    if (view.photo) {
+      try {
+        await tgCall(
+          token,
+          'sendPhoto',
+          {
+            chat_id: ctx.chatId,
+            photo: view.photo,
+            caption: escapeText(botDict(lang).payMemo(order.code)),
+            parse_mode: 'HTML',
+          },
+          20_000,
+          ctx.stop,
+        );
+      } catch (err) {
+        // Ảnh QR trượt không chặn thanh toán — hướng dẫn chữ đã đủ số liệu.
+        this.logger.warn(`sendPhoto QR trượt (chat ${ctx.chatId}): ${errText(err)}`);
+      }
+    }
+  }
+
+  /** Chat chưa từng mua mà bấm nút thao tác đơn — chỉ có thể là callback tự chế. */
+  private async requireUser(chatId: number) {
+    const user = await this.users.findByChat(chatId);
+    if (!user) throw new Error('K_NO_USER');
+    return user;
+  }
+
+  /**
+   * Lỗi từ service mang KHOÁ i18n (K.xxx) → dịch theo ngôn ngữ khách; còn lại
+   * trả câu chung — đừng lộ chi tiết nội bộ vào chat.
+   */
+  private botErrorText(err: unknown, lang: BotLang): string {
+    const raw = err instanceof Error ? err.message : '';
+    if (isMessageKey(raw)) {
+      const { key, params } = parseMessage(raw);
+      return translate(key, lang, params);
+    }
+    if (raw !== 'K_NO_USER') {
+      this.logger.warn(`Lỗi callback không nhận diện được: ${raw}`);
+    }
+    return botDict(lang).tryAgain;
   }
 
   private passCooldown(chatId: number): boolean {
@@ -452,6 +724,23 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Escape tối thiểu cho chuỗi TỪ ĐIỂN chèn thẳng làm text HTML của một tin. */
+function escapeText(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/** Số phút còn lại tới hạn — 0 khi đã quá, null khi đơn không có hạn. */
+function minutesLeft(expiresAt: string | null): number | null {
+  if (!expiresAt) return null;
+  const ms = new Date(expiresAt).getTime() - Date.now();
+  return ms <= 0 ? 0 : Math.ceil(ms / 60_000);
+}
+
+/** Tên chủ tài khoản SePay từ danh sách phương thức đang bật (rỗng nếu không có). */
+function sepayHolder(methods: readonly { method: string; accountHolder?: string }[]): string {
+  return methods.find((m) => m.method === 'sepay')?.accountHolder ?? '';
 }
 
 function sleep(ms: number): Promise<void> {

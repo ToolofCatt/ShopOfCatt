@@ -14,8 +14,10 @@ import {
   displayPriceAmount,
   formatMoney,
   formatUsdt,
+  type AnchoredPrice,
   type AnnouncementDto,
   type DisplayCurrency,
+  type PaymentMethod,
   type ProductDto,
   type StoreRatesDto,
   type SupportChannelDto,
@@ -117,29 +119,103 @@ function fitEscaped(raw: string, budget: number): string {
 
 export type BotCallback =
   | { kind: 'catalog'; page: number }
-  | { kind: 'product'; productId: string; backPage: number };
+  | { kind: 'product'; productId: string; backPage: number }
+  | { kind: 'buy'; variantId: string; productId: string; backPage: number }
+  | { kind: 'qty'; variantId: string; qty: number }
+  | { kind: 'method'; orderCode: string; method: PaymentMethod }
+  | { kind: 'check'; orderCode: string }
+  | { kind: 'cancelOrder'; orderCode: string }
+  | { kind: 'mockConfirm'; orderCode: string }
+  | { kind: 'orders' }
+  | { kind: 'order'; orderCode: string };
 
 /** Bot API chặt cứng callback_data ở 64 byte. */
 const CALLBACK_MAX_BYTES = 64;
 
+/**
+ * Mã 2 ký tự cho phương thức trong callback_data — tên đầy đủ ("crypto_bep20")
+ * cộng mã đơn là sát trần 64 byte, mà trần này Telegram không nới.
+ */
+const METHOD_TO_SHORT: Record<PaymentMethod, string> = {
+  mock: 'mk',
+  binance_pay: 'bp',
+  binance_id: 'bi',
+  crypto_bep20: 'cb',
+  crypto_trc20: 'ct',
+  sepay: 'sp',
+};
+const SHORT_TO_METHOD: Record<string, PaymentMethod> = Object.fromEntries(
+  Object.entries(METHOD_TO_SHORT).map(([method, short]) => [short, method]),
+) as Record<string, PaymentMethod>;
+
 export function encodeCallback(cb: BotCallback): string {
-  return cb.kind === 'catalog'
-    ? `c:${cb.page}`
-    : `p:${cb.productId}:${cb.backPage}`;
+  switch (cb.kind) {
+    case 'catalog':
+      return `c:${cb.page}`;
+    case 'product':
+      return `p:${cb.productId}:${cb.backPage}`;
+    case 'buy':
+      return `b:${cb.variantId}:${cb.productId}:${cb.backPage}`;
+    case 'qty':
+      return `q:${cb.variantId}:${cb.qty}`;
+    case 'method':
+      return `m:${cb.orderCode}:${METHOD_TO_SHORT[cb.method]}`;
+    case 'check':
+      return `k:${cb.orderCode}`;
+    case 'cancelOrder':
+      return `x:${cb.orderCode}`;
+    case 'mockConfirm':
+      return `z:${cb.orderCode}`;
+    case 'orders':
+      return 'o';
+    case 'order':
+      return `v:${cb.orderCode}`;
+  }
 }
+
+/** Mã đơn dạng "DH-XXXXXX" — nhận rộng hơn một chút phòng đổi độ dài sau này. */
+const ORDER_CODE_RE = '([A-Z0-9-]{3,32})';
+const ID_RE = '([A-Za-z0-9_-]{1,48})';
 
 /**
  * Parse CHẶT: callback_data là dữ liệu client gửi lên (client Telegram sửa
- * được tuỳ ý), nên rác/quá dài/số trang không nguyên dương đều trả null thay
- * vì cố hiểu.
+ * được tuỳ ý), nên rác/quá dài/số không hợp lệ đều trả null thay vì cố hiểu.
+ * Số lượng chặn trần 50 ngay tại đây — nút chỉ chào tối đa 10, con số lớn hơn
+ * chỉ có thể là callback tự chế.
  */
 export function parseCallback(data: string | undefined): BotCallback | null {
   if (!data || Buffer.byteLength(data, 'utf8') > CALLBACK_MAX_BYTES) return null;
-  const catalog = /^c:([1-9][0-9]{0,5})$/.exec(data);
-  if (catalog) return { kind: 'catalog', page: Number(catalog[1]) };
-  const product = /^p:([A-Za-z0-9_-]{1,48}):([1-9][0-9]{0,5})$/.exec(data);
-  if (product) {
-    return { kind: 'product', productId: product[1], backPage: Number(product[2]) };
+  let m: RegExpExecArray | null;
+  if ((m = /^c:([1-9][0-9]{0,5})$/.exec(data))) {
+    return { kind: 'catalog', page: Number(m[1]) };
+  }
+  if ((m = new RegExp(`^p:${ID_RE}:([1-9][0-9]{0,5})$`).exec(data))) {
+    return { kind: 'product', productId: m[1], backPage: Number(m[2]) };
+  }
+  if ((m = new RegExp(`^b:${ID_RE}:${ID_RE}:([1-9][0-9]{0,5})$`).exec(data))) {
+    return { kind: 'buy', variantId: m[1], productId: m[2], backPage: Number(m[3]) };
+  }
+  if ((m = new RegExp(`^q:${ID_RE}:([1-9][0-9]?)$`).exec(data))) {
+    const qty = Number(m[2]);
+    if (qty > 50) return null;
+    return { kind: 'qty', variantId: m[1], qty };
+  }
+  if ((m = new RegExp(`^m:${ORDER_CODE_RE}:([a-z]{2})$`).exec(data))) {
+    const method = SHORT_TO_METHOD[m[2]];
+    return method ? { kind: 'method', orderCode: m[1], method } : null;
+  }
+  if ((m = new RegExp(`^k:${ORDER_CODE_RE}$`).exec(data))) {
+    return { kind: 'check', orderCode: m[1] };
+  }
+  if ((m = new RegExp(`^x:${ORDER_CODE_RE}$`).exec(data))) {
+    return { kind: 'cancelOrder', orderCode: m[1] };
+  }
+  if ((m = new RegExp(`^z:${ORDER_CODE_RE}$`).exec(data))) {
+    return { kind: 'mockConfirm', orderCode: m[1] };
+  }
+  if (data === 'o') return { kind: 'orders' };
+  if ((m = new RegExp(`^v:${ORDER_CODE_RE}$`).exec(data))) {
+    return { kind: 'order', orderCode: m[1] };
   }
   return null;
 }
@@ -151,7 +227,7 @@ export function parseCallback(data: string | undefined): BotCallback | null {
  * "3800k". Số LẺ giữ nguyên định dạng đầy đủ ("77.982 ₫") — làm tròn ở nhãn
  * là nhãn nói dối giá, khách bấm vào thấy số khác ngay.
  */
-function compactMoney(amount: number, currency: DisplayCurrency): string {
+export function compactMoney(amount: number, currency: DisplayCurrency): string {
   if (
     currency === 'VND' &&
     Number.isInteger(amount) &&
@@ -161,6 +237,16 @@ function compactMoney(amount: number, currency: DisplayCurrency): string {
     return `${amount / 1000}k`;
   }
   return formatMoney(amount, currency);
+}
+
+/** Giá MỘT loại theo ngôn ngữ khách — dùng cho nút Mua và bảng chọn số lượng. */
+export function displayVariantPrice(
+  variant: AnchoredPrice,
+  lang: BotLang,
+  rates: StoreRatesDto | null,
+): string {
+  const hien = displayPriceAmount(variant, CURRENCY_BY_LANG[lang], rates);
+  return compactMoney(hien.amount, hien.currency);
 }
 
 /** Giá hiện trên nhãn nút — cùng nguồn giá neo với thẻ sản phẩm trên web. */
@@ -284,6 +370,12 @@ export function renderStorefront(
     }
   }
 
+  // "Đơn của tôi" luôn có mặt — kể cả khi bảng hàng trống, khách vẫn cần xem
+  // lại key của đơn cũ.
+  keyboard.push([
+    { text: dict.btnMyOrders, callback_data: encodeCallback({ kind: 'orders' }) },
+  ]);
+
   return { text: lines.join('\n'), keyboard, page: current, totalPages };
 }
 
@@ -367,14 +459,28 @@ export function renderProductDetail(
     if (fitted !== '') middle.push('', fitted);
   }
 
-  const keyboard: TgInlineKeyboard = [
-    [
+  const keyboard: TgInlineKeyboard = [];
+  // Mỗi loại còn hàng một nút Mua — loại hết hàng không chào nút hỏng.
+  for (const variant of product.variants) {
+    if (variant.availableStock <= 0) continue;
+    keyboard.push([
       {
-        text: dict.detailBack,
-        callback_data: encodeCallback({ kind: 'catalog', page: backPage }),
+        text: `🛒 ${truncateLabel(variant.name, 26)} — ${displayVariantPrice(variant, lang, rates)}`,
+        callback_data: encodeCallback({
+          kind: 'buy',
+          variantId: variant.id,
+          productId: product.id,
+          backPage,
+        }),
       },
-    ],
-  ];
+    ]);
+  }
+  keyboard.push([
+    {
+      text: dict.detailBack,
+      callback_data: encodeCallback({ kind: 'catalog', page: backPage }),
+    },
+  ]);
 
   return {
     text: [...head, ...middle, ...variantLines, ...tail].join('\n'),

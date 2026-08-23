@@ -178,7 +178,11 @@ export function TelegramSimulator({
       } catch {
         setError(t.common.connectionError);
       }
+      return;
     }
+    // Nút của luồng MUA (b:/q:/m:/k:…) — giả lập không tạo đơn thật được,
+    // nói thẳng thay vì một cái nút chết không giải thích.
+    setError(t.admin.telegramSimBuyNote);
   };
 
   const tenBot = botName ?? t.admin.telegramSimBotName;

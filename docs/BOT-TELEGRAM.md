@@ -16,7 +16,19 @@
 > `GET /admin/telegram/preview`. Cập nhật cấu hình bot đi qua
 > `PUT /admin/telegram/settings` (DTO riêng — không phải echo cấu hình thanh
 > toán như PUT /admin/settings đầy đủ).
-> Tiếp theo: Giai đoạn 3 (đặt đơn + thanh toán).
+> **Giai đoạn 3 (đặt đơn + thanh toán) đã xong**: nút 🛒 Mua theo từng loại còn
+> hàng → chọn số lượng → tạo đơn thật qua `OrdersService.create` (khách Telegram
+> được tạo `User` lúc này — `telegram-users.service.ts`, có test tích hợp) →
+> chọn phương thức đang bật → hướng dẫn trả tiền theo Payment ĐÃ CHỐT (SePay
+> gửi kèm ảnh VietQR; crypto nhắc chuyển ĐÚNG số tiền duy nhất; Binance ID nhắc
+> ghi mã đơn) → nút "✅ Tôi đã chuyển" chạy `checkPayment`, giao xong là KEY VỀ
+> CHAT trong thẻ spoiler. "🧾 Đơn của tôi" xem lại đơn/key cũ. Chống phá kho:
+> tối đa 2 đơn PENDING mỗi chat. Lỗi nghiệp vụ (hết hàng…) dịch từ khoá K theo
+> ngôn ngữ khách. Cổng giả lập chỉ hiện khi PAYMENT_MOCK + công tắc CSDL cùng
+> bật (fail-closed như web).
+> Tiếp theo: Giai đoạn 4 (vòng quét PUSH thông báo giao hàng qua outbox
+> `Order.telegramNotifiedAt` — hiện key mới về theo kiểu PULL khi khách bấm
+> kiểm tra) và GĐ5 (báo chủ shop).
 
 Mục tiêu: khách duyệt sản phẩm, đặt đơn, thanh toán và **nhận key ngay trong
 Telegram** — một kênh bán song song với web, dùng chung kho, chung luồng tiền.
