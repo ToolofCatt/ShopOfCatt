@@ -7,5 +7,7 @@ import { ProductsService } from './products.service';
   imports: [OrdersModule],
   controllers: [ProductsController],
   providers: [ProductsService],
+  // Bot Telegram gọi thẳng ProductsService (in-process) để dựng danh sách hàng.
+  exports: [ProductsService],
 })
 export class ProductsModule {}

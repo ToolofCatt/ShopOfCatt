@@ -1,10 +1,15 @@
 # Bot Telegram bán hàng — thiết kế và lộ trình
 
-> Trạng thái: **Giai đoạn 1 (nền) đã xong** — schema, module `telegram/` khung
-> long-poll + /start, cài đặt admin + readiness, migration đã kiểm trên CSDL
-> rỗng. Hai quyết định ở mục 1–2 đã chốt theo phương án khuyên dùng: khách
-> Telegram = `User` có `telegramChatId` (email null), key giao trong chat.
-> Tiếp theo: Giai đoạn 2 (duyệt hàng).
+> Trạng thái: **Giai đoạn 2 (duyệt hàng) đã xong.** Bố cục theo mẫu chủ shop
+> chốt (kiểu bot "Piggy AI Premium"): /start → tin "Thông báo từ Admin" (từ hộp
+> thông báo trang chủ) + tin chào; sản phẩm là NÚT BẤM inline — nhãn
+> `{tên} | {giá} | 📦 {tồn kho}` — bấm vào là chi tiết (các loại, giá neo theo
+> ngôn ngữ, tồn kho) sửa tại chỗ bằng editMessageText, có phân trang. Lõi dựng
+> chuỗi nằm ở `telegram/catalog-view.ts` (thuần, có unit test); giá đi đúng
+> đường giá neo của web (vi→VND, en→USD, zh→CNY — `CURRENCY_BY_LANG` phải khớp
+> `CURRENCY_BY_LOCALE` của web). GĐ1 đã chốt: khách Telegram = `User` có
+> `telegramChatId` (email null), key giao trong chat.
+> Tiếp theo: Giai đoạn 3 (đặt đơn + thanh toán).
 
 Mục tiêu: khách duyệt sản phẩm, đặt đơn, thanh toán và **nhận key ngay trong
 Telegram** — một kênh bán song song với web, dùng chung kho, chung luồng tiền.

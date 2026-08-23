@@ -27,10 +27,29 @@ export interface TgMessage {
   text?: string;
 }
 
+/** Cú bấm một nút inline. `message` là tin đang mang bàn phím — đủ
+ *  message_id + chat để editMessageText sửa tại chỗ. */
+export interface TgCallbackQuery {
+  id: string;
+  from: TgUser;
+  message?: TgMessage;
+  data?: string;
+}
+
 export interface TgUpdate {
   update_id: number;
   message?: TgMessage;
+  callback_query?: TgCallbackQuery;
 }
+
+export interface TgInlineKeyboardButton {
+  text: string;
+  /** Tối đa 64 BYTE theo Bot API — xem encodeCallback ở catalog-view.ts. */
+  callback_data: string;
+}
+
+/** Mảng hàng nút — mỗi hàng một mảng nút. */
+export type TgInlineKeyboard = TgInlineKeyboardButton[][];
 
 export class TelegramApiError extends Error {
   constructor(

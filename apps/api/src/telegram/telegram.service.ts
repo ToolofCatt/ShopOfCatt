@@ -4,11 +4,22 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
+import { AnnouncementService } from '../announcement/announcement.service';
+import { ProductsService } from '../products/products.service';
 import { SettingsService } from '../settings/settings.service';
-import { botDict, botLang } from './messages';
+import {
+  parseCallback,
+  renderAnnouncement,
+  renderProductDetail,
+  renderStorefront,
+  type StorefrontView,
+} from './catalog-view';
+import { botDict, botLang, type BotLang } from './messages';
 import {
   TelegramApiError,
   tgCall,
+  type TgCallbackQuery,
+  type TgInlineKeyboard,
   type TgMessage,
   type TgUpdate,
   type TgUser,
@@ -29,6 +40,13 @@ const RETRY_DELAY_MS = 5_000;
  * spam tin là bot đốt hết hạn mức sendMessage của chính nó (~30 tin/giây).
  */
 const CHAT_COOLDOWN_MS = 1_500;
+
+/**
+ * Cooldown RIÊNG cho nút bấm, ngắn hơn hẳn tin nhắn: mở chi tiết rồi bấm
+ * "Quay lại" ngay là thao tác bình thường — bắt chờ 1,5 giây là nút "chết"
+ * khó hiểu. 0,5 giây chỉ để chặn giữ-nút-spam.
+ */
+const CALLBACK_COOLDOWN_MS = 500;
 
 /** Chống rò bộ nhớ: bảng cooldown đầy thì xoá trắng thay vì lớn mãi. */
 const COOLDOWN_MAX_ENTRIES = 5_000;
@@ -68,8 +86,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private lastBadToken: string | null = null;
 
   private readonly chatCooldown = new Map<number, number>();
+  private readonly callbackCooldown = new Map<number, number>();
 
-  constructor(private readonly settings: SettingsService) {}
+  constructor(
+    private readonly settings: SettingsService,
+    private readonly products: ProductsService,
+    private readonly announcements: AnnouncementService,
+  ) {}
 
   onModuleInit(): void {
     this.superviseTimer = setInterval(() => {
@@ -149,14 +172,22 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         const updates = await tgCall<TgUpdate[]>(
           token,
           'getUpdates',
-          { offset, timeout: POLL_TIMEOUT_S, allowed_updates: ['message'] },
+          {
+            offset,
+            timeout: POLL_TIMEOUT_S,
+            allowed_updates: ['message', 'callback_query'],
+          },
           (POLL_TIMEOUT_S + 10) * 1_000,
           stop,
         );
         for (const update of updates) {
           offset = update.update_id + 1;
           if (this.generation !== gen) return;
-          await this.handleMessage(token, update.message, stop);
+          if (update.callback_query) {
+            await this.handleCallback(token, update.callback_query, stop);
+          } else {
+            await this.handleMessage(token, update.message, stop);
+          }
         }
       } catch (err) {
         if (this.generation !== gen) return; // dừng chủ động — không phải lỗi
@@ -181,7 +212,48 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Giai đoạn 1: chỉ chào /start và nói thật là chưa mở bán. */
+  /**
+   * Ba nguồn của một lần vẽ danh sách hàng — độc lập nhau nên chạy song song.
+   * KHÔNG cache: cooldown đã chặn dội, còn tồn kho cũ 30-60 giây là loại sai
+   * lệch tự chuốc ngay trước khi bot bán thật (GĐ3).
+   */
+  private async loadStorefront(lang: BotLang) {
+    const [products, rates, support] = await Promise.all([
+      this.products.list(lang),
+      this.settings.getPublicRates(),
+      this.settings.getSupportInfo(),
+    ]);
+    return { products, rates, support: support.supportChannels };
+  }
+
+  private async sendHtml(
+    token: string,
+    chatId: number,
+    text: string,
+    keyboard: TgInlineKeyboard | null,
+    stop: AbortSignal,
+  ): Promise<void> {
+    await tgCall(
+      token,
+      'sendMessage',
+      {
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+        // Link t.me trong kênh hỗ trợ sẽ kéo preview to đùng che tin nếu không tắt.
+        link_preview_options: { is_disabled: true },
+        ...(keyboard ? { reply_markup: { inline_keyboard: keyboard } } : {}),
+      },
+      15_000,
+      stop,
+    );
+  }
+
+  /**
+   * GĐ2: mọi tin nhắn đều trả về "mặt tiền" — tin chào + bàn phím sản phẩm.
+   * /start được thêm tin "Thông báo từ Admin" phía trước (chỉ /start, kẻo mỗi
+   * câu khách gõ lại dội một tin thông báo).
+   */
   private async handleMessage(
     token: string,
     message: TgMessage | undefined,
@@ -193,19 +265,129 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     if (message.chat.type !== 'private') return;
     if (!this.passCooldown(message.chat.id)) return;
 
-    const dict = botDict(botLang(message.from?.language_code));
-    const text = message.text.trim().startsWith('/start') ? dict.start : dict.notReady;
+    const lang = botLang(message.from?.language_code);
+    const dict = botDict(lang);
+    const chatId = message.chat.id;
+    try {
+      if (message.text.trim().startsWith('/start')) {
+        const announcement = renderAnnouncement(
+          await this.announcements.getPublic(lang),
+          lang,
+        );
+        if (announcement !== null) {
+          await this.sendHtml(token, chatId, announcement, null, stop);
+        }
+      }
+      const { products, rates, support } = await this.loadStorefront(lang);
+      const view = renderStorefront(products, lang, rates, support);
+      await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+    } catch (err) {
+      // Một chat trượt (bị khách chặn, CSDL chớp nhoáng…) không được phép giết
+      // vòng poll. Báo khách bằng chữ trần — parse_mode lúc này chính là thứ
+      // vừa có thể hỏng.
+      this.logger.warn(`Trả lời chat ${chatId} trượt: ${errText(err)}`);
+      try {
+        await tgCall(
+          token,
+          'sendMessage',
+          { chat_id: chatId, text: dict.tryAgain },
+          15_000,
+          stop,
+        );
+      } catch {
+        // Đến câu xin lỗi cũng trượt thì thôi — đừng lặp vô hạn.
+      }
+    }
+  }
+
+  /** Cú bấm nút inline: mở chi tiết sản phẩm / chuyển trang, sửa tin tại chỗ. */
+  private async handleCallback(
+    token: string,
+    cb: TgCallbackQuery,
+    stop: AbortSignal,
+  ): Promise<void> {
+    // LUÔN answerCallbackQuery kể cả khi bỏ qua — không answer là client treo
+    // spinner trên nút tới ~30 giây, trông như bot chết.
+    const answer = async (payload: Record<string, unknown> = {}) => {
+      try {
+        await tgCall(
+          token,
+          'answerCallbackQuery',
+          { callback_query_id: cb.id, ...payload },
+          15_000,
+          stop,
+        );
+      } catch (err) {
+        this.logger.warn(`answerCallbackQuery trượt: ${errText(err)}`);
+      }
+    };
+
+    const message = cb.message;
+    const parsed = parseCallback(cb.data);
+    if (!message || message.chat.type !== 'private' || parsed === null) {
+      await answer();
+      return;
+    }
+    if (!this.passCallbackCooldown(message.chat.id)) {
+      await answer();
+      return;
+    }
+
+    const lang = botLang(cb.from.language_code);
+    const dict = botDict(lang);
+    let data: Awaited<ReturnType<TelegramService['loadStorefront']>>;
+    try {
+      data = await this.loadStorefront(lang);
+    } catch (err) {
+      this.logger.warn(`Tải dữ liệu cho callback trượt: ${errText(err)}`);
+      await answer({ text: dict.tryAgain });
+      return;
+    }
+
+    let view: { text: string; keyboard: StorefrontView['keyboard'] };
+    if (parsed.kind === 'catalog') {
+      view = renderStorefront(data.products, lang, data.rates, data.support, parsed.page);
+      await answer();
+    } else {
+      const product = data.products.find((p) => p.id === parsed.productId);
+      if (!product) {
+        // Sản phẩm vừa bị tắt/xoá giữa hai cú bấm — báo khách rồi vẽ lại danh
+        // sách để cái nút mồ côi biến mất.
+        await answer({ text: dict.productGone, show_alert: true });
+        view = renderStorefront(data.products, lang, data.rates, data.support, parsed.backPage);
+      } else {
+        view = renderProductDetail(product, lang, data.rates, data.support, parsed.backPage);
+        await answer();
+      }
+    }
+
     try {
       await tgCall(
         token,
-        'sendMessage',
-        { chat_id: message.chat.id, text },
+        'editMessageText',
+        {
+          chat_id: message.chat.id,
+          message_id: message.message_id,
+          text: view.text,
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+          reply_markup: { inline_keyboard: view.keyboard },
+        },
         15_000,
         stop,
       );
     } catch (err) {
-      // Một chat gửi trượt (bị khách chặn…) không được phép giết vòng poll.
-      this.logger.warn(`sendMessage trượt (chat ${message.chat.id}): ${errText(err)}`);
+      // Bấm lại đúng nút đang mở: Telegram trả 400 "message is not modified" —
+      // không phải lỗi, nuốt trong im lặng thay vì rác log.
+      if (
+        err instanceof TelegramApiError &&
+        err.message.includes('message is not modified')
+      ) {
+        return;
+      }
+      // Tin quá cũ (Telegram khoá sửa sau ~48h) hay chat bị chặn — kệ, vòng
+      // poll phải sống tiếp.
+      this.logger.warn(`editMessageText trượt (chat ${message.chat.id}): ${errText(err)}`);
     }
   }
 
@@ -215,6 +397,18 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     if (now - last < CHAT_COOLDOWN_MS) return false;
     if (this.chatCooldown.size >= COOLDOWN_MAX_ENTRIES) this.chatCooldown.clear();
     this.chatCooldown.set(chatId, now);
+    return true;
+  }
+
+  /** Bản sao của passCooldown cho nút bấm — bảng riêng, ngưỡng riêng. */
+  private passCallbackCooldown(chatId: number): boolean {
+    const now = Date.now();
+    const last = this.callbackCooldown.get(chatId) ?? 0;
+    if (now - last < CALLBACK_COOLDOWN_MS) return false;
+    if (this.callbackCooldown.size >= COOLDOWN_MAX_ENTRIES) {
+      this.callbackCooldown.clear();
+    }
+    this.callbackCooldown.set(chatId, now);
     return true;
   }
 }

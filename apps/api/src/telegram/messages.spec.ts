@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { botDict, botLang } from './messages';
+import { botDict, botLang, type BotLang } from './messages';
 import { tgDisplayName } from './telegram-api';
 
 describe('botLang', () => {
@@ -29,11 +29,22 @@ describe('botLang', () => {
 });
 
 describe('botDict', () => {
-  it('cả ba ngôn ngữ đều trả về câu không rỗng', () => {
-    for (const lang of ['vi', 'en', 'zh'] as const) {
+  /*
+   * Duyệt generic qua MỌI khoá thay vì liệt kê từng cái: thêm khoá mới là test
+   * tự phủ, không phải sửa file này mỗi lần. Khoá hàm gọi với đối số mẫu —
+   * chỉ cần trả về chuỗi không rỗng, nội dung đã có kiểu BotDictionary canh.
+   */
+  it('mọi khoá ở cả ba ngôn ngữ đều trả về chuỗi không rỗng', () => {
+    for (const lang of ['vi', 'en', 'zh'] as const satisfies readonly BotLang[]) {
       const dict = botDict(lang);
-      expect(dict.start.length).toBeGreaterThan(0);
-      expect(dict.notReady.length).toBeGreaterThan(0);
+      for (const [key, value] of Object.entries(dict)) {
+        const text =
+          typeof value === 'function'
+            ? (value as (...args: (string | number)[]) => string)(1, 2)
+            : value;
+        expect(text, `${lang}.${key}`).toBeTypeOf('string');
+        expect(text.length, `${lang}.${key}`).toBeGreaterThan(0);
+      }
     }
   });
 });
