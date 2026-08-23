@@ -184,6 +184,7 @@ export const K = {
   adminSepayIncomplete: 'admin.sepay_incomplete',
   adminTelegramTokenRequired: 'admin.telegram_token_required',
   adminTelegramTokenInvalid: 'admin.telegram_token_invalid',
+  adminTelegramGreetingTooLong: 'admin.telegram_greeting_too_long',
   adminVndRateInvalid: 'admin.vnd_rate_invalid',
   adminCnyRateInvalid: 'admin.cny_rate_invalid',
   adminRateMarkupInvalid: 'admin.rate_markup_invalid',
@@ -865,6 +866,11 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Token bot Telegram không đúng dạng — token của @BotFather trông như "123456789:AA…"',
     en: 'The Telegram bot token is malformed — a @BotFather token looks like "123456789:AA…"',
     zh: 'Telegram 机器人令牌格式不正确 —— @BotFather 的令牌形如 "123456789:AA…"',
+  },
+  [K.adminTelegramGreetingTooLong]: {
+    vi: 'Lời chào của bot quá dài (tối đa 500 ký tự)',
+    en: 'The bot greeting is too long (500 characters max)',
+    zh: '机器人问候语过长（最多 500 个字符）',
   },
   [K.adminCnyRateInvalid]: {
     vi: 'Tỉ giá CNY phải là số dương, tối đa 4 chữ số thập phân',

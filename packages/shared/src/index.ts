@@ -330,10 +330,54 @@ export interface AdminStoreSettingDto {
   telegramBotTokenSet: boolean;
   /** Bốn ký tự cuối của token đã lưu, để chủ shop nhận ra mình dán token nào. */
   telegramBotTokenHint: string;
+  /** Gửi kèm tin "Thông báo từ Admin" (hộp thông báo trang chủ) khi khách /start. */
+  telegramSendAnnouncement: boolean;
+  /** Lời chào tuỳ chỉnh của bot; rỗng = câu mặc định theo ngôn ngữ khách. */
+  telegramGreeting: string;
   /** Các kênh liên hệ hiển thị ở khối "Quên mật khẩu". */
   supportChannels: SupportChannelDto[];
   /** Lời nhắn tùy chỉnh; rỗng = dùng câu mặc định theo ngôn ngữ. */
   supportNote: string;
+}
+
+/** Độ dài tối đa của lời chào bot tuỳ chỉnh. */
+export const TELEGRAM_GREETING_MAX_LENGTH = 500;
+
+// ---------- Bot Telegram: xem trước & trạng thái ----------
+
+/** Một nút inline trong bản xem trước — text + callback y như bot gửi thật. */
+export interface TelegramPreviewButton {
+  text: string;
+  callbackData: string;
+}
+
+/** Một tin nhắn bot đã dựng sẵn: text là HTML kiểu Telegram (chỉ b/i, entity đã escape). */
+export interface TelegramMessagePreview {
+  text: string;
+  keyboard: TelegramPreviewButton[][];
+}
+
+/**
+ * Bản xem trước cho trang /admin/telegram — dựng bằng CHÍNH module render của
+ * bot, nên cái admin thấy là cái khách sẽ thấy, không phải bản chép tay.
+ */
+export interface TelegramPreviewDto {
+  /** Tin "Thông báo từ Admin"; null = tắt gửi kèm, hoặc hộp thông báo tắt/rỗng. */
+  announcement: string | null;
+  storefront: TelegramMessagePreview & { page: number; totalPages: number };
+  /** Chi tiết của từng sản phẩm TRÊN TRANG hiện tại, khoá theo productId. */
+  details: Record<string, TelegramMessagePreview>;
+}
+
+export interface TelegramStatusDto {
+  enabled: boolean;
+  tokenSet: boolean;
+  /** Vòng long-poll có đang chạy không (đã qua getMe). */
+  running: boolean;
+  /** @username của bot khi đã nối được; null = chưa/không chạy. */
+  botUsername: string | null;
+  /** Lỗi gần nhất đáng cho chủ shop biết (token bị từ chối/thu hồi); null = không có. */
+  lastError: string | null;
 }
 
 /**

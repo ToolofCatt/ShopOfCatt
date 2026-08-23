@@ -93,7 +93,7 @@ export function ReadinessBanner({
       severity: 'warning',
       title: r.telegramIncompleteTitle,
       hint: r.telegramIncompleteHint,
-      href: '/admin/settings',
+      href: '/admin/telegram',
       action: r.goSettings,
     });
   }

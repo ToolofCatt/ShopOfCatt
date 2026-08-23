@@ -10,6 +10,7 @@ import {
   Package,
   ReceiptText,
   ScrollText,
+  Send,
   Settings,
   Store,
   Ticket,
@@ -58,6 +59,7 @@ export function AdminSidebar() {
     { href: '/admin/coupons', label: t.admin.navCoupons, icon: Ticket },
     { href: '/admin/audit', label: t.admin.navAudit, icon: ScrollText },
     { href: '/admin/settings', label: t.admin.navSettings, icon: Settings },
+    { href: '/admin/telegram', label: t.admin.navTelegram, icon: Send },
     { href: '/admin/announcement', label: t.admin.navAnnouncement, icon: Megaphone },
     { href: '/admin/legal', label: t.admin.navLegal, icon: FileText },
   ];

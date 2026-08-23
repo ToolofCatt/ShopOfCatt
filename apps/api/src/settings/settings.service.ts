@@ -17,6 +17,7 @@ import { AuditService } from '../audit/audit.service';
 import { K } from '../i18n/messages';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
+import { UpdateTelegramSettingsDto } from './dto/update-telegram-settings.dto';
 
 /** Bản ghi cấu hình duy nhất. */
 const SETTING_ID = 'main';
@@ -212,12 +213,65 @@ export class SettingsService {
    * Cấu hình bot Telegram. Token là bí mật nên chỉ TelegramService gọi hàm này;
    * nó không đi qua bất kỳ DTO nào.
    */
-  async getTelegramConfig(): Promise<{ enabled: boolean; token: string }> {
+  async getTelegramConfig(): Promise<{
+    enabled: boolean;
+    token: string;
+    sendAnnouncement: boolean;
+    greeting: string;
+  }> {
     const setting = await this.getSetting();
     return {
       enabled: setting.telegramBotEnabled,
       token: setting.telegramBotToken.trim(),
+      sendAnnouncement: setting.telegramSendAnnouncement,
+      greeting: setting.telegramGreeting.trim(),
     };
+  }
+
+  /**
+   * Cập nhật RIÊNG cấu hình bot Telegram — trang /admin/telegram gọi qua đây
+   * để không phải echo lại cấu hình thanh toán (hai tab admin ghi đè nhau).
+   * Cùng quy tắc fail-closed và cùng nhật ký với update() đầy đủ.
+   */
+  async updateTelegram(
+    actor: User,
+    dto: UpdateTelegramSettingsDto,
+  ): Promise<AdminStoreSettingDto> {
+    const before = await this.getSetting();
+
+    const token = dto.telegramBotToken?.trim();
+    const enabledNext = dto.telegramBotEnabled ?? before.telegramBotEnabled;
+    const tokenSauKhiLuu =
+      token === undefined ? before.telegramBotToken.trim() : token;
+    if (enabledNext && tokenSauKhiLuu === '') {
+      throw new BadRequestException(K.adminTelegramTokenRequired);
+    }
+
+    const updated = await this.prisma.storeSetting.update({
+      where: { id: SETTING_ID },
+      data: {
+        telegramBotEnabled: enabledNext,
+        // Không gửi = giữ token cũ — trang quản trị không bao giờ nhận được
+        // token nên nó KHÔNG THỂ gửi ngược lên.
+        telegramBotToken: token === undefined ? before.telegramBotToken : token,
+        telegramSendAnnouncement:
+          dto.telegramSendAnnouncement ?? before.telegramSendAnnouncement,
+        telegramGreeting:
+          dto.telegramGreeting === undefined
+            ? before.telegramGreeting
+            : dto.telegramGreeting.trim(),
+      },
+    });
+
+    const changes = diffChanges(toSnapshot(before), toSnapshot(updated));
+    await this.audit.log(
+      actor,
+      'settings.update',
+      { type: 'settings', id: SETTING_ID },
+      Object.keys(changes).length > 0 ? { changes } : undefined,
+    );
+
+    return toAdminDto(updated);
   }
 
   /**
@@ -484,6 +538,8 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     // Như khoá SePay/AI: token không bao giờ xuống trình duyệt.
     telegramBotTokenSet: setting.telegramBotToken.trim() !== '',
     telegramBotTokenHint: setting.telegramBotToken.trim().slice(-4),
+    telegramSendAnnouncement: setting.telegramSendAnnouncement,
+    telegramGreeting: setting.telegramGreeting,
     aiProvider: normalizeProvider(setting.aiProvider),
     aiBaseUrl: setting.aiBaseUrl,
     aiModel: setting.aiModel,
@@ -518,6 +574,8 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
     sepayWebhookSecretSet: setting.sepayWebhookSecret.trim() !== '',
     telegramBotEnabled: setting.telegramBotEnabled,
     telegramBotTokenSet: setting.telegramBotToken.trim() !== '',
+    telegramSendAnnouncement: setting.telegramSendAnnouncement,
+    telegramGreeting: setting.telegramGreeting,
     aiProvider: setting.aiProvider,
     aiBaseUrl: setting.aiBaseUrl,
     aiModel: setting.aiModel,

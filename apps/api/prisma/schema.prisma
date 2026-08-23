@@ -513,6 +513,12 @@ model StoreSetting {
   /// ghi "có/không"), chỉ TelegramService đọc. Ai cầm token là điều khiển được
   /// bot — đọc được mọi tin khách nhắn, kể cả key đã giao trong chat.
   telegramBotToken String @default("")
+  /// Gửi kèm tin "Thông báo từ Admin" khi khách /start — nội dung dùng chung
+  /// hộp thông báo trang chủ, không có bản riêng cho bot.
+  telegramSendAnnouncement Boolean @default(true)
+  /// Lời chào tuỳ chỉnh của bot. Rỗng = câu mặc định theo ngôn ngữ khách;
+  /// có nội dung thì dùng NGUYÊN VĂN cho mọi ngôn ngữ (chủ shop tự cân nhắc).
+  telegramGreeting String @default("")
 
   /// Danh sách kênh liên hệ hỗ trợ — mảng {label, value, url?}, admin tự sửa.
   /// Hiện ở khối "Quên mật khẩu" trang đăng nhập.

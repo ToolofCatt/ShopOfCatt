@@ -231,9 +231,12 @@ export function renderStorefront(
   rates: StoreRatesDto | null,
   supportChannels: readonly SupportChannelDto[],
   page = 1,
+  /** Lời chào chủ shop tự soạn; rỗng/không truyền = câu mặc định theo ngôn ngữ. */
+  greeting = '',
 ): StorefrontView {
   const dict = botDict(lang);
-  const lines: string[] = [escapeHtml(dict.start)];
+  const loiChao = greeting.trim() !== '' ? greeting.trim() : dict.start;
+  const lines: string[] = [escapeHtml(loiChao)];
   const support = supportLineText(lang, supportChannels);
   if (support) lines.push('', support);
 

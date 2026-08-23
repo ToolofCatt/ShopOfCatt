@@ -9,6 +9,13 @@
 > đường giá neo của web (vi→VND, en→USD, zh→CNY — `CURRENCY_BY_LANG` phải khớp
 > `CURRENCY_BY_LOCALE` của web). GĐ1 đã chốt: khách Telegram = `User` có
 > `telegramChatId` (email null), key giao trong chat.
+> Bot có TRANG QUẢN TRỊ RIÊNG `/admin/telegram`: công tắc + token, bật/tắt gửi
+> thông báo kèm /start, lời chào tuỳ chỉnh (`telegramGreeting`, rỗng = mặc định
+> theo ngôn ngữ), trạng thái sống (getMe/@username/lỗi cuối), và khung XEM
+> TRƯỚC giả lập Telegram bấm được nút — dựng bằng chính hàm render của bot qua
+> `GET /admin/telegram/preview`. Cập nhật cấu hình bot đi qua
+> `PUT /admin/telegram/settings` (DTO riêng — không phải echo cấu hình thanh
+> toán như PUT /admin/settings đầy đủ).
 > Tiếp theo: Giai đoạn 3 (đặt đơn + thanh toán).
 
 Mục tiêu: khách duyệt sản phẩm, đặt đơn, thanh toán và **nhận key ngay trong

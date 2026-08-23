@@ -205,6 +205,15 @@ describe('renderStorefront', () => {
     expect(khong.text).not.toContain('hỗ trợ');
   });
 
+  it('lời chào tuỳ chỉnh thay câu mặc định và được escape', () => {
+    const view = renderStorefront([product()], 'vi', RATES, [], 1, 'Chào <bạn> & mua gì ^^');
+    expect(view.text).toContain('Chào &lt;bạn&gt; &amp; mua gì ^^');
+    expect(view.text).not.toContain('Chào bạn đã đến với cửa hàng');
+    // Rỗng/toàn khoảng trắng → lùi về câu mặc định
+    const macDinh = renderStorefront([product()], 'vi', RATES, [], 1, '   ');
+    expect(macDinh.text).toContain('Chào bạn đã đến với cửa hàng');
+  });
+
   it('danh sách rỗng → câu báo trống, bàn phím rỗng', () => {
     const view = renderStorefront([], 'vi', RATES, []);
     expect(view.text).toContain('chưa có sản phẩm');

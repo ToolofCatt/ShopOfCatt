@@ -890,6 +890,25 @@ export const vi = {
     settingTelegramTokenHint:
       'Nhắn /newbot cho @BotFather trên Telegram để tạo bot và lấy token. Để trống = giữ token đang dùng.',
     errTelegramTokenRequired: 'Bật bot Telegram thì phải dán token bot',
+    navTelegram: 'Bot Telegram',
+    settingTelegramMoved: 'Cấu hình bot đã chuyển sang trang riêng, kèm khung xem trước →',
+    telegramPageHint:
+      'Cấu hình kênh bán qua bot và xem trước đúng những gì khách sẽ thấy trong Telegram.',
+    telegramStatusTitle: 'Trạng thái',
+    telegramStatusRunning: (bot: string) => `Đang chạy — ${bot}`,
+    telegramStatusConnecting: 'Đang bật — chờ kết nối (tối đa 15 giây, bấm Kiểm tra lại)',
+    telegramStatusStopped: 'Đang tắt',
+    telegramStatusRefresh: 'Kiểm tra lại',
+    telegramSendAnnouncementLabel: 'Gửi "Thông báo từ Admin" khi khách bấm /start',
+    telegramSendAnnouncementHint:
+      'Nội dung lấy từ hộp Thông báo trang chủ — sửa ở trang Thông báo.',
+    telegramGreetingLabel: 'Lời chào tuỳ chỉnh',
+    telegramGreetingHint:
+      'Để trống = câu chào mặc định theo ngôn ngữ khách. Có nội dung thì dùng nguyên văn cho mọi ngôn ngữ.',
+    telegramPreviewTitle: 'Xem trước',
+    telegramPreviewHint:
+      'Dựng bằng đúng mã của bot — bấm được các nút y như trong Telegram.',
+    telegramPreviewLang: 'Ngôn ngữ khách',
     settingSepayKeyLabel: 'Khoá API webhook SePay',
     settingSepayKeyReplaceLabel: 'Thay khoá webhook mới',
     settingSepayKeyHint: 'Lấy ở SePay → Webhooks. Để trống = giữ khoá đang dùng.',

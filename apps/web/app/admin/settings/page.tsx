@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Plus, PlugZap, ServerCrash, ShieldAlert, Trash2 } from 'lucide-react';
 import {
@@ -71,10 +73,6 @@ export default function AdminSettingsPage() {
   const [sepayApiKey, setSepayApiKey] = useState('');
   const [sepayWebhookSecret, setSepayWebhookSecret] = useState('');
   const [sepayError, setSepayError] = useState<string | null>(null);
-  const [telegramBotEnabled, setTelegramBotEnabled] = useState(false);
-  // Ô token: rỗng nghĩa là "giữ token cũ" — token thật không bao giờ xuống đây.
-  const [telegramBotToken, setTelegramBotToken] = useState('');
-  const [telegramError, setTelegramError] = useState<string | null>(null);
   const [cryptoEnabled, setCryptoEnabled] = useState(false);
   const [bep20Address, setBep20Address] = useState('');
   const [trc20Address, setTrc20Address] = useState('');
@@ -120,8 +118,6 @@ export default function AdminSettingsPage() {
     setRateHour(String(next.rateHour));
     setSepayApiKey('');
     setSepayWebhookSecret('');
-    setTelegramBotEnabled(next.telegramBotEnabled);
-    setTelegramBotToken('');
     setCryptoEnabled(next.cryptoEnabled);
     setBep20Address(next.bep20Address);
     setTrc20Address(next.trc20Address);
@@ -230,7 +226,6 @@ export default function AdminSettingsPage() {
     setAddressError(null);
     setAiError(null);
     setSepayError(null);
-    setTelegramError(null);
   };
 
   /** Sửa một ô của kênh liên hệ thứ `index`. */
@@ -288,17 +283,6 @@ export default function AdminSettingsPage() {
       }
     }
     setSepayError(null);
-    // Token: ô rỗng nghĩa là "giữ token cũ", nên chỉ coi là thiếu khi máy chủ
-    // cũng báo chưa có token nào — cùng lối với khoá API SePay ở trên.
-    if (
-      telegramBotEnabled &&
-      telegramBotToken.trim() === '' &&
-      settings?.telegramBotTokenSet !== true
-    ) {
-      setTelegramError(t.admin.errTelegramTokenRequired);
-      return;
-    }
-    setTelegramError(null);
     setSaving(true);
     setSaveError(null);
     setSaved(false);
@@ -325,11 +309,6 @@ export default function AdminSettingsPage() {
           ...(sepayWebhookSecret.trim() === ''
             ? {}
             : { sepayWebhookSecret: sepayWebhookSecret.trim() }),
-          telegramBotEnabled,
-          // Rỗng = giữ token cũ; máy chủ phân biệt bằng việc KHÔNG gửi trường.
-          ...(telegramBotToken.trim() === ''
-            ? {}
-            : { telegramBotToken: telegramBotToken.trim() }),
           cryptoEnabled,
           bep20Address: bep20Address.trim(),
           trc20Address: trc20Address.trim(),
@@ -957,61 +936,17 @@ export default function AdminSettingsPage() {
               )}
             </div>
 
-            {/* Bot Telegram bán hàng — GĐ1 mới có công tắc + token, xem docs/BOT-TELEGRAM.md. */}
-            <div className="space-y-3 border-t border-neutral-100 pt-4">
-              <div>
-                <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
-                  {t.admin.settingTelegramTitle}
-                </h2>
-                <p className="mt-0.5 text-sm text-neutral-500">
-                  {t.admin.settingTelegramSectionHint}
-                </p>
-              </div>
-
-              <ToggleRow
-                id="setting-telegram"
-                checked={telegramBotEnabled}
-                onChange={(checked) => {
-                  setTelegramBotEnabled(checked);
-                  markDirty();
-                }}
-                label={t.admin.settingTelegramEnable}
-                hint={t.admin.settingTelegramEnableHint}
-              />
-
-              {telegramBotEnabled && (
-                <div className="space-y-3">
-                  {settings?.telegramBotTokenSet ? (
-                    <p className="font-mono text-sm text-neutral-950">
-                      {t.admin.settingApiKeySaved(settings.telegramBotTokenHint)}
-                    </p>
-                  ) : null}
-                  <Field
-                    label={
-                      settings?.telegramBotTokenSet
-                        ? t.admin.settingTelegramTokenReplaceLabel
-                        : t.admin.settingTelegramTokenLabel
-                    }
-                    htmlFor="setting-telegram-token"
-                    hint={t.admin.settingTelegramTokenHint}
-                    error={telegramError}
-                  >
-                    <Input
-                      id="setting-telegram-token"
-                      type="password"
-                      autoComplete="off"
-                      spellCheck={false}
-                      value={telegramBotToken}
-                      invalid={Boolean(telegramError)}
-                      className="font-mono text-[13px]"
-                      onChange={(event) => {
-                        setTelegramBotToken(event.target.value);
-                        markDirty();
-                      }}
-                    />
-                  </Field>
-                </div>
-              )}
+            {/* Cấu hình bot Telegram nằm ở trang riêng /admin/telegram (kèm xem trước). */}
+            <div className="space-y-2 border-t border-neutral-100 pt-4">
+              <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
+                {t.admin.settingTelegramTitle}
+              </h2>
+              <Link
+                href="/admin/telegram"
+                className="inline-flex items-center gap-1 text-sm font-medium text-neutral-950 underline underline-offset-4 hover:text-neutral-600"
+              >
+                {t.admin.settingTelegramMoved}
+              </Link>
             </div>
 
             {/* Kênh liên hệ cho khách quên mật khẩu (cửa hàng không gửi email). */}

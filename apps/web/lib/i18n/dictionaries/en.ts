@@ -871,6 +871,25 @@ export const en: Dictionary = {
     settingTelegramTokenHint:
       'Message /newbot to @BotFather on Telegram to create a bot and get a token. Leave empty to keep the current token.',
     errTelegramTokenRequired: 'Enabling the Telegram bot requires a bot token',
+    navTelegram: 'Telegram bot',
+    settingTelegramMoved: 'Bot configuration moved to its own page, with a live preview →',
+    telegramPageHint:
+      'Configure the bot sales channel and preview exactly what customers see in Telegram.',
+    telegramStatusTitle: 'Status',
+    telegramStatusRunning: (bot: string) => `Running — ${bot}`,
+    telegramStatusConnecting: 'Enabled — connecting (up to 15 seconds, press Refresh)',
+    telegramStatusStopped: 'Off',
+    telegramStatusRefresh: 'Refresh',
+    telegramSendAnnouncementLabel: 'Send the "Announcement from Admin" on /start',
+    telegramSendAnnouncementHint:
+      'Content comes from the homepage announcement box — edit it on the Announcement page.',
+    telegramGreetingLabel: 'Custom greeting',
+    telegramGreetingHint:
+      'Leave empty for the default greeting per customer language. If set, it is used verbatim for all languages.',
+    telegramPreviewTitle: 'Preview',
+    telegramPreviewHint:
+      'Rendered by the exact bot code — the buttons are clickable, just like in Telegram.',
+    telegramPreviewLang: 'Customer language',
     settingSepayKeyLabel: 'SePay webhook API key',
     settingSepayKeyReplaceLabel: 'Replace webhook key',
     settingSepayKeyHint: 'From SePay → Webhooks. Leave empty to keep the current key.',

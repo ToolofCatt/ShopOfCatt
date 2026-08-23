@@ -85,6 +85,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
    */
   private lastBadToken: string | null = null;
 
+  /** @username sau lần getMe thành công gần nhất — cho trang /admin/telegram. */
+  private botUsername: string | null = null;
+  /** Lỗi gần nhất đáng cho chủ shop biết (token bị từ chối/thu hồi). */
+  private lastError: string | null = null;
+
   private readonly chatCooldown = new Map<number, number>();
   private readonly callbackCooldown = new Map<number, number>();
 
@@ -136,13 +141,16 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         username = me.username ? `@${me.username}` : String(me.id);
       } catch (err) {
         this.lastBadToken = cfg.token;
+        this.lastError = `Token bị Telegram từ chối: ${errText(err)}`;
         this.logger.error(
-          `Token bot bị Telegram từ chối (${errText(err)}) — bot KHÔNG chạy. Dán lại token trong /admin/settings.`,
+          `Token bot bị Telegram từ chối (${errText(err)}) — bot KHÔNG chạy. Dán lại token trong /admin/telegram.`,
         );
         return;
       }
 
       this.lastBadToken = null;
+      this.lastError = null;
+      this.botUsername = username;
       this.activeToken = cfg.token;
       this.stopController = new AbortController();
       const gen = ++this.generation;
@@ -158,9 +166,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
   private stopPolling(reason: string): void {
     this.activeToken = null;
+    this.botUsername = null;
     this.generation += 1;
     this.stopController.abort();
     this.logger.log(`Bot: dừng long-polling (${reason})`);
+  }
+
+  /** Trạng thái sống của bot cho trang /admin/telegram. */
+  getStatus(): { running: boolean; botUsername: string | null; lastError: string | null } {
+    return {
+      running: this.activeToken !== null,
+      botUsername: this.botUsername,
+      lastError: this.lastError,
+    };
   }
 
   /** Vòng getUpdates — sống tới khi generation đổi hoặc token bị thu hồi. */
@@ -194,9 +212,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         if (err instanceof TelegramApiError && (err.code === 401 || err.code === 404)) {
           // Token bị thu hồi GIỮA CHỪNG (chủ shop revoke trên @BotFather).
           this.lastBadToken = token;
+          this.lastError = 'Token bị thu hồi trên @BotFather — bot đã dừng.';
           this.stopPolling('token bị thu hồi');
           this.logger.error(
-            'Token bot bị thu hồi — bot dừng. Dán token mới trong /admin/settings.',
+            'Token bot bị thu hồi — bot dừng. Dán token mới trong /admin/telegram.',
           );
           return;
         }
@@ -218,12 +237,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
    * lệch tự chuốc ngay trước khi bot bán thật (GĐ3).
    */
   private async loadStorefront(lang: BotLang) {
-    const [products, rates, support] = await Promise.all([
+    const [products, rates, support, cfg] = await Promise.all([
       this.products.list(lang),
       this.settings.getPublicRates(),
       this.settings.getSupportInfo(),
+      this.settings.getTelegramConfig(),
     ]);
-    return { products, rates, support: support.supportChannels };
+    return {
+      products,
+      rates,
+      support: support.supportChannels,
+      greeting: cfg.greeting,
+      sendAnnouncement: cfg.sendAnnouncement,
+    };
   }
 
   private async sendHtml(
@@ -269,7 +295,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const dict = botDict(lang);
     const chatId = message.chat.id;
     try {
-      if (message.text.trim().startsWith('/start')) {
+      const data = await this.loadStorefront(lang);
+      if (data.sendAnnouncement && message.text.trim().startsWith('/start')) {
         const announcement = renderAnnouncement(
           await this.announcements.getPublic(lang),
           lang,
@@ -278,8 +305,14 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           await this.sendHtml(token, chatId, announcement, null, stop);
         }
       }
-      const { products, rates, support } = await this.loadStorefront(lang);
-      const view = renderStorefront(products, lang, rates, support);
+      const view = renderStorefront(
+        data.products,
+        lang,
+        data.rates,
+        data.support,
+        1,
+        data.greeting,
+      );
       await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
     } catch (err) {
       // Một chat trượt (bị khách chặn, CSDL chớp nhoáng…) không được phép giết
@@ -346,7 +379,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
     let view: { text: string; keyboard: StorefrontView['keyboard'] };
     if (parsed.kind === 'catalog') {
-      view = renderStorefront(data.products, lang, data.rates, data.support, parsed.page);
+      view = renderStorefront(
+        data.products, lang, data.rates, data.support, parsed.page, data.greeting,
+      );
       await answer();
     } else {
       const product = data.products.find((p) => p.id === parsed.productId);
@@ -354,7 +389,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         // Sản phẩm vừa bị tắt/xoá giữa hai cú bấm — báo khách rồi vẽ lại danh
         // sách để cái nút mồ côi biến mất.
         await answer({ text: dict.productGone, show_alert: true });
-        view = renderStorefront(data.products, lang, data.rates, data.support, parsed.backPage);
+        view = renderStorefront(
+          data.products, lang, data.rates, data.support, parsed.backPage, data.greeting,
+        );
       } else {
         view = renderProductDetail(product, lang, data.rates, data.support, parsed.backPage);
         await answer();
