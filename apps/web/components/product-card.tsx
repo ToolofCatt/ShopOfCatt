@@ -57,6 +57,11 @@ export function ProductCard({ product }: { product: ProductDto }) {
         iconClassName="h-10 w-10"
       />
 
+      {/*
+        `flex-1` ở khối chữ (chứ không ở giá): giá phải dính ngay dưới tên/mô tả,
+        còn khoảng trống khi thẻ này thấp hơn thẻ bên cạnh thì dồn xuống phía
+        dưới. Đảo lại là giá bị đẩy rời khỏi tên, mỗi thẻ một độ cao khác nhau.
+      */}
       <div className="flex flex-1 flex-col gap-1">
         {product.category && (
           <p className="text-[11px] font-medium uppercase tracking-wider text-neutral-500">
@@ -67,28 +72,39 @@ export function ProductCard({ product }: { product: ProductDto }) {
         {product.shortDescription && (
           <p className="line-clamp-2 text-sm text-neutral-500">{product.shortDescription}</p>
         )}
+        {/*
+          Một dòng giá duy nhất, theo đơn vị của ngôn ngữ khách đang xem.
+          `whitespace-nowrap`: thẻ ở lưới 2 cột trên điện thoại chỉ rộng ~170px,
+          không có nó thì giá bị ngắt làm đôi ("10.50" xuống dòng rời khỏi
+          "USDT").
+        */}
+        <p className="mt-1 whitespace-nowrap font-semibold tabular-nums text-neutral-950">
+          {priceLabel}
+        </p>
       </div>
 
       {/*
-        `flex-wrap` + `whitespace-nowrap`: thẻ ở lưới 2 cột trên điện thoại chỉ
-        rộng ~170px, không có hai thứ này thì giá bị ngắt làm đôi ("10.50" xuống
-        dòng rời khỏi "USDT") và nhãn tồn kho tràn ra ngoài viền thẻ.
+        Hàng cuối: "đã bán" bên trái, tồn kho bên phải — hai con số khách hay so
+        với nhau nên để cùng hàng. "Đã bán" có thể vắng, nên `ml-auto` ở nhãn tồn
+        kho: chỉ dựa vào `justify-between` thì khi thiếu "đã bán" nhãn tồn kho
+        tụt về bên trái.
       */}
-      <div className="flex flex-wrap items-end justify-between gap-x-2 gap-y-1 border-t border-neutral-100 pt-3">
-        {/* Một dòng giá duy nhất, theo đơn vị của ngôn ngữ khách đang xem. */}
-        <p className="whitespace-nowrap font-semibold tabular-nums text-neutral-950">
-          {priceLabel}
-        </p>
-        <div className="flex flex-col items-end gap-1">
-          {/* Hết hàng đã có ruy-băng ở góc — nhắc lại ở đây là thừa. */}
-          {!outOfStock && (
-            <Badge variant="outline">{t.product.inStockShort(product.availableStock)}</Badge>
-          )}
-          {/* Cửa hàng mới thì "đã bán 0" là bằng chứng NGƯỢC — ẩn cho tới khi có số thật. */}
-          {product.sold > 0 && (
-            <span className="text-[11px] text-neutral-400">{t.product.sold(product.sold)}</span>
-          )}
-        </div>
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-t border-neutral-100 pt-3">
+        {/* Cửa hàng mới thì "đã bán 0" là bằng chứng NGƯỢC — ẩn cho tới khi có số thật. */}
+        {product.sold > 0 && (
+          <span className="whitespace-nowrap text-[11px] text-neutral-400">
+            {t.product.sold(product.sold)}
+          </span>
+        )}
+        {/*
+          Hết hàng vẫn hiện nhãn "Còn 0" (chủ shop yêu cầu): ô này biến mất là
+          khách tưởng thẻ bị lỗi hiển thị. Đổi sang `muted` để nó không trông như
+          một lời quảng cáo còn hàng, còn `Math.max` chặn trường hợp tồn kho âm
+          — không được để giao diện khoe "Còn -2".
+        */}
+        <Badge variant={outOfStock ? 'muted' : 'outline'} className="ml-auto">
+          {t.product.inStockShort(Math.max(0, product.availableStock))}
+        </Badge>
       </div>
     </Link>
   );
