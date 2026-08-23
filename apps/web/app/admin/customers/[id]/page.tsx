@@ -14,6 +14,7 @@ import {
 import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
+import { customerLabel } from '@/components/admin/helpers';
 import { Button, Card, EmptyState, Spinner, buttonVariants } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/order-status-badge';
 import { Pagination } from '@/components/admin/pagination';
@@ -181,7 +182,7 @@ export default function AdminCustomerDetailPage({
             />
             <InfoRow
               label={t.admin.infoEmail}
-              value={<span className="break-all">{customer.email}</span>}
+              value={<span className="break-all">{customerLabel(customer)}</span>}
             />
             <InfoRow label={t.admin.infoRole} value={<RoleBadge role={customer.role} />} />
             <InfoRow label={t.admin.infoCreatedAt} value={formatDate(customer.createdAt)} />

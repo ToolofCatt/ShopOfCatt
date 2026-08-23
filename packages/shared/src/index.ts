@@ -57,7 +57,9 @@ export interface PublicUser {
   id: string;
   /** Mã khách hàng dạng số (bắt đầu từ 100000) — dùng để tra cứu/hỗ trợ */
   code: number;
-  email: string;
+  /** null = khách Telegram — không có mật khẩu nên không bao giờ đăng nhập web,
+   *  giá trị null thực tế không chảy tới đây; kiểu null hoá theo cột CSDL. */
+  email: string | null;
   role: Role;
   createdAt: string;
 }
@@ -319,6 +321,15 @@ export interface AdminStoreSettingDto {
   aiKeySet: boolean;
   /** Bốn ký tự cuối của khoá đã lưu, để chủ shop nhận ra mình dán khoá nào. */
   aiKeyHint: string;
+  /** Bật kênh bán hàng qua bot Telegram. */
+  telegramBotEnabled: boolean;
+  /**
+   * Đã lưu token bot hay chưa — KHÔNG BAO GIỜ trả về chính token: ai cầm token
+   * là điều khiển được bot, đọc được mọi tin khách nhắn (kể cả key đã giao).
+   */
+  telegramBotTokenSet: boolean;
+  /** Bốn ký tự cuối của token đã lưu, để chủ shop nhận ra mình dán token nào. */
+  telegramBotTokenHint: string;
   /** Các kênh liên hệ hiển thị ở khối "Quên mật khẩu". */
   supportChannels: SupportChannelDto[];
   /** Lời nhắn tùy chỉnh; rỗng = dùng câu mặc định theo ngôn ngữ. */
@@ -508,8 +519,8 @@ export interface OrderSummaryDto {
   createdAt: string;
   itemsCount: number;
   firstProductName: string;
-  /** Only present in admin listing */
-  userEmail?: string;
+  /** Only present in admin listing. null = khách Telegram (không có email). */
+  userEmail?: string | null;
   /** Only present in admin listing */
   userCode?: number;
 }
@@ -517,7 +528,8 @@ export interface OrderSummaryDto {
 /** Chi tiết đơn hàng ở trang quản trị — kèm thông tin khách hàng. */
 export interface AdminOrderDetailDto extends OrderDetailDto {
   userId: string;
-  userEmail: string;
+  /** null = khách Telegram (không có email). */
+  userEmail: string | null;
   userCode: number;
 }
 
@@ -590,6 +602,11 @@ export interface StoreReadinessDto {
   /** Tổng số key/tài khoản còn trong kho của các loại đang bán. */
   stockAvailable: number;
   /**
+   * Bật bot Telegram nhưng chưa lưu token — bot không chạy được (fail-closed),
+   * và không có dòng này thì chủ shop tưởng đã bật xong.
+   */
+  telegramIncomplete: boolean;
+  /**
    * Chưa cấu hình kênh liên hệ nào.
    *
    * Cửa hàng KHÔNG gửi email tự động, nên "quên mật khẩu" chỉ giải quyết được
@@ -648,7 +665,10 @@ export interface RevenuePointDto {
 export interface AdminCustomerDto {
   id: string;
   code: number;
-  email: string;
+  /** null = khách đến từ bot Telegram — hiển thị bằng telegramName + mã số. */
+  email: string | null;
+  /** Tên hiển thị Telegram lúc gặp gần nhất; rỗng với khách web. */
+  telegramName: string;
   role: Role;
   /** Khác null = đang bị khóa. */
   lockedAt: string | null;

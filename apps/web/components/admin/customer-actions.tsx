@@ -12,6 +12,7 @@ import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import { Badge, Button, type BadgeVariant } from '@/components/ui';
+import { customerLabel } from '@/components/admin/helpers';
 import type { Dictionary } from '@/lib/i18n';
 
 /** Vai trò → biến thể badge: SUPERADMIN đậm, ADMIN viền, USER mờ. */
@@ -108,7 +109,7 @@ export function CustomerActions({ customer, onChanged, className }: CustomerActi
 
   const resetPassword = async () => {
     if (busy) return;
-    if (!window.confirm(t.admin.resetPasswordConfirm(customer.email))) return;
+    if (!window.confirm(t.admin.resetPasswordConfirm(customerLabel(customer)))) return;
     setBusy('reset-password');
     setCopied(false);
     try {
@@ -144,7 +145,7 @@ export function CustomerActions({ customer, onChanged, className }: CustomerActi
           size="sm"
           loading={busy === 'lock'}
           disabled={busy !== null}
-          onClick={() => void run('lock', t.admin.lockConfirm(customer.email))}
+          onClick={() => void run('lock', t.admin.lockConfirm(customerLabel(customer)))}
         >
           {busy !== 'lock' && <Lock strokeWidth={1.75} className="h-3.5 w-3.5" />}
           {t.admin.lockAction}
@@ -156,7 +157,7 @@ export function CustomerActions({ customer, onChanged, className }: CustomerActi
           size="sm"
           loading={busy === 'unlock'}
           disabled={busy !== null}
-          onClick={() => void run('unlock', t.admin.unlockConfirm(customer.email))}
+          onClick={() => void run('unlock', t.admin.unlockConfirm(customerLabel(customer)))}
         >
           {busy !== 'unlock' && <LockOpen strokeWidth={1.75} className="h-3.5 w-3.5" />}
           {t.admin.unlockAction}
@@ -168,7 +169,7 @@ export function CustomerActions({ customer, onChanged, className }: CustomerActi
           size="sm"
           loading={busy === 'grant-admin'}
           disabled={busy !== null}
-          onClick={() => void run('grant-admin', t.admin.grantConfirm(customer.email))}
+          onClick={() => void run('grant-admin', t.admin.grantConfirm(customerLabel(customer)))}
         >
           {busy !== 'grant-admin' && <ShieldPlus strokeWidth={1.75} className="h-3.5 w-3.5" />}
           {t.admin.grantAction}
@@ -180,7 +181,7 @@ export function CustomerActions({ customer, onChanged, className }: CustomerActi
           size="sm"
           loading={busy === 'revoke-admin'}
           disabled={busy !== null}
-          onClick={() => void run('revoke-admin', t.admin.revokeConfirm(customer.email))}
+          onClick={() => void run('revoke-admin', t.admin.revokeConfirm(customerLabel(customer)))}
         >
           {busy !== 'revoke-admin' && <ShieldMinus strokeWidth={1.75} className="h-3.5 w-3.5" />}
           {t.admin.revokeAction}

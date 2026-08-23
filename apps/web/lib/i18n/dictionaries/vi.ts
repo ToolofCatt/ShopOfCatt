@@ -809,6 +809,9 @@ export const vi = {
       binanceKeyTitle: 'Binance Pay bật nhưng máy chủ thiếu khoá',
       binanceKeyHint:
         'Thiếu BINANCE_PAY_API_KEY nên khách không thấy phương thức này. Kiểm tra biến môi trường rồi khởi động lại máy chủ.',
+      telegramIncompleteTitle: 'Bot Telegram đang bật nhưng chưa có token',
+      telegramIncompleteHint:
+        'Bot không chạy được nếu thiếu token. Dán token từ @BotFather vào Cài đặt.',
       sepayIncompleteTitle: 'SePay đang bật nhưng thiếu cấu hình',
       sepayIncompleteHint:
         'Khách chuyển khoản xong đơn vẫn treo. Điền đủ số tài khoản, ngân hàng, tỉ giá VND và khoá API webhook.',
@@ -877,6 +880,16 @@ export const vi = {
     rateNeverUpdated: 'Chưa lấy tự động lần nào.',
     settingVndRateLabel: 'Tỉ giá (VND cho 1 USDT)',
     settingVndRateHint: 'Giá bán ghi bằng USDT, nên cần tỉ giá để ra số tiền VND.',
+    settingTelegramTitle: 'Bot Telegram',
+    settingTelegramSectionHint:
+      'Kênh bán hàng qua bot — đang xây dựng, hiện bot mới chào khách và hẹn quay lại.',
+    settingTelegramEnable: 'Bật bot Telegram',
+    settingTelegramEnableHint: 'Bot chạy ngay trên máy chủ này, không cần mở cổng nào thêm.',
+    settingTelegramTokenLabel: 'Token bot (từ @BotFather)',
+    settingTelegramTokenReplaceLabel: 'Thay token mới',
+    settingTelegramTokenHint:
+      'Nhắn /newbot cho @BotFather trên Telegram để tạo bot và lấy token. Để trống = giữ token đang dùng.',
+    errTelegramTokenRequired: 'Bật bot Telegram thì phải dán token bot',
     settingSepayKeyLabel: 'Khoá API webhook SePay',
     settingSepayKeyReplaceLabel: 'Thay khoá webhook mới',
     settingSepayKeyHint: 'Lấy ở SePay → Webhooks. Để trống = giữ khoá đang dùng.',

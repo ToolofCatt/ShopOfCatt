@@ -10,7 +10,8 @@ export interface OrderCsvRow {
   createdAt: Date;
   paidAt: Date | null;
   status: string;
-  customerEmail: string;
+  /** null = khách Telegram — xuất ô trống, đừng in chữ "null" vào sổ sách. */
+  customerEmail: string | null;
   customerCode: number;
   subtotal: number;
   discount: number;
@@ -78,7 +79,7 @@ export function buildOrdersCsv(rows: readonly OrderCsvRow[]): string {
         csvCell(csvDate(row.createdAt)),
         csvCell(csvDate(row.paidAt)),
         csvCell(row.status),
-        csvCell(row.customerEmail),
+        csvCell(row.customerEmail ?? ''),
         csvCell(row.customerCode),
         csvCell(row.subtotal.toFixed(2)),
         csvCell(row.discount.toFixed(2)),

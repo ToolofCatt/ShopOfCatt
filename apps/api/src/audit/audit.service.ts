@@ -32,7 +32,9 @@ export class AuditService {
       await this.prisma.auditLog.create({
         data: {
           actorId: actor.id,
-          actorEmail: actor.email,
+          // Actor là admin đăng nhập web nên luôn có email; `?? ''` chỉ để
+          // thoả cột snapshot NOT NULL từ khi cột email cho phép null.
+          actorEmail: actor.email ?? '',
           actorCode: actor.code,
           action,
           entityType: entity?.type ?? null,

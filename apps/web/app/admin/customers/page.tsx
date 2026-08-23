@@ -13,6 +13,7 @@ import {
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
+import { customerLabel } from '@/components/admin/helpers';
 import { Button, Card, EmptyState, Input, Spinner } from '@/components/ui';
 import { PageHeader } from '@/components/admin/page-header';
 import { Pagination } from '@/components/admin/pagination';
@@ -165,7 +166,7 @@ export default function AdminCustomersPage() {
                       </Link>
                     </td>
                     <td className="max-w-[240px] px-4 py-3">
-                      <span className="block truncate text-neutral-950">{customer.email}</span>
+                      <span className="block truncate text-neutral-950">{customerLabel(customer)}</span>
                     </td>
                     <td className="px-4 py-3">
                       <RoleBadge role={customer.role} />

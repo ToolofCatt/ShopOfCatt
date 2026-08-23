@@ -182,6 +182,8 @@ export const K = {
   adminSepayHolderInvalid: 'admin.sepay_holder_invalid',
   adminSepayApiKeyInvalid: 'admin.sepay_api_key_invalid',
   adminSepayIncomplete: 'admin.sepay_incomplete',
+  adminTelegramTokenRequired: 'admin.telegram_token_required',
+  adminTelegramTokenInvalid: 'admin.telegram_token_invalid',
   adminVndRateInvalid: 'admin.vnd_rate_invalid',
   adminCnyRateInvalid: 'admin.cny_rate_invalid',
   adminRateMarkupInvalid: 'admin.rate_markup_invalid',
@@ -853,6 +855,16 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Bật SePay thì phải có số tài khoản, ngân hàng, tỉ giá VND và khoá API',
     en: 'Enabling SePay requires an account number, bank, VND rate and API key',
     zh: '启用 SePay 需要填写账号、银行、VND 汇率和 API 密钥',
+  },
+  [K.adminTelegramTokenRequired]: {
+    vi: 'Bật bot Telegram thì phải dán token bot (lấy từ @BotFather)',
+    en: 'Enabling the Telegram bot requires a bot token (from @BotFather)',
+    zh: '启用 Telegram 机器人前请先粘贴机器人令牌（从 @BotFather 获取）',
+  },
+  [K.adminTelegramTokenInvalid]: {
+    vi: 'Token bot Telegram không đúng dạng — token của @BotFather trông như "123456789:AA…"',
+    en: 'The Telegram bot token is malformed — a @BotFather token looks like "123456789:AA…"',
+    zh: 'Telegram 机器人令牌格式不正确 —— @BotFather 的令牌形如 "123456789:AA…"',
   },
   [K.adminCnyRateInvalid]: {
     vi: 'Tỉ giá CNY phải là số dương, tối đa 4 chữ số thập phân',

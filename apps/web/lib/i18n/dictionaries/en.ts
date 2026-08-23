@@ -790,6 +790,9 @@ export const en: Dictionary = {
       binanceKeyTitle: 'Binance Pay is on but the server key is missing',
       binanceKeyHint:
         'BINANCE_PAY_API_KEY is not set, so customers never see this method. Check the environment variable and restart the server.',
+      telegramIncompleteTitle: 'Telegram bot is on but has no token',
+      telegramIncompleteHint:
+        'The bot cannot run without a token. Paste the @BotFather token in Settings.',
       sepayIncompleteTitle: 'SePay is on but not fully configured',
       sepayIncompleteHint:
         'Orders hang even after customers pay. Fill in the account number, bank, VND rate and webhook API key.',
@@ -858,6 +861,16 @@ export const en: Dictionary = {
     rateNeverUpdated: 'Never fetched automatically.',
     settingVndRateLabel: 'Rate (VND per 1 USDT)',
     settingVndRateHint: 'Prices are in USDT, so a rate is needed to get the VND amount.',
+    settingTelegramTitle: 'Telegram bot',
+    settingTelegramSectionHint:
+      'Sales channel via bot — under construction; for now the bot only greets customers.',
+    settingTelegramEnable: 'Enable the Telegram bot',
+    settingTelegramEnableHint: 'The bot runs on this server; no extra ports needed.',
+    settingTelegramTokenLabel: 'Bot token (from @BotFather)',
+    settingTelegramTokenReplaceLabel: 'Replace the token',
+    settingTelegramTokenHint:
+      'Message /newbot to @BotFather on Telegram to create a bot and get a token. Leave empty to keep the current token.',
+    errTelegramTokenRequired: 'Enabling the Telegram bot requires a bot token',
     settingSepayKeyLabel: 'SePay webhook API key',
     settingSepayKeyReplaceLabel: 'Replace webhook key',
     settingSepayKeyHint: 'From SePay → Webhooks. Leave empty to keep the current key.',

@@ -181,6 +181,27 @@ export class UpdateSettingsDto {
   @MaxLength(200, { message: K.adminSepayApiKeyInvalid })
   sepayApiKey?: string;
 
+  /** Bật kênh bán hàng qua bot Telegram. Không gửi = giữ nguyên. */
+  @IsOptional()
+  @IsBoolean({ message: K.adminSettingsFlagInvalid })
+  telegramBotEnabled?: boolean;
+
+  /**
+   * Token bot Telegram. Ba trạng thái như khoá AI: không gửi = giữ nguyên,
+   * gửi rỗng = xoá, gửi chuỗi = đặt mới.
+   *
+   * Dạng của @BotFather: "<id số>:<35 ký tự>". Bắt dạng ngay ở đây vì dán nhầm
+   * (thiếu dấu hai chấm, dính khoảng trắng) là bot chết im lặng — getMe trượt
+   * mãi mà chủ shop không biết mình sai ở đâu.
+   */
+  @IsOptional()
+  @IsString({ message: K.adminTelegramTokenInvalid })
+  @MaxLength(64, { message: K.adminTelegramTokenInvalid })
+  @Matches(/^$|^[0-9]{5,12}:[A-Za-z0-9_-]{30,50}$/, {
+    message: K.adminTelegramTokenInvalid,
+  })
+  telegramBotToken?: string;
+
   /** Khoá bí mật HMAC (tuỳ chọn). Cùng ba trạng thái như trên. */
   @IsOptional()
   @IsString({ message: K.adminSepayApiKeyInvalid })

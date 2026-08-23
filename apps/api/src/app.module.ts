@@ -18,6 +18,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProductsModule } from './products/products.module';
 import { SecurityModule } from './security/security.module';
 import { SettingsModule } from './settings/settings.module';
+import { TelegramModule } from './telegram/telegram.module';
 import { TranslationModule } from './translation/translation.module';
 
 @Module({
@@ -34,6 +35,7 @@ import { TranslationModule } from './translation/translation.module';
     TranslationModule,
     LegalModule,
     SettingsModule,
+    TelegramModule,
     CouponsModule,
     OrdersModule,
     RatesModule,

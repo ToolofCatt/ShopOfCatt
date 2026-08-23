@@ -59,9 +59,19 @@ enum DiscountType {
 model User {
   id String @id @default(cuid())
   /// Mã khách hàng ngẫu nhiên 8 chữ số — không lộ số lượng/tăng trưởng khách
-  code         Int      @unique
-  email        String   @unique
+  code Int @unique
+  /// null = khách đến từ Telegram, KHÔNG đăng nhập web được (không có mật khẩu
+  /// để gõ). Postgres cho nhiều NULL trong unique index nên không vướng nhau.
+  email String? @unique
+  /// Khách Telegram vẫn có hash — của một chuỗi ngẫu nhiên vứt đi ngay lúc tạo.
+  /// Giữ cột NOT NULL để mọi nhánh so mật khẩu cứ chạy và luôn trượt, thay vì
+  /// phải rào null ở từng chỗ gọi bcrypt.compare.
   passwordHash String
+  /// Chat ID Telegram — khoá định danh của kênh bot. null = khách web thuần.
+  telegramChatId String? @unique
+  /// Tên hiển thị Telegram lúc gặp gần nhất (first_name + @username) — chỉ để
+  /// trang quản trị có gì đó thay cho email; không dùng để định danh.
+  telegramName String @default("")
   role         Role     @default(USER)
   /// Khác null = tài khoản đang bị khóa (không đăng nhập/gọi API được)
   lockedAt DateTime?
@@ -294,6 +304,10 @@ model Order {
   createdAt  DateTime    @default(now())
   expiresAt  DateTime?
   paidAt     DateTime?
+  /// Lúc bot đã nhắn kết quả đơn cho khách Telegram. null = chưa nhắn (hoặc
+  /// khách web — bot bỏ qua). Là outbox: KHÔNG gọi Telegram trong transaction
+  /// giao hàng, một vòng quét riêng đọc cột này rồi gửi và đánh dấu.
+  telegramNotifiedAt DateTime?
   items      OrderItem[]
   payment    Payment?
 
@@ -488,6 +502,17 @@ model StoreSetting {
   /// — đó là cái giá của việc cho sửa ngay trên web thay vì phải SSH vào máy chủ.
   /// Rỗng thì lùi về biến môi trường ANTHROPIC_API_KEY.
   aiApiKey          String   @default("")
+
+  /// --- Bot Telegram bán hàng ---
+  /// Bật kênh bán qua bot. Fail-closed: bật mà thiếu token thì bot không chạy
+  /// và getReadiness phải báo, không âm thầm im lặng.
+  telegramBotEnabled Boolean @default(false)
+  /// Token bot từ @BotFather.
+  ///
+  /// Là BÍ MẬT: không nằm trong AdminStoreSettingDto, không vào nhật ký (chỉ
+  /// ghi "có/không"), chỉ TelegramService đọc. Ai cầm token là điều khiển được
+  /// bot — đọc được mọi tin khách nhắn, kể cả key đã giao trong chat.
+  telegramBotToken String @default("")
 
   /// Danh sách kênh liên hệ hỗ trợ — mảng {label, value, url?}, admin tự sửa.
   /// Hiện ở khối "Quên mật khẩu" trang đăng nhập.

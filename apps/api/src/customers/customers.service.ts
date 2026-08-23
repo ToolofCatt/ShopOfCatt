@@ -37,6 +37,15 @@ function generatePassword(): string {
 
 type UserWithOrdersCount = User & { _count: { orders: number } };
 
+/**
+ * Tên hiển thị trong nhật ký thao tác: khách Telegram không có email nên rơi
+ * về tên Telegram, cùng lắm là mã số — nhật ký ghi "null" thì admin không biết
+ * mình vừa khoá ai.
+ */
+function customerLabel(user: User): string {
+  return user.email ?? (user.telegramName.trim() !== '' ? user.telegramName : `#${user.code}`);
+}
+
 @Injectable()
 export class CustomersService {
   constructor(
@@ -50,10 +59,14 @@ export class CustomersService {
 
     const where: Prisma.UserWhereInput = {};
     if (query.q) {
-      // Tìm theo email (chứa, không phân biệt hoa thường) hoặc mã số (bỏ dấu "#")
+      // Tìm theo email hoặc tên Telegram (chứa, không phân biệt hoa thường),
+      // hoặc mã số (bỏ dấu "#")
       const term = query.q.trim();
       const numeric = Number.parseInt(term.replace(/^#/, ''), 10);
-      where.OR = [{ email: { contains: term, mode: 'insensitive' } }];
+      where.OR = [
+        { email: { contains: term, mode: 'insensitive' } },
+        { telegramName: { contains: term, mode: 'insensitive' } },
+      ];
       if (Number.isSafeInteger(numeric)) {
         where.OR.push({ code: numeric });
       }
@@ -102,7 +115,7 @@ export class CustomersService {
       actor,
       'customer.lock',
       { type: 'user', id },
-      { name: target.email },
+      { name: customerLabel(target) },
     );
     return this.getOne(id);
   }
@@ -117,7 +130,7 @@ export class CustomersService {
       actor,
       'customer.unlock',
       { type: 'user', id },
-      { name: target.email },
+      { name: customerLabel(target) },
     );
     return this.getOne(id);
   }
@@ -153,7 +166,7 @@ export class CustomersService {
       actor,
       'customer.reset_password',
       { type: 'user', id },
-      { name: target.email },
+      { name: customerLabel(target) },
     );
     return { password };
   }
@@ -178,7 +191,7 @@ export class CustomersService {
       actor,
       'admin.grant',
       { type: 'user', id },
-      { name: target.email },
+      { name: customerLabel(target) },
     );
     return this.getOne(id);
   }
@@ -200,7 +213,7 @@ export class CustomersService {
       actor,
       'admin.revoke',
       { type: 'user', id },
-      { name: target.email },
+      { name: customerLabel(target) },
     );
     return this.getOne(id);
   }
@@ -244,6 +257,7 @@ export class CustomersService {
       id: user.id,
       code: user.code,
       email: user.email,
+      telegramName: user.telegramName,
       role: user.role,
       lockedAt: user.lockedAt ? user.lockedAt.toISOString() : null,
       createdAt: user.createdAt.toISOString(),

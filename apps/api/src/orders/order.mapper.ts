@@ -154,7 +154,7 @@ export function toOrderDetailDto(
 
 export function toOrderSummaryDto(
   order: OrderForSummary,
-  buyer?: { email: string; code: number },
+  buyer?: { email: string | null; code: number },
 ): OrderSummaryDto {
   const dto: OrderSummaryDto = {
     code: order.code,

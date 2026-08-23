@@ -1,8 +1,10 @@
 # Bot Telegram bán hàng — thiết kế và lộ trình
 
-> Trạng thái: **đã review nền, chưa code**. Tài liệu này là kết quả vòng khảo
-> sát mã nguồn trước khi làm, để người làm (agent hay người) không phải dò lại
-> từ đầu và không dẫm lên các ràng buộc tiền/kho.
+> Trạng thái: **Giai đoạn 1 (nền) đã xong** — schema, module `telegram/` khung
+> long-poll + /start, cài đặt admin + readiness, migration đã kiểm trên CSDL
+> rỗng. Hai quyết định ở mục 1–2 đã chốt theo phương án khuyên dùng: khách
+> Telegram = `User` có `telegramChatId` (email null), key giao trong chat.
+> Tiếp theo: Giai đoạn 2 (duyệt hàng).
 
 Mục tiêu: khách duyệt sản phẩm, đặt đơn, thanh toán và **nhận key ngay trong
 Telegram** — một kênh bán song song với web, dùng chung kho, chung luồng tiền.

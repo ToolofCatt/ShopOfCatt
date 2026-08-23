@@ -337,7 +337,7 @@ export default function AdminOrderDetailPage({
             </h2>
             <dl className="mt-3 divide-y divide-neutral-100 text-sm">
               <InfoRow label={t.admin.infoCode} value={order.code} mono />
-              <InfoRow label={t.admin.infoCustomer} value={order.userEmail} />
+              <InfoRow label={t.admin.infoCustomer} value={order.userEmail ?? '—'} />
               <InfoRow
                 label={t.admin.infoCustomerCode}
                 value={

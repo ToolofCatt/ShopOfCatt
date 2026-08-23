@@ -26,7 +26,7 @@ pnpm db:seed        # tạo tài khoản chủ shop
 pnpm dev            # web :3000 + api :3001
 
 pnpm typecheck      # bắt buộc xanh trước khi commit
-pnpm test           # vitest — 174 test (163 api + 11 shared)
+pnpm test           # vitest — 216 test (190 api + 26 shared)
                     # 20 test tích hợp cần pnpm db:embedded, không có thì tự bỏ qua
 pnpm build
 ```

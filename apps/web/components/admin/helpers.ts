@@ -2,6 +2,7 @@ import {
   cheapestAnchored,
   formatMoney,
   formatUsdt,
+  type AdminCustomerDto,
   type PaymentStatus,
   type ProductDto,
   type TranslatableLocale,
@@ -16,6 +17,18 @@ export const PAYMENT_STATUS_BADGE_VARIANT: Record<PaymentStatus, BadgeVariant> =
   FAILED: 'muted',
   EXPIRED: 'muted',
 };
+
+/**
+ * Nhãn hiển thị của một khách hàng: khách Telegram không có email nên rơi về
+ * tên Telegram, cùng lắm là mã số. "Telegram" là tên riêng — không cần dịch.
+ */
+export function customerLabel(
+  customer: Pick<AdminCustomerDto, 'email' | 'telegramName' | 'code'>,
+): string {
+  if (customer.email) return customer.email;
+  const name = customer.telegramName.trim();
+  return name !== '' ? `Telegram: ${name}` : `Telegram #${customer.code}`;
+}
 
 /** Plain 2-decimal number (no currency suffix) for stat cards. */
 export function formatAmount(value: number): string {

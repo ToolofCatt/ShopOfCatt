@@ -173,6 +173,8 @@ export class SettingsService {
         setting.binanceIdEnabled &&
         (this.config.get<string>('BINANCE_API_KEY') ?? '').trim() === '',
       mockActive: methods.some((entry) => entry.method === 'mock'),
+      telegramIncomplete:
+        setting.telegramBotEnabled && setting.telegramBotToken.trim() === '',
       stockAvailable: await this.countAvailableStock(),
       supportChannelsMissing: parseSupportChannels(setting.supportChannels).length === 0,
     };
@@ -204,6 +206,18 @@ export class SettingsService {
   /** Ảnh QR Binance Pay chủ shop đã tải lên (rỗng = chưa có). */
   async getBinanceQr(): Promise<string> {
     return (await this.getSetting()).binanceQr;
+  }
+
+  /**
+   * Cấu hình bot Telegram. Token là bí mật nên chỉ TelegramService gọi hàm này;
+   * nó không đi qua bất kỳ DTO nào.
+   */
+  async getTelegramConfig(): Promise<{ enabled: boolean; token: string }> {
+    const setting = await this.getSetting();
+    return {
+      enabled: setting.telegramBotEnabled,
+      token: setting.telegramBotToken.trim(),
+    };
   }
 
   /**
@@ -328,6 +342,20 @@ export class SettingsService {
       throw new BadRequestException(K.adminSepayIncomplete);
     }
 
+    /*
+     * Token bot xét theo giá trị SẼ CÓ sau khi lưu, giống khoá SePay: không gửi
+     * trường này nghĩa là giữ token cũ, nên không được coi là thiếu.
+     */
+    const telegramBotToken = dto.telegramBotToken?.trim();
+    const telegramEnabledNext = dto.telegramBotEnabled ?? before0.telegramBotEnabled;
+    const tokenSauKhiLuu =
+      telegramBotToken === undefined
+        ? before0.telegramBotToken.trim()
+        : telegramBotToken;
+    if (telegramEnabledNext && tokenSauKhiLuu === '') {
+      throw new BadRequestException(K.adminTelegramTokenRequired);
+    }
+
     const aiApiKey = dto.aiApiKey?.trim();
     // Bỏ dấu / thừa ở cuối để lúc nối đường dẫn không sinh ra "//chat/completions".
     const aiBaseUrl = dto.aiBaseUrl?.trim().replace(/\/+$/, '');
@@ -387,6 +415,11 @@ export class SettingsService {
       rateHour: dto.rateHour ?? before.rateHour,
       // Không gửi = giữ khoá cũ, giống hệt khoá AI.
       sepayApiKey: sepayApiKey === undefined ? before.sepayApiKey : sepayApiKey,
+      telegramBotEnabled: telegramEnabledNext,
+      // Không gửi = giữ token cũ — trang quản trị không bao giờ nhận được token
+      // nên nó KHÔNG THỂ gửi ngược lên.
+      telegramBotToken:
+        telegramBotToken === undefined ? before.telegramBotToken : telegramBotToken,
       sepayWebhookSecret:
         sepayWebhookSecret === undefined
           ? before.sepayWebhookSecret
@@ -447,6 +480,10 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     sepayApiKeySet: setting.sepayApiKey.trim() !== '',
     sepayApiKeyHint: setting.sepayApiKey.trim().slice(-4),
     sepayWebhookSecretSet: setting.sepayWebhookSecret.trim() !== '',
+    telegramBotEnabled: setting.telegramBotEnabled,
+    // Như khoá SePay/AI: token không bao giờ xuống trình duyệt.
+    telegramBotTokenSet: setting.telegramBotToken.trim() !== '',
+    telegramBotTokenHint: setting.telegramBotToken.trim().slice(-4),
     aiProvider: normalizeProvider(setting.aiProvider),
     aiBaseUrl: setting.aiBaseUrl,
     aiModel: setting.aiModel,
@@ -479,6 +516,8 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
     // BOOLEAN, không phải chính khoá — nhật ký lưu vĩnh viễn.
     sepayApiKeySet: setting.sepayApiKey.trim() !== '',
     sepayWebhookSecretSet: setting.sepayWebhookSecret.trim() !== '',
+    telegramBotEnabled: setting.telegramBotEnabled,
+    telegramBotTokenSet: setting.telegramBotToken.trim() !== '',
     aiProvider: setting.aiProvider,
     aiBaseUrl: setting.aiBaseUrl,
     aiModel: setting.aiModel,

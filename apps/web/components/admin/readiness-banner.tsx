@@ -87,6 +87,16 @@ export function ReadinessBanner({
     webhook tới nhưng bị từ chối (hoặc không dựng được số tiền để đối chiếu), và
     đơn treo tới lúc hết hạn. Trang tổng quan phải nói ra, không im lặng.
   */
+  if (readiness.telegramIncomplete) {
+    issues.push({
+      key: 'telegram-incomplete',
+      severity: 'warning',
+      title: r.telegramIncompleteTitle,
+      hint: r.telegramIncompleteHint,
+      href: '/admin/settings',
+      action: r.goSettings,
+    });
+  }
   if (readiness.sepayIncomplete) {
     issues.push({
       key: 'sepay-incomplete',
