@@ -50,6 +50,7 @@ import {
   TelegramApiError,
   tgCall,
   tgDisplayName,
+  tgSendPhotoUpload,
   type TgCallbackQuery,
   type TgInlineKeyboard,
   type TgMessage,
@@ -316,6 +317,27 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       greeting: cfg.greeting,
       sendAnnouncement: cfg.sendAnnouncement,
     };
+  }
+
+  /**
+   * Gửi ảnh QR: tải bytes về rồi upload — Telegram không tự tải nổi
+   * qr.sepay.vn (400 "failed to get HTTP URL content", đã gặp thật).
+   * Trượt kiểu gì cũng chỉ log — hướng dẫn chữ đã đủ số liệu chuyển khoản.
+   */
+  private async sendQrPhoto(
+    token: string,
+    chatId: number,
+    url: string,
+    caption: string,
+    stop: AbortSignal,
+  ): Promise<void> {
+    try {
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
+      if (!res.ok) throw new Error(`tai QR duoc HTTP ${res.status}`);
+      await tgSendPhotoUpload(token, chatId, await res.arrayBuffer(), caption, stop);
+    } catch (err) {
+      this.logger.warn(`Gửi ảnh QR trượt (chat ${chatId}): ${errText(err)}`);
+    }
   }
 
   private async sendHtml(
@@ -909,23 +931,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         );
         await edit({ text: view.text, keyboard: view.keyboard });
         if (view.photo) {
-          try {
-            await tgCall(
-              token,
-              'sendPhoto',
-              {
-                chat_id: chatId,
-                photo: view.photo,
-                caption: escapeText(dict.payMemo(kq.deposit.code)),
-                parse_mode: 'HTML',
-              },
-              20_000,
-              stop,
-            );
-          } catch (err) {
-            // Ảnh QR trượt không chặn nạp — hướng dẫn chữ đã đủ số liệu.
-            this.logger.warn(`sendPhoto QR nạp trượt (chat ${chatId}): ${errText(err)}`);
-          }
+          await this.sendQrPhoto(
+            token,
+            chatId,
+            view.photo,
+            escapeText(dict.payMemo(kq.deposit.code)),
+            stop,
+          );
         }
         return;
       }
@@ -1136,23 +1148,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     );
     await ctx.edit({ text: view.text, keyboard: view.keyboard });
     if (view.photo) {
-      try {
-        await tgCall(
-          token,
-          'sendPhoto',
-          {
-            chat_id: ctx.chatId,
-            photo: view.photo,
-            caption: escapeText(botDict(lang).payMemo(order.code)),
-            parse_mode: 'HTML',
-          },
-          20_000,
-          ctx.stop,
-        );
-      } catch (err) {
-        // Ảnh QR trượt không chặn thanh toán — hướng dẫn chữ đã đủ số liệu.
-        this.logger.warn(`sendPhoto QR trượt (chat ${ctx.chatId}): ${errText(err)}`);
-      }
+      await this.sendQrPhoto(
+        token,
+        ctx.chatId,
+        view.photo,
+        escapeText(botDict(lang).payMemo(order.code)),
+        ctx.stop,
+      );
     }
   }
 

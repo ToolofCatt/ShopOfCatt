@@ -109,6 +109,44 @@ export async function tgCall<T>(
   return body.result as T;
 }
 
+/**
+ * Gửi ảnh bằng cách UPLOAD BYTES thay vì đưa URL: Telegram tự tải URL ngoài
+ * hay trượt ("400 failed to get HTTP URL content" với qr.sepay.vn) — mình tải
+ * hộ rồi đẩy multipart là chắc ăn.
+ */
+export async function tgSendPhotoUpload(
+  token: string,
+  chatId: number,
+  image: ArrayBuffer,
+  caption: string,
+  stopSignal?: AbortSignal,
+): Promise<void> {
+  const timeout = AbortSignal.timeout(30_000);
+  const signal = stopSignal ? AbortSignal.any([timeout, stopSignal]) : timeout;
+  const form = new FormData();
+  form.append('chat_id', String(chatId));
+  form.append('caption', caption);
+  form.append('parse_mode', 'HTML');
+  form.append('photo', new Blob([image], { type: 'image/png' }), 'qr.png');
+  const res = await fetch(`${API_BASE}/bot${token}/sendPhoto`, {
+    method: 'POST',
+    body: form,
+    signal,
+  });
+  const body = (await res.json()) as {
+    ok: boolean;
+    error_code?: number;
+    description?: string;
+  };
+  if (!body.ok) {
+    throw new TelegramApiError(
+      'sendPhoto',
+      body.error_code ?? res.status,
+      body.description ?? 'unknown',
+    );
+  }
+}
+
 /** Tên hiển thị của người dùng Telegram — để lưu vào `User.telegramName`. */
 export function tgDisplayName(user: TgUser | undefined): string {
   if (!user) return '';
