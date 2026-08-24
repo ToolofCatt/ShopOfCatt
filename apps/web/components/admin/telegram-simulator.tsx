@@ -33,9 +33,10 @@ type SimMessage =
   | {
       id: number;
       from: 'bot';
-      kind: 'storefront';
+      kind: 'screens';
       data: TelegramPreviewDto;
-      view: string; // 'storefront' | productId đang mở
+      /** Khoá màn hình đang hiển thị trong bản đồ `data.screens`. */
+      view: string;
       time: string;
     };
 
@@ -118,9 +119,9 @@ export function TelegramSimulator({
         replies.push({
           id: nextId.current++,
           from: 'bot',
-          kind: 'storefront',
+          kind: 'screens',
           data,
-          view: 'storefront',
+          view: data.entry,
           time: gioBayGio(),
         });
         setMessages((prev) => [...prev, ...replies]);
@@ -147,40 +148,19 @@ export function TelegramSimulator({
     if (el) el.scrollTop = el.scrollHeight;
   }, [messages, typing]);
 
-  /** Bấm nút inline trên MỘT tin — sửa đúng tin đó, mô phỏng editMessageText. */
-  const onButton = async (messageId: number, callbackData: string) => {
+  /** Bấm nút inline trên MỘT tin — tra BẢN ĐỒ MÀN HÌNH, sửa đúng tin đó tại chỗ. */
+  const onButton = (messageId: number, callbackData: string) => {
     const message = messages.find((m) => m.id === messageId);
-    if (!message || message.from !== 'bot' || message.kind !== 'storefront') return;
+    if (!message || message.from !== 'bot' || message.kind !== 'screens') return;
 
-    if (callbackData.startsWith('p:')) {
-      const productId = callbackData.split(':')[1];
-      if (!message.data.details[productId]) return;
+    if (message.data.screens[callbackData]) {
+      setError(null);
       setMessages((prev) =>
-        prev.map((m) => (m.id === messageId ? { ...m, view: productId } : m)),
+        prev.map((m) => (m.id === messageId ? { ...m, view: callbackData } : m)),
       );
       return;
     }
-    if (callbackData.startsWith('c:')) {
-      const page = Number(callbackData.split(':')[1]);
-      if (page === message.data.storefront.page) {
-        setMessages((prev) =>
-          prev.map((m) => (m.id === messageId ? { ...m, view: 'storefront' } : m)),
-        );
-        return;
-      }
-      try {
-        const data = await fetchPreview(lang, page);
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === messageId ? { ...m, data, view: 'storefront' } : m,
-          ),
-        );
-      } catch {
-        setError(t.common.connectionError);
-      }
-      return;
-    }
-    // Nút của luồng MUA (b:/q:/m:/k:…) — giả lập không tạo đơn thật được,
+    // Nút của luồng MUA/ví (b:/q:/dn:/o/a/d…) — giả lập không tạo đơn thật,
     // nói thẳng thay vì một cái nút chết không giải thích.
     setError(t.admin.telegramSimBuyNote);
   };
@@ -251,9 +231,8 @@ export function TelegramSimulator({
               return <BotBubble key={message.id} html={message.html} time={message.time} />;
             }
             const noiDung =
-              message.view === 'storefront'
-                ? message.data.storefront
-                : (message.data.details[message.view] ?? message.data.storefront);
+              message.data.screens[message.view] ??
+              message.data.screens[message.data.entry];
             return (
               <div key={message.id} className="max-w-[85%] space-y-1 self-start">
                 <BotBubble html={noiDung.text} time={message.time} />
@@ -266,7 +245,7 @@ export function TelegramSimulator({
                             key={button.callbackData}
                             type="button"
                             title={button.text}
-                            onClick={() => void onButton(message.id, button.callbackData)}
+                            onClick={() => onButton(message.id, button.callbackData)}
                             className="min-w-0 flex-1 truncate rounded-lg bg-white/10 px-3 py-1.5 text-center text-[12.5px] font-medium text-white/90 transition hover:bg-white/20 active:bg-white/25"
                           >
                             {button.text}

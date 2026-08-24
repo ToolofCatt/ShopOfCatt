@@ -17,9 +17,14 @@ import { ProductsService } from '../products/products.service';
 import { SettingsService } from '../settings/settings.service';
 import { UpdateTelegramSettingsDto } from '../settings/dto/update-telegram-settings.dto';
 import {
+  groupCategories,
   renderAnnouncement,
+  renderCategoryProducts,
+  renderHub,
+  renderLanguageMenu,
   renderProductDetail,
   renderStorefront,
+  renderSupport,
 } from './catalog-view';
 import { TelegramService } from './telegram.service';
 import type { TgInlineKeyboard } from './telegram-api';
@@ -88,47 +93,73 @@ export class TelegramAdminController {
       this.announcements.getPublic(lang),
     ]);
 
-    const storefront = renderStorefront(
-      products,
-      lang,
-      rates,
-      support.supportChannels,
-      query.page ?? 1,
-      cfg.greeting,
-    );
+    /*
+     * BẢN ĐỒ MÀN HÌNH khoá theo callback_data: giả lập bấm nút nào tra đúng
+     * khoá đó — logic điều hướng nằm nguyên trong renderer của bot, trang
+     * admin không chép lại gì để rồi lệch dần.
+     */
+    const screens: Record<string, TelegramMessagePreview> = {};
+    const dua = (key: string, view: { text: string; keyboard: TgInlineKeyboard }) => {
+      screens[key] = { text: view.text, keyboard: toPreviewKeyboard(view.keyboard) };
+    };
 
-    // Chỉ dựng chi tiết cho sản phẩm TRÊN TRANG hiện tại — nút của trang này
-    // chỉ trỏ tới chúng, và cửa hàng nghìn sản phẩm không phải trả cả nghìn bản.
-    const details: Record<string, TelegramMessagePreview> = {};
-    for (const row of storefront.keyboard) {
-      for (const button of row) {
-        const match = /^p:([A-Za-z0-9_-]+):/.exec(button.callback_data);
-        if (!match) continue;
-        const product = products.find((p) => p.id === match[1]);
-        if (!product) continue;
-        const detail = renderProductDetail(
-          product,
-          lang,
-          rates,
-          support.supportChannels,
-          storefront.page,
-        );
-        details[product.id] = {
-          text: detail.text,
-          keyboard: toPreviewKeyboard(detail.keyboard),
-        };
+    dua('h', renderHub('Khách', 0, lang, rates, cfg.greeting));
+    dua('s', renderSupport(support.supportChannels, support.supportNote, lang));
+    dua('lg', renderLanguageMenu(lang));
+
+    const nhom = groupCategories(products, lang);
+    if (nhom.length <= 1) {
+      // Một danh mục: c:pg là danh sách phẳng theo trang.
+      const trang1 = renderStorefront(products, lang, rates, 1);
+      for (let pg = 1; pg <= trang1.totalPages; pg++) {
+        dua(`c:${pg}`, renderStorefront(products, lang, rates, pg));
+      }
+    } else {
+      dua('c:1', renderStorefront(products, lang, rates, 1));
+      for (let i = 0; i < nhom.length; i++) {
+        const trang1 = renderCategoryProducts(products, i, lang, rates, 1);
+        if (!trang1) continue;
+        for (let pg = 1; pg <= trang1.totalPages; pg++) {
+          const view = renderCategoryProducts(products, i, lang, rates, pg);
+          if (view) dua(`ct:${i}:${pg}`, view);
+        }
+      }
+    }
+
+    // Chi tiết sản phẩm: dựng cho đúng những khoá p:… mà các màn trên trỏ tới.
+    for (const screen of Object.values(screens)) {
+      for (const row of screen.keyboard) {
+        for (const button of row) {
+          const match = /^p:([A-Za-z0-9_-]+):([0-9]+)$/.exec(button.callbackData);
+          if (!match || screens[button.callbackData]) continue;
+          const product = products.find((sp) => sp.id === match[1]);
+          if (!product) continue;
+          dua(
+            button.callbackData,
+            renderProductDetail(
+              product, lang, rates, support.supportChannels, Number(match[2]),
+            ),
+          );
+        }
+      }
+    }
+    // Nút quay lại của chi tiết có thể trỏ c:pg chưa có (chế độ danh mục) —
+    // cho về màn cửa hàng để giả lập không bấm vào khoảng không.
+    for (const screen of Object.values(screens)) {
+      for (const row of screen.keyboard) {
+        for (const button of row) {
+          const m = /^c:([0-9]+)$/.exec(button.callbackData);
+          if (m && !screens[button.callbackData]) {
+            screens[button.callbackData] = screens['c:1'];
+          }
+        }
       }
     }
 
     return {
       announcement: cfg.sendAnnouncement ? renderAnnouncement(announcement, lang) : null,
-      storefront: {
-        text: storefront.text,
-        keyboard: toPreviewKeyboard(storefront.keyboard),
-        page: storefront.page,
-        totalPages: storefront.totalPages,
-      },
-      details,
+      entry: 'h',
+      screens,
     };
   }
 }

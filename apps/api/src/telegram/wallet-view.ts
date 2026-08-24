@@ -58,17 +58,31 @@ export function matchMenuAction(text: string): MenuAction | null {
 
 // ---------------------------------------------------------------- tài khoản
 
+/** Màn 👤 kiểu bảng thống kê của Lâm Shop — chỉ những con số CÓ THẬT ở shop này. */
 export function renderAccount(
-  info: { code: number; balance: number; ordersCount: number },
+  info: {
+    name: string;
+    code: number;
+    balance: number;
+    spentUsdt: number;
+    doneCount: number;
+  },
   lang: BotLang,
   rates: StoreRatesDto | null,
 ): BotView {
   const dict = botDict(lang);
   const text = [
-    `<b>${escapeHtml(dict.accountTitle)}</b>`,
-    escapeHtml(dict.accountCode(info.code)),
-    escapeHtml(dict.accountBalance(orderMoney(info.balance, lang, rates))),
-    escapeHtml(dict.accountOrders(info.ordersCount)),
+    `<b>${escapeHtml(dict.accStatsTitle)}</b>`,
+    '━━━━━━━━━━━━━━━━━━',
+    '',
+    `<b>${escapeHtml(dict.accSectionUser)}</b>`,
+    escapeHtml(dict.accNameLine(info.name.trim() || '...')),
+    escapeHtml(dict.accBalanceLine(orderMoney(info.balance, lang, rates))),
+    escapeHtml(dict.accIdLine(info.code)),
+    '',
+    `<b>${escapeHtml(dict.accSectionShopping)}</b>`,
+    escapeHtml(dict.accSpentLine(orderMoney(info.spentUsdt, lang, rates))),
+    escapeHtml(dict.accDoneLine(info.doneCount)),
   ].join('\n');
   return {
     text,
@@ -77,7 +91,7 @@ export function renderAccount(
         { text: dict.menuDeposit, callback_data: encodeCallback({ kind: 'depositMenu' }) },
         { text: dict.menuOrders, callback_data: encodeCallback({ kind: 'orders' }) },
       ],
-      [{ text: dict.btnBackToShop, callback_data: encodeCallback({ kind: 'catalog', page: 1 }) }],
+      [{ text: botDict(lang).hubBackBtn, callback_data: encodeCallback({ kind: 'hub' }) }],
     ],
   };
 }
@@ -90,7 +104,12 @@ export function renderDepositMenu(lang: BotLang, balanceUsdt: number | null, rat
   if (balanceUsdt !== null) {
     lines.push(escapeHtml(dict.accountBalance(orderMoney(balanceUsdt, lang, rates))));
   }
-  lines.push('', escapeHtml(dict.depositChooseAmount));
+  // Kiểu Lâm Shop: cho GÕ số tiền tự do — nút nhanh vẫn giữ cho khách lười gõ.
+  lines.push(
+    '',
+    escapeHtml(dict.depositFreeText),
+    escapeHtml(dict.depositRange),
+  );
 
   const keyboard: TgInlineKeyboard = DEPOSIT_VND_OPTIONS.map((row) =>
     row.map((vnd) => ({
@@ -99,9 +118,34 @@ export function renderDepositMenu(lang: BotLang, balanceUsdt: number | null, rat
     })),
   );
   keyboard.push([
-    { text: dict.btnBackToShop, callback_data: encodeCallback({ kind: 'catalog', page: 1 }) },
+    { text: dict.hubBackBtn, callback_data: encodeCallback({ kind: 'hub' }) },
   ]);
   return { text: lines.join('\n'), keyboard };
+}
+
+/**
+ * Khách GÕ số tiền → hỏi xác nhận bằng nút thay vì tạo mã ngay: bot không có
+ * "trạng thái hội thoại", một con số trôi nổi trong chat mà tạo luôn mã nạp
+ * thì gõ nhầm cũng thành mã — bắt bấm xác nhận là chặn được.
+ */
+export function renderDepositConfirm(
+  vnd: number,
+  lang: BotLang,
+): BotView {
+  const dict = botDict(lang);
+  const tien = formatMoney(vnd, 'VND');
+  return {
+    text: escapeHtml(dict.depositConfirmAsk(tien)),
+    keyboard: [
+      [
+        {
+          text: dict.depositConfirmBtn(tien),
+          callback_data: encodeCallback({ kind: 'depositAmount', vnd }),
+        },
+      ],
+      [{ text: dict.menuDeposit, callback_data: encodeCallback({ kind: 'depositMenu' }) }],
+    ],
+  };
 }
 
 /**

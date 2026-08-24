@@ -15,11 +15,16 @@ import { SettingsService } from '../settings/settings.service';
 import {
   parseCallback,
   renderAnnouncement,
+  renderCategoryProducts,
+  renderHub,
+  renderLanguageMenu,
   renderProductDetail,
   renderStorefront,
+  renderSupport,
   type BotCallback,
   type StorefrontView,
 } from './catalog-view';
+import { DEPOSIT_MAX_VND, DEPOSIT_MIN_VND } from '../balance/balance.service';
 import {
   renderMethodChooser,
   renderOrderDelivered,
@@ -34,6 +39,7 @@ import {
   mainMenuKeyboard,
   matchMenuAction,
   renderAccount,
+  renderDepositConfirm,
   renderDepositCredited,
   renderDepositInstructions,
   renderDepositMenu,
@@ -346,6 +352,48 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
    * /start được thêm tin "Thông báo từ Admin" phía trước (chỉ /start, kẻo mỗi
    * câu khách gõ lại dội một tin thông báo).
    */
+  /**
+   * Ngôn ngữ của MỘT chat: khách đã tự chọn ở màn 🌐 thì lựa chọn đó thắng,
+   * chưa chọn thì đoán theo language_code của app như cũ.
+   */
+  private async resolveLang(chatId: number, languageCode?: string): Promise<BotLang> {
+    const user = await this.users.findByChat(chatId);
+    if (
+      user?.telegramLangChosen &&
+      (['vi', 'en', 'zh'] as readonly string[]).includes(user.telegramLang)
+    ) {
+      return user.telegramLang as BotLang;
+    }
+    return botLang(languageCode);
+  }
+
+  /** Số liệu màn 👤 — chỉ những con số CÓ THẬT: tổng chi + đơn đã giao. */
+  private async accountStats(userId: string): Promise<{ spentUsdt: number; doneCount: number }> {
+    const [tong, done] = await Promise.all([
+      this.prisma.order.aggregate({
+        _sum: { totalAmount: true },
+        where: { userId, status: { in: ['PAID', 'DELIVERED'] } },
+      }),
+      this.prisma.order.count({ where: { userId, status: 'DELIVERED' } }),
+    ]);
+    return { spentUsdt: Number(tong._sum.totalAmount ?? 0), doneCount: done };
+  }
+
+  /** Dựng HUB cho một chat — tên + số dư thật (nếu đã có tài khoản). */
+  private async hubFor(
+    chatId: number,
+    from: TgUser | undefined,
+    lang: BotLang,
+  ): Promise<{ text: string; keyboard: TgInlineKeyboard }> {
+    const [user, rates, cfg] = await Promise.all([
+      this.users.findByChat(chatId),
+      this.settings.getPublicRates(),
+      this.settings.getTelegramConfig(),
+    ]);
+    const ten = from?.first_name ?? user?.telegramName ?? '';
+    return renderHub(ten, user ? Number(user.balance) : null, lang, rates, cfg.greeting);
+  }
+
   private async handleMessage(
     token: string,
     message: TgMessage | undefined,
@@ -357,9 +405,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     if (message.chat.type !== 'private') return;
     if (!this.passCooldown(message.chat.id)) return;
 
-    const lang = botLang(message.from?.language_code);
-    const dict = botDict(lang);
     const chatId = message.chat.id;
+    const lang = await this.resolveLang(chatId, message.from?.language_code);
+    const dict = botDict(lang);
     const text = message.text.trim();
     try {
       // Nút menu cố định gửi TEXT của nó — so với nhãn của cả ba ngôn ngữ.
@@ -370,10 +418,29 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         await this.handleMenuAction(token, chatId, message.from, lang, menu, stop);
         return;
       }
+      if (menu === 'shop') {
+        const data = await this.loadStorefront(lang);
+        const view = renderStorefront(data.products, lang, data.rates);
+        await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+        return;
+      }
 
-      const data = await this.loadStorefront(lang);
+      // Khách GÕ MỘT CON SỐ = số tiền muốn nạp (kiểu Lâm Shop) — hỏi xác nhận
+      // bằng nút, không tạo mã ngay kẻo gõ nhầm cũng thành mã nạp.
+      if (/^[0-9]{3,10}$/.test(text)) {
+        const vnd = Number(text);
+        if (vnd < DEPOSIT_MIN_VND || vnd > DEPOSIT_MAX_VND) {
+          await this.sendHtml(token, chatId, escapeText(dict.depositRange), null, stop);
+          return;
+        }
+        const view = renderDepositConfirm(vnd, lang);
+        await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+        return;
+      }
+
       if (text.startsWith('/start')) {
-        if (data.sendAnnouncement) {
+        const cfg = await this.settings.getTelegramConfig();
+        if (cfg.sendAnnouncement) {
           const announcement = renderAnnouncement(
             await this.announcements.getPublic(lang),
             lang,
@@ -383,7 +450,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           }
         }
         // Tin riêng gắn bàn phím CỐ ĐỊNH: Telegram chỉ cho một reply_markup
-        // mỗi tin, mà bảng hàng đã dùng chỗ đó cho nút inline sản phẩm.
+        // mỗi tin, mà HUB đã dùng chỗ đó cho nút inline.
         await this.sendHtml(
           token,
           chatId,
@@ -392,15 +459,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           stop,
         );
       }
-      const view = renderStorefront(
-        data.products,
-        lang,
-        data.rates,
-        data.support,
-        1,
-        data.greeting,
-      );
-      await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+      // Mọi text còn lại → HUB (kiểu Lâm Shop: gõ gì cũng quay về bảng điều khiển).
+      const hub = await this.hubFor(chatId, message.from, lang);
+      await this.sendHtml(token, chatId, hub.text, hub.keyboard, stop);
     } catch (err) {
       // Một chat trượt (bị khách chặn, CSDL chớp nhoáng…) không được phép giết
       // vòng poll. Báo khách bằng chữ trần — parse_mode lúc này chính là thứ
@@ -453,9 +514,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const lang = botLang(cb.from.language_code);
-    const dict = botDict(lang);
     const chatId = message.chat.id;
+    const lang = await this.resolveLang(chatId, cb.from.language_code);
+    const dict = botDict(lang);
 
     /** Sửa tin hiện tại thành `view`; kèm ảnh (QR) thì gửi ảnh thành tin MỚI. */
     const edit = async (view: { text: string; keyboard: TgInlineKeyboard }) => {
@@ -531,12 +592,17 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       }
       case 'account': {
         const user = await this.users.findOrCreate(chatId, tgDisplayName(from), lang);
-        const [ordersCount, rates] = await Promise.all([
-          this.prisma.order.count({ where: { userId: user.id } }),
+        const [stats, rates] = await Promise.all([
+          this.accountStats(user.id),
           this.settings.getPublicRates(),
         ]);
         const view = renderAccount(
-          { code: user.code, balance: Number(user.balance), ordersCount },
+          {
+            name: from?.first_name ?? user.telegramName,
+            code: user.code,
+            balance: Number(user.balance),
+            ...stats,
+          },
           lang,
           rates,
         );
@@ -560,12 +626,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       }
       case 'support': {
         const info = await this.settings.getSupportInfo();
-        const channels = info.supportChannels
-          .map((channel) => `${channel.label}: ${channel.value}`)
-          .join(' • ');
-        const text =
-          channels !== '' ? dict.supportLine(channels) : dict.menuHint;
-        await this.sendHtml(token, chatId, escapeText(text), null, stop);
+        const view = renderSupport(info.supportChannels, info.supportNote, lang);
+        await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
         return;
       }
     }
@@ -588,14 +650,26 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const dict = botDict(lang);
 
     switch (parsed.kind) {
+      case 'hub': {
+        const hub = await this.hubFor(chatId, ctx.from, lang);
+        await answer();
+        await edit(hub);
+        return;
+      }
       case 'catalog': {
         const data = await this.loadStorefront(lang);
         await answer();
-        await edit(
-          renderStorefront(
-            data.products, lang, data.rates, data.support, parsed.page, data.greeting,
-          ),
+        await edit(renderStorefront(data.products, lang, data.rates, parsed.page));
+        return;
+      }
+      case 'category': {
+        const data = await this.loadStorefront(lang);
+        await answer();
+        const view = renderCategoryProducts(
+          data.products, parsed.catIndex, lang, data.rates, parsed.page,
         );
+        // Danh mục đổi giữa hai cú bấm (admin sửa) → vẽ lại màn cửa hàng.
+        await edit(view ?? renderStorefront(data.products, lang, data.rates));
         return;
       }
       case 'product': {
@@ -605,16 +679,41 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           // Sản phẩm vừa bị tắt/xoá giữa hai cú bấm — báo khách rồi vẽ lại
           // danh sách để cái nút mồ côi biến mất.
           await answer({ text: dict.productGone, show_alert: true });
-          await edit(
-            renderStorefront(
-              data.products, lang, data.rates, data.support, parsed.backPage, data.greeting,
-            ),
-          );
+          await edit(renderStorefront(data.products, lang, data.rates));
           return;
         }
         await answer();
         await edit(
           renderProductDetail(product, lang, data.rates, data.support, parsed.backPage),
+        );
+        return;
+      }
+      case 'support': {
+        const info = await this.settings.getSupportInfo();
+        await answer();
+        await edit(renderSupport(info.supportChannels, info.supportNote, lang));
+        return;
+      }
+      case 'langMenu': {
+        await answer();
+        await edit(renderLanguageMenu(lang));
+        return;
+      }
+      case 'setLang': {
+        await this.users.setLanguage(chatId, tgDisplayName(ctx.from), parsed.lang);
+        const dictMoi = botDict(parsed.lang);
+        await answer({
+          text: dictMoi.langSet(dictMoi.langNames[parsed.lang] ?? parsed.lang),
+        });
+        // HUB vẽ lại bằng ngôn ngữ mới + bàn phím CỐ ĐỊNH mới (nhãn đổi tiếng).
+        const hub = await this.hubFor(chatId, ctx.from, parsed.lang);
+        await edit(hub);
+        await this.sendHtml(
+          token,
+          chatId,
+          escapeText(dictMoi.menuHint),
+          mainMenuKeyboard(parsed.lang),
+          stop,
         );
         return;
       }
@@ -761,14 +860,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       }
       case 'account': {
         const user = await this.users.findOrCreate(chatId, tgDisplayName(ctx.from), lang);
-        const [ordersCount, rates] = await Promise.all([
-          this.prisma.order.count({ where: { userId: user.id } }),
+        const [stats, rates] = await Promise.all([
+          this.accountStats(user.id),
           this.settings.getPublicRates(),
         ]);
         await answer();
         await edit(
           renderAccount(
-            { code: user.code, balance: Number(user.balance), ordersCount },
+            {
+              name: ctx.from.first_name ?? user.telegramName,
+              code: user.code,
+              balance: Number(user.balance),
+              ...stats,
+            },
             lang,
             rates,
           ),

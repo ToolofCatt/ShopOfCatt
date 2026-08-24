@@ -14,6 +14,15 @@ import type { BotLang } from './messages';
 export class TelegramUsersService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Khách tự chọn ngôn ngữ ở màn 🌐 — từ đó nó là quyết định cuối. */
+  async setLanguage(chatId: number, displayName: string, lang: BotLang): Promise<User> {
+    const user = await this.findOrCreate(chatId, displayName, lang);
+    return this.prisma.user.update({
+      where: { id: user.id },
+      data: { telegramLang: lang, telegramLangChosen: true },
+    });
+  }
+
   /** Tra khách theo chat — null nếu chat này chưa từng mua gì. */
   findByChat(chatId: number): Promise<User | null> {
     return this.prisma.user.findUnique({
@@ -36,15 +45,18 @@ export class TelegramUsersService {
     if (existing) {
       // Tên/ngôn ngữ Telegram đổi theo thời gian — cập nhật để trang admin
       // không hiện tên cũ và vòng đẩy key nói đúng thứ tiếng khách đang dùng.
+      // Khách ĐÃ TỰ CHỌN ngôn ngữ ở màn 🌐 thì lựa chọn đó là quyết định cuối,
+      // language_code của app không được ghi đè nữa.
+      const langMoi = existing.telegramLangChosen ? existing.telegramLang : lang;
       if (
         (ten !== '' && ten !== existing.telegramName) ||
-        lang !== existing.telegramLang
+        langMoi !== existing.telegramLang
       ) {
         return this.prisma.user.update({
           where: { id: existing.id },
           data: {
             telegramName: ten !== '' ? ten : existing.telegramName,
-            telegramLang: lang,
+            telegramLang: langMoi,
           },
         });
       }

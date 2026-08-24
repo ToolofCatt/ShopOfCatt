@@ -76,6 +76,9 @@ model User {
   /// key chạy NGOÀI mọi tương tác nên không có language_code nào để đoán —
   /// phải nhớ từ lần gặp trước. Rỗng = khách cũ trước cột này, lùi về "vi".
   telegramLang String @default("")
+  /// true = khách ĐÃ TỰ CHỌN ngôn ngữ ở màn 🌐 của bot — từ đó telegramLang là
+  /// quyết định cuối, không bị language_code của app ghi đè nữa.
+  telegramLangChosen Boolean @default(false)
   /// Số dư ví (USDT). MỌI thay đổi phải đi qua BalanceService và kèm đúng một
   /// BalanceEntry — cột này mà lệch với sổ cái là có tiền không giải thích được.
   balance Decimal @default(0) @db.Decimal(18, 6)

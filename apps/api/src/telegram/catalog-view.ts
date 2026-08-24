@@ -4,8 +4,10 @@
  * (escape, cắt chuỗi, callback format, phân trang) nằm ở đây; telegram.service
  * chỉ là lớp keo I/O.
  *
- * Bố cục theo mẫu chủ shop chốt (bot "Piggy AI Premium"): sản phẩm là NÚT BẤM
- * — nhãn `{tên} | {giá} | 📦 {tồn kho}` — chứ không phải bảng chữ.
+ * Bố cục theo mẫu chủ shop chốt (bot "Lâm Shop", khảo sát 25/08/2026 —
+ * scratchpad/tg/lamshop-dump*.txt): HUB điều khiển all-inline sửa tại chỗ →
+ * 🛒 Cửa hàng → DANH MỤC (đếm số) → sản phẩm `Tên | giá | Còn n` → chi tiết
+ * 📦/📝 + nút Mua theo loại.
  */
 
 import {
@@ -118,7 +120,9 @@ function fitEscaped(raw: string, budget: number): string {
 // ---------------------------------------------------------------- callback
 
 export type BotCallback =
+  | { kind: 'hub' }
   | { kind: 'catalog'; page: number }
+  | { kind: 'category'; catIndex: number; page: number }
   | { kind: 'product'; productId: string; backPage: number }
   | { kind: 'buy'; variantId: string; productId: string; backPage: number }
   | { kind: 'qty'; variantId: string; qty: number }
@@ -133,7 +137,10 @@ export type BotCallback =
   | { kind: 'depositAmount'; vnd: number }
   | { kind: 'depositCheck'; code: string }
   | { kind: 'depositCancel'; code: string }
-  | { kind: 'payBalance'; orderCode: string };
+  | { kind: 'payBalance'; orderCode: string }
+  | { kind: 'support' }
+  | { kind: 'langMenu' }
+  | { kind: 'setLang'; lang: BotLang };
 
 /** Bot API chặt cứng callback_data ở 64 byte. */
 const CALLBACK_MAX_BYTES = 64;
@@ -156,8 +163,12 @@ const SHORT_TO_METHOD: Record<string, PaymentMethod> = Object.fromEntries(
 
 export function encodeCallback(cb: BotCallback): string {
   switch (cb.kind) {
+    case 'hub':
+      return 'h';
     case 'catalog':
       return `c:${cb.page}`;
+    case 'category':
+      return `ct:${cb.catIndex}:${cb.page}`;
     case 'product':
       return `p:${cb.productId}:${cb.backPage}`;
     case 'buy':
@@ -188,6 +199,12 @@ export function encodeCallback(cb: BotCallback): string {
       return `dx:${cb.code}`;
     case 'payBalance':
       return `mb:${cb.orderCode}`;
+    case 'support':
+      return 's';
+    case 'langMenu':
+      return 'lg';
+    case 'setLang':
+      return `lg:${cb.lang}`;
   }
 }
 
@@ -204,8 +221,12 @@ const ID_RE = '([A-Za-z0-9_-]{1,48})';
 export function parseCallback(data: string | undefined): BotCallback | null {
   if (!data || Buffer.byteLength(data, 'utf8') > CALLBACK_MAX_BYTES) return null;
   let m: RegExpExecArray | null;
+  if (data === 'h') return { kind: 'hub' };
   if ((m = /^c:([1-9][0-9]{0,5})$/.exec(data))) {
     return { kind: 'catalog', page: Number(m[1]) };
+  }
+  if ((m = /^ct:([0-9]{1,3}):([1-9][0-9]{0,5})$/.exec(data))) {
+    return { kind: 'category', catIndex: Number(m[1]), page: Number(m[2]) };
   }
   if ((m = new RegExp(`^p:${ID_RE}:([1-9][0-9]{0,5})$`).exec(data))) {
     return { kind: 'product', productId: m[1], backPage: Number(m[2]) };
@@ -249,6 +270,11 @@ export function parseCallback(data: string | undefined): BotCallback | null {
   }
   if ((m = new RegExp(`^mb:${ORDER_CODE_RE}$`).exec(data))) {
     return { kind: 'payBalance', orderCode: m[1] };
+  }
+  if (data === 's') return { kind: 'support' };
+  if (data === 'lg') return { kind: 'langMenu' };
+  if ((m = /^lg:(vi|en|zh)$/.exec(data))) {
+    return { kind: 'setLang', lang: m[1] as BotLang };
   }
   return null;
 }
@@ -306,20 +332,24 @@ export function productPriceLabel(
 
 // ---------------------------------------------------------------- nút sản phẩm
 
-/** Nhãn nút: `{tên} | {giá} | 📦 {tồn}` — nhìn thấy đủ ba thứ không cần mở chi tiết. */
+/** Nhãn nút kiểu Lâm Shop: `{tên} | {giá} | Còn n` / `| Hết hàng`. */
 export function productButtonLabel(
   product: ProductDto,
   lang: BotLang,
   rates: StoreRatesDto | null,
 ): string {
+  const dict = botDict(lang);
   const price = productPriceLabel(product, lang, rates);
-  // "Còn 0" cấp sản phẩm là quy ước chủ shop trên web — nút cũng không âm.
-  const suffix = ` | ${price} | 📦 ${Math.max(0, product.availableStock)}`;
+  const stock =
+    product.availableStock > 0
+      ? dict.inStock(product.availableStock)
+      : dict.outOfStock;
+  const suffix = ` | ${price} | ${stock}`;
   const nameBudget = Math.max(6, BUTTON_LABEL_MAX - Array.from(suffix).length);
   return `${truncateLabel(product.name, nameBudget)}${suffix}`;
 }
 
-// ---------------------------------------------------------------- danh sách
+// ---------------------------------------------------------------- hub
 
 export interface StorefrontView {
   text: string;
@@ -328,88 +358,201 @@ export interface StorefrontView {
   totalPages: number;
 }
 
-function supportLineText(
+/**
+ * HUB điều khiển — tin đầu tiên khách thấy, mọi màn khác quay về đây.
+ * Nút hàng đầu hiện luôn SỐ DƯ (kiểu Lâm Shop) để khách thấy ví ngay.
+ */
+export function renderHub(
+  customerName: string,
+  balanceUsdt: number | null,
   lang: BotLang,
-  supportChannels: readonly SupportChannelDto[],
-): string | null {
-  if (supportChannels.length === 0) return null;
-  const channels = supportChannels
-    .map((channel) => `${channel.label}: ${channel.value}`)
-    .join(' • ');
-  return escapeHtml(botDict(lang).supportLine(channels));
+  rates: StoreRatesDto | null,
+  /** Lời chào chủ shop tự soạn; rỗng = khối mặc định theo ngôn ngữ. */
+  greeting = '',
+): { text: string; keyboard: TgInlineKeyboard } {
+  const dict = botDict(lang);
+  const thanChao = greeting.trim() !== '' ? greeting.trim() : dict.hubHeader;
+  const text = [
+    escapeHtml(dict.hubHello(customerName.trim() || '...')),
+    '',
+    escapeHtml(thanChao),
+    '',
+    escapeHtml(dict.hubChoose),
+  ].join('\n');
+
+  const soDu = convertFromUsdt(balanceUsdt ?? 0, CURRENCY_BY_LANG[lang], rates);
+  const nhanSoDu =
+    soDu === null ? formatUsdt(balanceUsdt ?? 0) : formatMoney(soDu, CURRENCY_BY_LANG[lang]);
+
+  const keyboard: TgInlineKeyboard = [
+    [{ text: dict.hubBalanceBtn(nhanSoDu), callback_data: encodeCallback({ kind: 'account' }) }],
+    [
+      { text: dict.hubShopBtn, callback_data: encodeCallback({ kind: 'catalog', page: 1 }) },
+      { text: dict.hubOrdersBtn, callback_data: encodeCallback({ kind: 'orders' }) },
+    ],
+    [
+      { text: dict.hubAccountBtn, callback_data: encodeCallback({ kind: 'account' }) },
+      { text: dict.hubDepositBtn, callback_data: encodeCallback({ kind: 'depositMenu' }) },
+    ],
+    [
+      { text: dict.hubSupportBtn, callback_data: encodeCallback({ kind: 'support' }) },
+      { text: dict.hubLangBtn, callback_data: encodeCallback({ kind: 'langMenu' }) },
+    ],
+  ];
+  return { text, keyboard };
+}
+
+// ---------------------------------------------------------------- cửa hàng + danh mục
+
+export interface CategoryGroup {
+  label: string;
+  products: ProductDto[];
+}
+
+/** Nhóm sản phẩm theo danh mục, thứ tự ổn định — index là địa chỉ callback. */
+export function groupCategories(
+  products: readonly ProductDto[],
+  lang: BotLang,
+): CategoryGroup[] {
+  const dict = botDict(lang);
+  const map = new Map<string, ProductDto[]>();
+  for (const product of products) {
+    const label = product.category?.trim() || dict.categoryOther;
+    const list = map.get(label) ?? [];
+    list.push(product);
+    map.set(label, list);
+  }
+  return [...map.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, 'vi'))
+    .map(([label, list]) => ({ label, products: list }));
+}
+
+function productRows(
+  products: readonly ProductDto[],
+  lang: BotLang,
+  rates: StoreRatesDto | null,
+  page: number,
+): { rows: TgInlineKeyboard; page: number; totalPages: number } {
+  const totalPages = Math.max(1, Math.ceil(products.length / PAGE_MAX_ITEMS));
+  const current = Math.min(Math.max(1, Math.trunc(page)), totalPages);
+  const start = (current - 1) * PAGE_MAX_ITEMS;
+  const rows: TgInlineKeyboard = products
+    .slice(start, start + PAGE_MAX_ITEMS)
+    .map((product) => [
+      {
+        text: productButtonLabel(product, lang, rates),
+        callback_data: encodeCallback({
+          kind: 'product',
+          productId: product.id,
+          backPage: current,
+        }),
+      },
+    ]);
+  return { rows, page: current, totalPages };
+}
+
+function pageNav(
+  current: number,
+  totalPages: number,
+  dict: ReturnType<typeof botDict>,
+  data: (page: number) => string,
+): TgInlineKeyboardButton[] {
+  const nav: TgInlineKeyboardButton[] = [];
+  if (current > 1) nav.push({ text: dict.pagePrev, callback_data: data(current - 1) });
+  // Nút giữa bấm cũng vô hại: render lại đúng trang, Telegram trả
+  // "message is not modified" và service nuốt trong im lặng.
+  nav.push({ text: dict.pageLabel(current, totalPages), callback_data: data(current) });
+  if (current < totalPages) nav.push({ text: dict.pageNext, callback_data: data(current + 1) });
+  return nav;
 }
 
 /**
- * Tin chào + bàn phím sản phẩm. `page` vượt biên thì KẸP về trang gần nhất
- * chứ không báo lỗi — danh sách đổi giữa hai cú bấm là chuyện bình thường
- * (admin vừa tắt bớt sản phẩm), khách không có lỗi gì để phải thấy lỗi.
+ * Màn CỬA HÀNG (nút 🛒 từ hub): nhiều danh mục → bảng danh mục kèm đếm số;
+ * chỉ một danh mục thì khỏi bắt khách bấm thêm một lần — vào thẳng danh sách.
+ * `page` chỉ có nghĩa ở dạng danh sách phẳng.
  */
 export function renderStorefront(
   products: readonly ProductDto[],
   lang: BotLang,
   rates: StoreRatesDto | null,
-  supportChannels: readonly SupportChannelDto[],
   page = 1,
-  /** Lời chào chủ shop tự soạn; rỗng/không truyền = câu mặc định theo ngôn ngữ. */
-  greeting = '',
 ): StorefrontView {
   const dict = botDict(lang);
-  const loiChao = greeting.trim() !== '' ? greeting.trim() : dict.start;
-  const lines: string[] = [escapeHtml(loiChao)];
-  const support = supportLineText(lang, supportChannels);
-  if (support) lines.push('', support);
-
-  const totalPages = Math.max(1, Math.ceil(products.length / PAGE_MAX_ITEMS));
-  const current = Math.min(Math.max(1, Math.trunc(page)), totalPages);
-  const keyboard: TgInlineKeyboard = [];
+  const nhom = groupCategories(products, lang);
+  const quayVeHub: TgInlineKeyboardButton = {
+    text: dict.hubBackBtn,
+    callback_data: encodeCallback({ kind: 'hub' }),
+  };
 
   if (products.length === 0) {
-    lines.push('', escapeHtml(dict.catalogEmpty));
-  } else {
-    const start = (current - 1) * PAGE_MAX_ITEMS;
-    for (const product of products.slice(start, start + PAGE_MAX_ITEMS)) {
-      keyboard.push([
-        {
-          text: productButtonLabel(product, lang, rates),
-          callback_data: encodeCallback({
-            kind: 'product',
-            productId: product.id,
-            backPage: current,
-          }),
-        },
-      ]);
-    }
-    if (totalPages > 1) {
-      const nav: TgInlineKeyboardButton[] = [];
-      if (current > 1) {
-        nav.push({
-          text: dict.pagePrev,
-          callback_data: encodeCallback({ kind: 'catalog', page: current - 1 }),
-        });
-      }
-      // Nút giữa bấm cũng vô hại: render lại đúng trang, Telegram trả
-      // "message is not modified" và service nuốt trong im lặng.
-      nav.push({
-        text: dict.pageLabel(current, totalPages),
-        callback_data: encodeCallback({ kind: 'catalog', page: current }),
-      });
-      if (current < totalPages) {
-        nav.push({
-          text: dict.pageNext,
-          callback_data: encodeCallback({ kind: 'catalog', page: current + 1 }),
-        });
-      }
-      keyboard.push(nav);
-    }
+    return {
+      text: [`<b>${escapeHtml(dict.shopTitle)}</b>`, '', escapeHtml(dict.catalogEmpty)].join('\n'),
+      keyboard: [[quayVeHub]],
+      page: 1,
+      totalPages: 1,
+    };
   }
 
-  // "Đơn của tôi" luôn có mặt — kể cả khi bảng hàng trống, khách vẫn cần xem
-  // lại key của đơn cũ.
-  keyboard.push([
-    { text: dict.btnMyOrders, callback_data: encodeCallback({ kind: 'orders' }) },
-  ]);
+  if (nhom.length <= 1) {
+    const { rows, page: current, totalPages } = productRows(products, lang, rates, page);
+    const keyboard = [...rows];
+    if (totalPages > 1) keyboard.push(pageNav(current, totalPages, dict, (p) => `c:${p}`));
+    keyboard.push([quayVeHub]);
+    return {
+      text: [`<b>${escapeHtml(dict.shopTitle)}</b>`, '', escapeHtml(dict.categoryChoose)].join('\n'),
+      keyboard,
+      page: current,
+      totalPages,
+    };
+  }
 
-  return { text: lines.join('\n'), keyboard, page: current, totalPages };
+  const keyboard: TgInlineKeyboard = nhom.map((group, index) => [
+    {
+      text: `${truncateLabel(group.label, 40)} (${group.products.length})`,
+      callback_data: encodeCallback({ kind: 'category', catIndex: index, page: 1 }),
+    },
+  ]);
+  keyboard.push([quayVeHub]);
+  return {
+    text: [`<b>${escapeHtml(dict.shopTitle)}</b>`, '', escapeHtml(dict.shopChooseCategory)].join('\n'),
+    keyboard,
+    page: 1,
+    totalPages: 1,
+  };
+}
+
+/** Danh sách sản phẩm của MỘT danh mục (bấm từ màn cửa hàng). */
+export function renderCategoryProducts(
+  products: readonly ProductDto[],
+  catIndex: number,
+  lang: BotLang,
+  rates: StoreRatesDto | null,
+  page = 1,
+): StorefrontView | null {
+  const dict = botDict(lang);
+  const nhom = groupCategories(products, lang);
+  // Danh mục đổi giữa hai cú bấm (admin sửa) → null, service vẽ lại màn cửa hàng.
+  const group = nhom[catIndex];
+  if (!group) return null;
+
+  const { rows, page: current, totalPages } = productRows(group.products, lang, rates, page);
+  const keyboard = [...rows];
+  if (totalPages > 1) {
+    keyboard.push(pageNav(current, totalPages, dict, (p) => `ct:${catIndex}:${p}`));
+  }
+  keyboard.push([
+    { text: dict.backToCategories, callback_data: encodeCallback({ kind: 'catalog', page: 1 }) },
+  ]);
+  return {
+    text: [
+      `<b>${escapeHtml(dict.categoryTitle(group.label))}</b>`,
+      '',
+      escapeHtml(dict.categoryChoose),
+    ].join('\n'),
+    keyboard,
+    page: current,
+    totalPages,
+  };
 }
 
 // ---------------------------------------------------------------- thông báo admin
@@ -437,7 +580,7 @@ export function renderAnnouncement(
 
 // ---------------------------------------------------------------- chi tiết
 
-/** Trang chi tiết một sản phẩm — thay tại chỗ tin chào bằng editMessageText. */
+/** Trang chi tiết một sản phẩm — bố cục 📦/📝 theo mẫu Lâm Shop. */
 export function renderProductDetail(
   product: ProductDto,
   lang: BotLang,
@@ -448,10 +591,12 @@ export function renderProductDetail(
   const dict = botDict(lang);
   const currency = CURRENCY_BY_LANG[lang];
 
-  const head: string[] = [`<b>${escapeHtml(product.name)}</b>`];
+  const head: string[] = [`📦 <b>${escapeHtml(product.name)}</b>`];
   if (product.category) head.push(escapeHtml(product.category));
+
+  const moTa: string[] = [];
   if (product.shortDescription) {
-    head.push('', `<i>${escapeHtml(product.shortDescription)}</i>`);
+    moTa.push('', escapeHtml(dict.detailDescTitle), `<i>${escapeHtml(product.shortDescription)}</i>`);
   }
 
   const variantLines: string[] = [];
@@ -470,21 +615,23 @@ export function renderProductDetail(
     }
   }
 
-  const tail: string[] = [''];
-  const stockLine = [
-    // "Đã bán 0" ở cửa hàng mới là bằng chứng NGƯỢC — ẩn như trên web.
-    product.sold > 0 ? dict.soldCount(product.sold) : null,
-    dict.inStock(Math.max(0, product.availableStock)),
-  ]
-    .filter((part): part is string => part !== null)
-    .join(' • ');
-  tail.push(escapeHtml(stockLine));
+  const tail: string[] = [
+    '',
+    escapeHtml(dict.detailPriceLine(productPriceLabel(product, lang, rates))),
+    escapeHtml(dict.detailAutoLine),
+    escapeHtml(
+      product.availableStock > 0
+        ? dict.detailStatusIn(product.availableStock)
+        : dict.detailStatusOut,
+    ),
+  ];
+  if (product.sold > 0) tail.push(escapeHtml(dict.soldCount(product.sold)));
+  tail.push('', escapeHtml(dict.detailHowTo));
   const support = supportLineText(lang, supportChannels);
   if (support) tail.push(support);
-  tail.push(escapeHtml(dict.detailBuyHint));
 
-  // Mô tả nhét vừa phần còn lại của trần 4096 — dài quá thì cắt, âm thì bỏ.
-  const fixed = [...head, ...variantLines, ...tail].join('\n');
+  // Mô tả dài nhét vừa phần còn lại của trần 4096 — dài quá thì cắt, âm thì bỏ.
+  const fixed = [...head, ...moTa, ...variantLines, ...tail].join('\n');
   const middle: string[] = [];
   if (product.description) {
     const budget = TG_TEXT_LIMIT - SAFETY_MARGIN - fixed.length - 2;
@@ -510,13 +657,73 @@ export function renderProductDetail(
   }
   keyboard.push([
     {
-      text: dict.detailBack,
+      text: dict.backToCategories,
       callback_data: encodeCallback({ kind: 'catalog', page: backPage }),
     },
   ]);
 
   return {
-    text: [...head, ...middle, ...variantLines, ...tail].join('\n'),
+    text: [...head, ...moTa, ...middle, ...variantLines, ...tail].join('\n'),
     keyboard,
   };
+}
+
+// ---------------------------------------------------------------- hỗ trợ + ngôn ngữ
+
+export function supportLineText(
+  lang: BotLang,
+  supportChannels: readonly SupportChannelDto[],
+): string | null {
+  if (supportChannels.length === 0) return null;
+  const channels = supportChannels
+    .map((channel) => `${channel.label}: ${channel.value}`)
+    .join(' • ');
+  return escapeHtml(botDict(lang).supportLine(channels));
+}
+
+/** Màn ☎️ Hỗ Trợ & Liên Hệ — danh sách kênh admin đã cấu hình. */
+export function renderSupport(
+  supportChannels: readonly SupportChannelDto[],
+  supportNote: string,
+  lang: BotLang,
+): { text: string; keyboard: TgInlineKeyboard } {
+  const dict = botDict(lang);
+  const lines = [`<b>${escapeHtml(dict.hubSupportBtn)}</b>`];
+  if (supportNote.trim() !== '') lines.push('', escapeHtml(supportNote.trim()));
+  if (supportChannels.length > 0) {
+    lines.push('');
+    for (const channel of supportChannels) {
+      lines.push(`• ${escapeHtml(channel.label)}: ${escapeHtml(channel.value)}`);
+    }
+  } else {
+    lines.push('', escapeHtml(dict.menuHint));
+  }
+  return {
+    text: lines.join('\n'),
+    keyboard: [
+      [{ text: dict.hubBackBtn, callback_data: encodeCallback({ kind: 'hub' }) }],
+    ],
+  };
+}
+
+/** Màn 🌐 chọn ngôn ngữ — theo mẫu Lâm Shop. */
+export function renderLanguageMenu(
+  lang: BotLang,
+): { text: string; keyboard: TgInlineKeyboard } {
+  const dict = botDict(lang);
+  const text = [
+    `<b>${escapeHtml(dict.langTitle)}</b>`,
+    '━━━━━━━━━━━━━━━━━━',
+    '',
+    escapeHtml(dict.langCurrent(dict.langNames[lang] ?? lang)),
+    escapeHtml(dict.langChoose),
+  ].join('\n');
+  const keyboard: TgInlineKeyboard = (['vi', 'en', 'zh'] as const).map((code) => [
+    {
+      text: dict.langNames[code] ?? code,
+      callback_data: encodeCallback({ kind: 'setLang', lang: code }),
+    },
+  ]);
+  keyboard.push([{ text: dict.hubBackBtn, callback_data: encodeCallback({ kind: 'hub' }) }]);
+  return { text, keyboard };
 }

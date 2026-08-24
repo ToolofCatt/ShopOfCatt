@@ -46,6 +46,19 @@
 > lần, thiếu tiền lăn ngược sạch (test tích hợp trên PG thật ở
 > `balance.integration.spec.ts`); vòng đẩy báo "đã cộng ví" dùng chung outbox.
 > Payment.mode có thêm giá trị `BALANCE`; trang khách hàng admin hiện số dư.
+> **Giao diện đã theo mẫu bot "Lâm Shop"** (khảo sát thật bằng Telethon,
+> transcript trong scratchpad phiên làm việc): /start → HUB điều khiển
+> all-inline sửa tại chỗ (chào tên khách, nút số dư đứng đầu, 2 nút/hàng) →
+> 🛒 Cửa hàng → DANH MỤC kèm đếm số (một danh mục thì vào thẳng danh sách) →
+> nút sản phẩm `Tên | giá | Còn n`/`Hết hàng` → chi tiết 📦/📝 + trạng thái
+> ✅/❌ + "Cách mua". Màn 👤 kiểu bảng thống kê (tên/số dư/mã khách/tổng chi/
+> đơn hoàn thành — chỉ số CÓ THẬT, không bịa hạng VIP/hoa hồng). Nạp tiền: nút
+> nhanh HOẶC GÕ SỐ tự do → bot hỏi xác nhận bằng nút rồi mới tạo mã (bot không
+> có trạng thái hội thoại — số trôi nổi mà tạo mã ngay thì gõ nhầm cũng thành
+> mã). Màn 🌐 chọn ngôn ngữ: lựa chọn lưu vào `User.telegramLang` +
+> `telegramLangChosen` — đã tự chọn thì language_code của app không ghi đè nữa.
+> Preview /admin/telegram đổi sang BẢN ĐỒ MÀN HÌNH (`screens` khoá theo
+> callback_data) — giả lập tra khoá, không chép logic điều hướng.
 > Tiếp theo: GĐ5 (báo chủ shop: đơn mới/kẹt/kho cạn vào chat riêng).
 
 Mục tiêu: khách duyệt sản phẩm, đặt đơn, thanh toán và **nhận key ngay trong

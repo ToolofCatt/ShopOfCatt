@@ -361,13 +361,16 @@ export interface TelegramMessagePreview {
 /**
  * Bản xem trước cho trang /admin/telegram — dựng bằng CHÍNH module render của
  * bot, nên cái admin thấy là cái khách sẽ thấy, không phải bản chép tay.
+ *
+ * `screens` là BẢN ĐỒ MÀN HÌNH khoá theo callback_data: giả lập bấm nút nào
+ * thì tra đúng khoá đó — không phải chép lại logic điều hướng của bot.
  */
 export interface TelegramPreviewDto {
   /** Tin "Thông báo từ Admin"; null = tắt gửi kèm, hoặc hộp thông báo tắt/rỗng. */
   announcement: string | null;
-  storefront: TelegramMessagePreview & { page: number; totalPages: number };
-  /** Chi tiết của từng sản phẩm TRÊN TRANG hiện tại, khoá theo productId. */
-  details: Record<string, TelegramMessagePreview>;
+  /** Khoá màn hình đầu tiên (hub). */
+  entry: string;
+  screens: Record<string, TelegramMessagePreview>;
 }
 
 export interface TelegramStatusDto {
