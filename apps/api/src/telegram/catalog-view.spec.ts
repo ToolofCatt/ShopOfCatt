@@ -137,8 +137,8 @@ describe('productPriceLabel', () => {
 });
 
 describe('productButtonLabel', () => {
-  it('đủ ba phần kiểu Lâm Shop: tên | giá | Còn n', () => {
-    expect(productButtonLabel(product(), 'vi', RATES)).toBe('🔑 Key bản quyền | 75k | Còn 10');
+  it('đủ ba phần theo số đông shop bot: tên | giá | 📦 n', () => {
+    expect(productButtonLabel(product(), 'vi', RATES)).toBe('🔑 Key bản quyền | 75k | 📦 10');
   });
 
   it('hết hàng → hậu tố "Hết hàng" thay vì con số', () => {
@@ -151,7 +151,7 @@ describe('productButtonLabel', () => {
     const label = productButtonLabel(product({ name }), 'vi', RATES);
     expect(Array.from(label).length).toBeLessThanOrEqual(62);
     expect((label as string & { isWellFormed(): boolean }).isWellFormed()).toBe(true);
-    expect(label).toMatch(/\| 75k \| Còn 10$/);
+    expect(label).toMatch(/\| 75k \| 📦 10$/);
   });
 
   it('truncateLabel giữ nguyên chuỗi ngắn, thêm … khi cắt', () => {
@@ -219,19 +219,33 @@ describe('renderStorefront — màn cửa hàng', () => {
     expect(view.keyboard[view.keyboard.length - 1][0].callback_data).toBe('h');
   });
 
-  it('NHIỀU danh mục → bảng danh mục kèm đếm số kiểu "ChatGPT (2)"', () => {
+  it('ÍT hàng thì PHẲNG HOÁ dù nhiều danh mục — không bắt khách bấm hai lần', () => {
     const nhieu = [
       product({ id: 'a1', category: 'ChatGPT' }),
-      product({ id: 'a2', category: 'ChatGPT' }),
       product({ id: 'b1', category: 'Claude' }),
       product({ id: 'c1', category: null }),
     ];
     const view = renderStorefront(nhieu, 'vi', RATES);
+    // 3 sản phẩm / 3 danh mục vẫn ra danh sách phẳng — học Piggy/sahasa.
+    const data = view.keyboard.flat().map((b) => b.callback_data);
+    expect(data.filter((v) => v.startsWith('p:'))).toHaveLength(3);
+    expect(data.filter((v) => v.startsWith('ct:'))).toHaveLength(0);
+  });
+
+  it('NHIỀU hàng + nhiều danh mục → bảng danh mục 2 CỘT kèm đếm số', () => {
+    const nhieu = [
+      ...Array.from({ length: 20 }, (_, i) => product({ id: `g${i}`, category: 'ChatGPT' })),
+      ...Array.from({ length: 15 }, (_, i) => product({ id: `c${i}`, category: 'Claude' })),
+      product({ id: 'x1', category: null }),
+    ];
+    const view = renderStorefront(nhieu, 'vi', RATES);
     expect(view.text).toContain('Chọn danh mục');
     const labels = view.keyboard.flat().map((b) => b.text);
-    expect(labels).toContain('ChatGPT (2)');
-    expect(labels).toContain('Claude (1)');
+    expect(labels).toContain('ChatGPT (20)');
+    expect(labels).toContain('Claude (15)');
     expect(labels).toContain('Khác (1)'); // không danh mục → gom vào "Khác"
+    // 2 cột: hàng đầu phải có 2 nút danh mục
+    expect(view.keyboard[0]).toHaveLength(2);
     const data = view.keyboard.flat().map((b) => b.callback_data);
     expect(data.filter((v) => v.startsWith('ct:'))).toHaveLength(3);
   });

@@ -332,7 +332,7 @@ export function productPriceLabel(
 
 // ---------------------------------------------------------------- nút sản phẩm
 
-/** Nhãn nút kiểu Lâm Shop: `{tên} | {giá} | Còn n` / `| Hết hàng`. */
+/** Nhãn nút theo số đông shop bot VN (Piggy/sahasa): `{tên} | {giá} | 📦 n`. */
 export function productButtonLabel(
   product: ProductDto,
   lang: BotLang,
@@ -342,7 +342,7 @@ export function productButtonLabel(
   const price = productPriceLabel(product, lang, rates);
   const stock =
     product.availableStock > 0
-      ? dict.inStock(product.availableStock)
+      ? `📦 ${product.availableStock}`
       : dict.outOfStock;
   const suffix = ` | ${price} | ${stock}`;
   const nameBudget = Math.max(6, BUTTON_LABEL_MAX - Array.from(suffix).length);
@@ -369,20 +369,34 @@ export function renderHub(
   rates: StoreRatesDto | null,
   /** Lời chào chủ shop tự soạn; rỗng = khối mặc định theo ngôn ngữ. */
   greeting = '',
+  /** Tổng số đơn của khách — null = chưa từng mua, ẩn dòng này. */
+  ordersCount: number | null = null,
 ): { text: string; keyboard: TgInlineKeyboard } {
   const dict = botDict(lang);
   const thanChao = greeting.trim() !== '' ? greeting.trim() : dict.hubHeader;
+
+  const soDu = convertFromUsdt(balanceUsdt ?? 0, CURRENCY_BY_LANG[lang], rates);
+  const nhanSoDu =
+    soDu === null ? formatUsdt(balanceUsdt ?? 0) : formatMoney(soDu, CURRENCY_BY_LANG[lang]);
+
+  // Khối số liệu trong CHỮ (kiểu DiDi Shop) — khách thấy ví/tỉ giá không cần bấm.
+  const soLieu: string[] = [escapeHtml(dict.hubBalanceLine(nhanSoDu))];
+  if (ordersCount !== null && ordersCount > 0) {
+    soLieu.push(escapeHtml(dict.hubOrdersLine(ordersCount)));
+  }
+  if (rates && rates.vndPerUsdt > 0 && lang === 'vi') {
+    soLieu.push(escapeHtml(dict.hubRateLine(formatMoney(rates.vndPerUsdt, 'VND'))));
+  }
+
   const text = [
     escapeHtml(dict.hubHello(customerName.trim() || '...')),
     '',
     escapeHtml(thanChao),
     '',
+    ...soLieu,
+    '',
     escapeHtml(dict.hubChoose),
   ].join('\n');
-
-  const soDu = convertFromUsdt(balanceUsdt ?? 0, CURRENCY_BY_LANG[lang], rates);
-  const nhanSoDu =
-    soDu === null ? formatUsdt(balanceUsdt ?? 0) : formatMoney(soDu, CURRENCY_BY_LANG[lang]);
 
   const keyboard: TgInlineKeyboard = [
     [{ text: dict.hubBalanceBtn(nhanSoDu), callback_data: encodeCallback({ kind: 'account' }) }],
@@ -493,25 +507,37 @@ export function renderStorefront(
     };
   }
 
-  if (nhom.length <= 1) {
+  /*
+   * Ít hàng thì PHẲNG HOÁ dù có nhiều danh mục (học Piggy/sahasa): shop 3 sản
+   * phẩm chia 3 danh mục mà bắt khách bấm hai lần mới thấy hàng là tự đuổi
+   * khách. Danh mục chỉ đáng giá khi danh sách phẳng không còn nhìn nổi.
+   */
+  if (nhom.length <= 1 || products.length <= PAGE_MAX_ITEMS) {
     const { rows, page: current, totalPages } = productRows(products, lang, rates, page);
     const keyboard = [...rows];
     if (totalPages > 1) keyboard.push(pageNav(current, totalPages, dict, (p) => `c:${p}`));
     keyboard.push([quayVeHub]);
     return {
-      text: [`<b>${escapeHtml(dict.shopTitle)}</b>`, '', escapeHtml(dict.categoryChoose)].join('\n'),
+      text: [`<b>${escapeHtml(dict.shopTitle)}</b>`, '', escapeHtml(dict.shopHello)].join('\n'),
       keyboard,
       page: current,
       totalPages,
     };
   }
 
-  const keyboard: TgInlineKeyboard = nhom.map((group, index) => [
-    {
-      text: `${truncateLabel(group.label, 40)} (${group.products.length})`,
-      callback_data: encodeCallback({ kind: 'category', catIndex: index, page: 1 }),
-    },
-  ]);
+  // Danh mục xếp HAI CỘT (học stkvn/DiDi) — nhiều nhóm mà một cột là cuộn mỏi tay.
+  const keyboard: TgInlineKeyboard = [];
+  for (let i = 0; i < nhom.length; i += 2) {
+    const hang: TgInlineKeyboardButton[] = [];
+    for (const [offset, group] of [nhom[i], nhom[i + 1]].entries()) {
+      if (!group) continue;
+      hang.push({
+        text: `${truncateLabel(group.label, 24)} (${group.products.length})`,
+        callback_data: encodeCallback({ kind: 'category', catIndex: i + offset, page: 1 }),
+      });
+    }
+    keyboard.push(hang);
+  }
   keyboard.push([quayVeHub]);
   return {
     text: [`<b>${escapeHtml(dict.shopTitle)}</b>`, '', escapeHtml(dict.shopChooseCategory)].join('\n'),

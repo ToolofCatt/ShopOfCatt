@@ -425,8 +425,18 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       this.settings.getPublicRates(),
       this.settings.getTelegramConfig(),
     ]);
+    const ordersCount = user
+      ? await this.prisma.order.count({ where: { userId: user.id } })
+      : null;
     const ten = from?.first_name ?? user?.telegramName ?? '';
-    return renderHub(ten, user ? Number(user.balance) : null, lang, rates, cfg.greeting);
+    return renderHub(
+      ten,
+      user ? Number(user.balance) : null,
+      lang,
+      rates,
+      cfg.greeting,
+      ordersCount,
+    );
   }
 
   private async handleMessage(
