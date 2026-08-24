@@ -75,6 +75,17 @@ const COOLDOWN_MAX_ENTRIES = 5_000;
 const MAX_PENDING_PER_CHAT = 2;
 
 /**
+ * Chu kỳ vòng ĐẨY key: quét đơn DELIVERED của khách Telegram chưa được báo
+ * (outbox `telegramNotifiedAt`) rồi nhắn thẳng vào chat. Webhook SePay chốt
+ * đơn trong vài giây, nên 15 giây là khách gần như nhận key "ngay lập tức"
+ * mà không phải bấm gì.
+ */
+const NOTIFY_MS = 15_000;
+
+/** Mỗi lượt đẩy tối đa bấy nhiêu đơn — phần dư sang lượt sau, khỏi giữ vòng lặp lâu. */
+const NOTIFY_BATCH = 10;
+
+/**
  * Bot Telegram bán hàng — khung Giai đoạn 1 (xem docs/BOT-TELEGRAM.md).
  *
  * Nhận update bằng LONG-POLLING chứ không webhook: không phải mở endpoint
@@ -90,6 +101,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(TelegramService.name);
   private superviseTimer: NodeJS.Timeout | null = null;
   private supervising = false;
+  private notifyTimer: NodeJS.Timeout | null = null;
+  private notifying = false;
 
   /** Token của vòng poll đang chạy; null = không có vòng nào. */
   private activeToken: string | null = null;
@@ -132,6 +145,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }, SUPERVISE_MS);
     // unref: đừng vì bot mà giữ tiến trình sống trong test/tắt máy chủ.
     this.superviseTimer.unref?.();
+    this.notifyTimer = setInterval(() => {
+      void this.notifySweep();
+    }, NOTIFY_MS);
+    this.notifyTimer.unref?.();
     void this.supervise();
   }
 
@@ -139,6 +156,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     if (this.superviseTimer) {
       clearInterval(this.superviseTimer);
       this.superviseTimer = null;
+    }
+    if (this.notifyTimer) {
+      clearInterval(this.notifyTimer);
+      this.notifyTimer = null;
     }
     this.stopPolling('tắt máy chủ');
   }
@@ -518,7 +539,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       case 'qty': {
-        const user = await this.users.findOrCreate(chatId, tgDisplayName(ctx.from));
+        const user = await this.users.findOrCreate(
+          chatId,
+          tgDisplayName(ctx.from),
+          lang,
+        );
         const pending = await this.prisma.order.count({
           where: { userId: user.id, status: 'PENDING' },
         });
@@ -561,6 +586,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           const detail = await this.orders.getOwnDetail(user.id, parsed.orderCode);
           await answer();
           await edit(renderOrderDelivered(detail, lang));
+          // Khách đã thấy key qua nút kiểm tra — đánh dấu để vòng đẩy không
+          // gửi lại lần nữa.
+          await this.markNotified(detail.id);
           return;
         }
         if (result.status === 'PAID') {
@@ -585,6 +613,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           const detail = await this.orders.getOwnDetail(user.id, parsed.orderCode);
           await answer();
           await edit(renderOrderDelivered(detail, lang));
+          await this.markNotified(detail.id);
           return;
         }
         await answer({ text: dict.checkPaidWaitDelivery, show_alert: true });
@@ -625,6 +654,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           this.settings.getEnabledMethods(),
         ]);
         await answer();
+        if (detail.status === 'DELIVERED') await this.markNotified(detail.id);
         // Xem lại đơn PENDING thì KHÔNG gửi lại ảnh QR — dội ảnh mỗi lần mở là spam.
         const view = renderOrderView(
           detail, lang, rates, minutesLeft(detail.expiresAt), sepayHolder(methods),
@@ -632,6 +662,93 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         await edit({ text: view.text, keyboard: view.keyboard });
         return;
       }
+    }
+  }
+
+  /**
+   * Vòng ĐẨY key — nửa còn lại của lời hứa "tiền vào là hàng ra": webhook/bộ
+   * đối soát chốt đơn xong, vòng này nhắn key vào chat mà khách KHÔNG phải bấm
+   * "Tôi đã chuyển".
+   *
+   * Chạy NGOÀI transaction giao hàng (ràng buộc trong docs/BOT-TELEGRAM.md):
+   * đọc outbox `telegramNotifiedAt`, gửi rồi mới đánh dấu — tiến trình chết
+   * giữa hai bước thì lượt sau gửi TRÙNG một tin, thà trùng còn hơn mất key.
+   */
+  private async notifySweep(): Promise<void> {
+    const token = this.activeToken;
+    if (!token || this.notifying) return;
+    this.notifying = true;
+    try {
+      const cho = await this.prisma.order.findMany({
+        where: {
+          status: 'DELIVERED',
+          telegramNotifiedAt: null,
+          user: { telegramChatId: { not: null } },
+        },
+        select: {
+          id: true,
+          code: true,
+          userId: true,
+          user: { select: { telegramChatId: true, telegramLang: true } },
+        },
+        orderBy: { paidAt: 'asc' },
+        take: NOTIFY_BATCH,
+      });
+
+      for (const order of cho) {
+        if (this.activeToken !== token) return; // bot vừa bị tắt/đổi token
+        const chatId = Number(order.user.telegramChatId);
+        // Khách trước cột telegramLang chưa có ngôn ngữ lưu lại — cửa hàng VN
+        // nên lùi về tiếng Việt (khác mặc định "en" của lượt chat trực tiếp,
+        // nơi còn language_code để đoán).
+        const lang: BotLang = (['vi', 'en', 'zh'] as readonly string[]).includes(
+          order.user.telegramLang,
+        )
+          ? (order.user.telegramLang as BotLang)
+          : 'vi';
+        try {
+          const detail = await this.orders.getOwnDetail(order.userId, order.code);
+          const view = renderOrderDelivered(detail, lang);
+          await this.sendHtml(
+            token,
+            chatId,
+            view.text,
+            view.keyboard,
+            this.stopController.signal,
+          );
+          await this.markNotified(order.id);
+          this.logger.log(`Đã đẩy key đơn ${order.code} vào chat ${chatId}`);
+        } catch (err) {
+          if (err instanceof TelegramApiError) {
+            // Lỗi CỦA CHAT (khách chặn bot, chat biến mất…) — không bao giờ
+            // gửi được nữa, đánh dấu luôn kẻo lượt nào cũng thử lại và rác log.
+            // Key vẫn nằm ở "🧾 Đơn của tôi" và trang quản trị.
+            this.logger.warn(
+              `Đẩy key đơn ${order.code} bị Telegram từ chối (${errText(err)}) — thôi không thử lại.`,
+            );
+            await this.markNotified(order.id);
+          } else {
+            // Lỗi mạng/CSDL thoáng qua — để nguyên, lượt sau thử lại.
+            this.logger.warn(`Đẩy key đơn ${order.code} trượt: ${errText(err)}`);
+          }
+        }
+      }
+    } catch (err) {
+      this.logger.warn(`Vòng đẩy key trượt: ${errText(err)}`);
+    } finally {
+      this.notifying = false;
+    }
+  }
+
+  /** Đánh dấu "đã báo khách" — updateMany điều kiện null nên gọi trùng vô hại. */
+  private async markNotified(orderId: string): Promise<void> {
+    try {
+      await this.prisma.order.updateMany({
+        where: { id: orderId, telegramNotifiedAt: null },
+        data: { telegramNotifiedAt: new Date() },
+      });
+    } catch (err) {
+      this.logger.warn(`Đánh dấu đã báo đơn ${orderId} trượt: ${errText(err)}`);
     }
   }
 

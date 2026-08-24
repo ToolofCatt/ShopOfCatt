@@ -72,6 +72,10 @@ model User {
   /// Tên hiển thị Telegram lúc gặp gần nhất (first_name + @username) — chỉ để
   /// trang quản trị có gì đó thay cho email; không dùng để định danh.
   telegramName String @default("")
+  /// Ngôn ngữ bot của khách ("vi"/"en"/"zh"), cập nhật mỗi lần mua. Vòng đẩy
+  /// key chạy NGOÀI mọi tương tác nên không có language_code nào để đoán —
+  /// phải nhớ từ lần gặp trước. Rỗng = khách cũ trước cột này, lùi về "vi".
+  telegramLang String @default("")
   role         Role     @default(USER)
   /// Khác null = tài khoản đang bị khóa (không đăng nhập/gọi API được)
   lockedAt DateTime?

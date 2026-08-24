@@ -59,6 +59,8 @@ const vi = {
   payBankLine: (bank: string, account: string) => `${bank} — STK: ${account}`,
   payOpenCheckout: 'Bấm liên kết để mở trang thanh toán Binance Pay:',
   payMockHint: 'Cổng GIẢ LẬP — không có tiền thật, chỉ dùng để thử hệ thống.',
+  payAutoNote:
+    'Tiền vào là bot TỰ gửi hàng vào chat này (thường dưới 1 phút) — không cần bấm gì. Nút bên dưới chỉ để kiểm tra cho nhanh.',
   btnPaid: '✅ Tôi đã chuyển',
   btnCancelOrder: '❌ Huỷ đơn',
   btnMockConfirm: '✅ Xác nhận đã trả (giả lập)',
@@ -130,6 +132,8 @@ const en: BotDictionary = {
   payBankLine: (bank: string, account: string) => `${bank} — account: ${account}`,
   payOpenCheckout: 'Open the Binance Pay checkout link:',
   payMockHint: 'MOCK gateway — no real money, for testing the system only.',
+  payAutoNote:
+    'Once the payment lands, the bot delivers to this chat AUTOMATICALLY (usually under a minute) — no need to press anything. The button below is just a quick check.',
   btnPaid: '✅ I have paid',
   btnCancelOrder: '❌ Cancel order',
   btnMockConfirm: '✅ Confirm payment (mock)',
@@ -197,6 +201,7 @@ const zh: BotDictionary = {
   payBankLine: (bank: string, account: string) => `${bank} — 账号：${account}`,
   payOpenCheckout: '点击链接打开 Binance Pay 收银台：',
   payMockHint: '模拟网关——没有真实资金，仅用于测试系统。',
+  payAutoNote: '款项到账后机器人会自动将商品发送到本对话（通常不到一分钟）——无需任何操作。下方按钮仅用于快速查询。',
   btnPaid: '✅ 我已付款',
   btnCancelOrder: '❌ 取消订单',
   btnMockConfirm: '✅ 确认付款（模拟）',

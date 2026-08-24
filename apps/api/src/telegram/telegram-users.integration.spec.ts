@@ -120,7 +120,7 @@ afterAll(async () => {
 
 describe('TelegramUsersService (tích hợp)', () => {
   itDb('tạo khách mới: email null, có mã số, mật khẩu không đăng nhập được', async () => {
-    const user = await service.findOrCreate(111222333, 'An (@an123)');
+    const user = await service.findOrCreate(111222333, 'An (@an123)', 'vi');
     expect(user.email).toBeNull();
     expect(user.telegramChatId).toBe('111222333');
     expect(user.telegramName).toBe('An (@an123)');
@@ -132,7 +132,7 @@ describe('TelegramUsersService (tích hợp)', () => {
   });
 
   itDb('gọi lại cùng chat → trả đúng bản ghi cũ, không tạo trùng', async () => {
-    const lanHai = await service.findOrCreate(111222333, 'An (@an123)');
+    const lanHai = await service.findOrCreate(111222333, 'An (@an123)', 'vi');
     const soKhach = await prisma.user.count({
       where: { telegramChatId: '111222333' },
     });
@@ -141,13 +141,18 @@ describe('TelegramUsersService (tích hợp)', () => {
   });
 
   itDb('tên Telegram đổi → cập nhật, vẫn một bản ghi', async () => {
-    const doiTen = await service.findOrCreate(111222333, 'An Mới (@an123)');
+    const doiTen = await service.findOrCreate(111222333, 'An Mới (@an123)', 'vi');
     expect(doiTen.telegramName).toBe('An Mới (@an123)');
     expect(await prisma.user.count({ where: { telegramChatId: '111222333' } })).toBe(1);
   });
 
+  itDb('ngôn ngữ đổi → cập nhật cho vòng đẩy key nói đúng thứ tiếng', async () => {
+    const doiNgonNgu = await service.findOrCreate(111222333, 'An Mới (@an123)', 'zh');
+    expect(doiNgonNgu.telegramLang).toBe('zh');
+  });
+
   itDb('hai chat khác nhau đều email null — unique cho nhiều NULL không vướng nhau', async () => {
-    const khach2 = await service.findOrCreate(444555666, 'Bình');
+    const khach2 = await service.findOrCreate(444555666, 'Bình', 'en');
     expect(khach2.email).toBeNull();
     expect(khach2.telegramChatId).toBe('444555666');
     expect(await prisma.user.count({ where: { email: null } })).toBe(2);
@@ -157,8 +162,8 @@ describe('TelegramUsersService (tích hợp)', () => {
     'hai lượt tạo CÙNG chat chạy song song → đúng một bản ghi (nhánh đua P2002)',
     async () => {
       const [a, b] = await Promise.all([
-        service.findOrCreate(777888999, 'Đua 1'),
-        service.findOrCreate(777888999, 'Đua 2'),
+        service.findOrCreate(777888999, 'Đua 1', 'vi'),
+        service.findOrCreate(777888999, 'Đua 2', 'vi'),
       ]);
       expect(a.id).toBe(b.id);
       expect(await prisma.user.count({ where: { telegramChatId: '777888999' } })).toBe(1);

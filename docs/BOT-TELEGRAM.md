@@ -26,9 +26,14 @@
 > tối đa 2 đơn PENDING mỗi chat. Lỗi nghiệp vụ (hết hàng…) dịch từ khoá K theo
 > ngôn ngữ khách. Cổng giả lập chỉ hiện khi PAYMENT_MOCK + công tắc CSDL cùng
 > bật (fail-closed như web).
-> Tiếp theo: Giai đoạn 4 (vòng quét PUSH thông báo giao hàng qua outbox
-> `Order.telegramNotifiedAt` — hiện key mới về theo kiểu PULL khi khách bấm
-> kiểm tra) và GĐ5 (báo chủ shop).
+> **Giai đoạn 4 (tự đẩy key) đã xong**: vòng quét 15 giây đọc outbox
+> `Order.telegramNotifiedAt` — webhook SePay/bộ đối soát crypto chốt đơn xong
+> là bot TỰ nhắn key vào chat, khách không phải bấm gì (nút "Tôi đã chuyển"
+> giữ lại làm đường kiểm tra nhanh). Gửi rồi mới đánh dấu — thà trùng còn hơn
+> mất key; khách chặn bot thì đánh dấu luôn để khỏi thử lại vô hạn, key vẫn
+> nằm ở "🧾 Đơn của tôi". Ngôn ngữ đẩy lấy từ `User.telegramLang` nhớ từ lần
+> mua (vòng đẩy chạy ngoài mọi tương tác, không có language_code để đoán).
+> Tiếp theo: GĐ5 (báo chủ shop: đơn mới/kẹt/kho cạn vào chat riêng).
 
 Mục tiêu: khách duyệt sản phẩm, đặt đơn, thanh toán và **nhận key ngay trong
 Telegram** — một kênh bán song song với web, dùng chung kho, chung luồng tiền.

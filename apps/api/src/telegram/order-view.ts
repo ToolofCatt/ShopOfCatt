@@ -233,6 +233,10 @@ export function renderPaymentInstructions(
     }
   }
 
+  // MOCK không có đối soát tự động — đừng hứa "bot tự gửi" ở cổng giả lập.
+  if (payment?.mode !== 'MOCK') {
+    lines.push('', escapeHtml(dict.payAutoNote));
+  }
   if (minutesLeft !== null) {
     lines.push('', escapeHtml(dict.payDeadline(minutesLeft)));
   }

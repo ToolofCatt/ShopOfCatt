@@ -4,6 +4,7 @@ import { Prisma, type User } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { generateUniqueCustomerCode } from '../common/customer-code';
 import { PrismaService } from '../prisma/prisma.service';
+import type { BotLang } from './messages';
 
 /**
  * Khách Telegram là một `User` thật (Order.userId bắt buộc) — email null,
@@ -25,7 +26,7 @@ export class TelegramUsersService {
    * phải lúc /start: chào hỏi không cần tài khoản, tạo sớm chỉ đổ rác vào bảng
    * khách hàng.
    */
-  async findOrCreate(chatId: number, displayName: string): Promise<User> {
+  async findOrCreate(chatId: number, displayName: string, lang: BotLang): Promise<User> {
     const chat = String(chatId);
     const ten = displayName.trim().slice(0, 120);
 
@@ -33,11 +34,18 @@ export class TelegramUsersService {
       where: { telegramChatId: chat },
     });
     if (existing) {
-      // Tên Telegram đổi theo thời gian — cập nhật để trang admin không hiện tên cũ.
-      if (ten !== '' && ten !== existing.telegramName) {
+      // Tên/ngôn ngữ Telegram đổi theo thời gian — cập nhật để trang admin
+      // không hiện tên cũ và vòng đẩy key nói đúng thứ tiếng khách đang dùng.
+      if (
+        (ten !== '' && ten !== existing.telegramName) ||
+        lang !== existing.telegramLang
+      ) {
         return this.prisma.user.update({
           where: { id: existing.id },
-          data: { telegramName: ten },
+          data: {
+            telegramName: ten !== '' ? ten : existing.telegramName,
+            telegramLang: lang,
+          },
         });
       }
       return existing;
@@ -66,6 +74,7 @@ export class TelegramUsersService {
           code,
           telegramChatId: chat,
           telegramName: ten,
+          telegramLang: lang,
         },
       });
     } catch (err) {
