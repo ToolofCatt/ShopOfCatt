@@ -32,7 +32,7 @@ export function mainMenuKeyboard(lang: BotLang): TgReplyKeyboard {
   const dict = botDict(lang);
   return {
     keyboard: [
-      [{ text: dict.menuShop }, { text: dict.menuDeposit }],
+      [{ text: dict.menuShop }, { text: dict.menuDeposit }, { text: dict.searchBtn }],
       [{ text: dict.menuOrders }, { text: dict.menuAccount }, { text: dict.menuSupport }],
     ],
     resize_keyboard: true,
@@ -41,7 +41,7 @@ export function mainMenuKeyboard(lang: BotLang): TgReplyKeyboard {
 }
 
 /** Nút menu nào ứng với hành động gì — so trên cả ba ngôn ngữ. */
-export type MenuAction = 'shop' | 'deposit' | 'orders' | 'account' | 'support';
+export type MenuAction = 'shop' | 'deposit' | 'orders' | 'account' | 'support' | 'search';
 
 export function matchMenuAction(text: string): MenuAction | null {
   const gon = text.trim();
@@ -52,6 +52,7 @@ export function matchMenuAction(text: string): MenuAction | null {
     if (gon === dict.menuOrders) return 'orders';
     if (gon === dict.menuAccount) return 'account';
     if (gon === dict.menuSupport) return 'support';
+    if (gon === dict.searchBtn) return 'search';
   }
   return null;
 }

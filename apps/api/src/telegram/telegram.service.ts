@@ -19,8 +19,10 @@ import {
   renderHub,
   renderLanguageMenu,
   renderProductDetail,
+  renderSearchResults,
   renderStorefront,
   renderSupport,
+  searchProducts,
   type BotCallback,
   type StorefrontView,
 } from './catalog-view';
@@ -425,18 +427,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       this.settings.getPublicRates(),
       this.settings.getTelegramConfig(),
     ]);
-    const ordersCount = user
-      ? await this.prisma.order.count({ where: { userId: user.id } })
-      : null;
     const ten = from?.first_name ?? user?.telegramName ?? '';
-    return renderHub(
-      ten,
-      user ? Number(user.balance) : null,
-      lang,
-      rates,
-      cfg.greeting,
-      ordersCount,
-    );
+    return renderHub(ten, user ? Number(user.balance) : null, lang, rates, cfg.greeting);
   }
 
   private async handleMessage(
@@ -504,7 +496,17 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           stop,
         );
       }
-      // Mọi text còn lại → HUB (kiểu Lâm Shop: gõ gì cũng quay về bảng điều khiển).
+      // Text thường → đem đi TÌM KIẾM sản phẩm (học Panda Shop) — có kết quả
+      // thì trả kết quả, không có gì khớp thì về HUB như cũ.
+      if (!text.startsWith('/')) {
+        const data = await this.loadStorefront(lang);
+        const thay = searchProducts(data.products, text);
+        if (thay.length > 0) {
+          const view = renderSearchResults(thay, text, lang, data.rates);
+          await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+          return;
+        }
+      }
       const hub = await this.hubFor(chatId, message.from, lang);
       await this.sendHtml(token, chatId, hub.text, hub.keyboard, stop);
     } catch (err) {
@@ -625,6 +627,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     const dict = botDict(lang);
     switch (action) {
+      case 'search': {
+        // Bot không có trạng thái hội thoại — lời nhắc chỉ để hướng dẫn,
+        // thực tế GÕ BẤT KỲ chữ gì cũng được đem đi tìm (xem handleMessage).
+        await this.sendHtml(token, chatId, escapeText(dict.searchPrompt), null, stop);
+        return;
+      }
       case 'orders': {
         const user = await this.users.findByChat(chatId);
         const [orders, rates] = await Promise.all([

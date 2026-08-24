@@ -367,51 +367,39 @@ export function renderHub(
   balanceUsdt: number | null,
   lang: BotLang,
   rates: StoreRatesDto | null,
-  /** Lời chào chủ shop tự soạn; rỗng = khối mặc định theo ngôn ngữ. */
+  /** Lời chào chủ shop tự soạn; rỗng = câu mặc định "⭐ Catt Store Xin Chào…". */
   greeting = '',
-  /** Tổng số đơn của khách — null = chưa từng mua, ẩn dòng này. */
-  ordersCount: number | null = null,
 ): { text: string; keyboard: TgInlineKeyboard } {
   const dict = botDict(lang);
-  const thanChao = greeting.trim() !== '' ? greeting.trim() : dict.hubHeader;
 
   const soDu = convertFromUsdt(balanceUsdt ?? 0, CURRENCY_BY_LANG[lang], rates);
   const nhanSoDu =
     soDu === null ? formatUsdt(balanceUsdt ?? 0) : formatMoney(soDu, CURRENCY_BY_LANG[lang]);
 
-  // Khối số liệu trong CHỮ (kiểu DiDi Shop) — khách thấy ví/tỉ giá không cần bấm.
-  const soLieu: string[] = [escapeHtml(dict.hubBalanceLine(nhanSoDu))];
-  if (ordersCount !== null && ordersCount > 0) {
-    soLieu.push(escapeHtml(dict.hubOrdersLine(ordersCount)));
-  }
-  if (rates && rates.vndPerUsdt > 0 && lang === 'vi') {
-    soLieu.push(escapeHtml(dict.hubRateLine(formatMoney(rates.vndPerUsdt, 'VND'))));
-  }
-
+  // Tối giản kiểu Panda Shop: chào + số dư + mời chọn — hết. Không khối "uy
+  // tín chuyên nghiệp" nào nữa; chữ càng ít càng đỡ trôi nút.
+  const chao =
+    greeting.trim() !== ''
+      ? escapeHtml(greeting.trim())
+      : escapeHtml(dict.hubHello(customerName.trim() || '...'));
   const text = [
-    escapeHtml(dict.hubHello(customerName.trim() || '...')),
-    '',
-    escapeHtml(thanChao),
-    '',
-    ...soLieu,
+    chao,
+    escapeHtml(dict.hubBalanceLine2(nhanSoDu)),
     '',
     escapeHtml(dict.hubChoose),
   ].join('\n');
 
   const keyboard: TgInlineKeyboard = [
-    [{ text: dict.hubBalanceBtn(nhanSoDu), callback_data: encodeCallback({ kind: 'account' }) }],
+    [{ text: dict.hubShopBtn, callback_data: encodeCallback({ kind: 'catalog', page: 1 }) }],
     [
-      { text: dict.hubShopBtn, callback_data: encodeCallback({ kind: 'catalog', page: 1 }) },
+      { text: dict.hubAccountBtn, callback_data: encodeCallback({ kind: 'account' }) },
       { text: dict.hubOrdersBtn, callback_data: encodeCallback({ kind: 'orders' }) },
     ],
     [
-      { text: dict.hubAccountBtn, callback_data: encodeCallback({ kind: 'account' }) },
       { text: dict.hubDepositBtn, callback_data: encodeCallback({ kind: 'depositMenu' }) },
-    ],
-    [
       { text: dict.hubSupportBtn, callback_data: encodeCallback({ kind: 'support' }) },
-      { text: dict.hubLangBtn, callback_data: encodeCallback({ kind: 'langMenu' }) },
     ],
+    [{ text: dict.hubLangBtn, callback_data: encodeCallback({ kind: 'langMenu' }) }],
   ];
   return { text, keyboard };
 }
@@ -518,21 +506,21 @@ export function renderStorefront(
     if (totalPages > 1) keyboard.push(pageNav(current, totalPages, dict, (p) => `c:${p}`));
     keyboard.push([quayVeHub]);
     return {
-      text: [`<b>${escapeHtml(dict.shopTitle)}</b>`, '', escapeHtml(dict.shopHello)].join('\n'),
+      text: `<b>${escapeHtml(dict.shopTitle)}</b>`,
       keyboard,
       page: current,
       totalPages,
     };
   }
 
-  // Danh mục xếp HAI CỘT (học stkvn/DiDi) — nhiều nhóm mà một cột là cuộn mỏi tay.
+  // Danh mục xếp BA CỘT chữ HOA, không đếm số — đúng kiểu Panda Shop.
   const keyboard: TgInlineKeyboard = [];
-  for (let i = 0; i < nhom.length; i += 2) {
+  for (let i = 0; i < nhom.length; i += 3) {
     const hang: TgInlineKeyboardButton[] = [];
-    for (const [offset, group] of [nhom[i], nhom[i + 1]].entries()) {
+    for (const [offset, group] of [nhom[i], nhom[i + 1], nhom[i + 2]].entries()) {
       if (!group) continue;
       hang.push({
-        text: `${truncateLabel(group.label, 24)} (${group.products.length})`,
+        text: truncateLabel(group.label.toLocaleUpperCase('vi'), 14),
         callback_data: encodeCallback({ kind: 'category', catIndex: i + offset, page: 1 }),
       });
     }
@@ -540,7 +528,7 @@ export function renderStorefront(
   }
   keyboard.push([quayVeHub]);
   return {
-    text: [`<b>${escapeHtml(dict.shopTitle)}</b>`, '', escapeHtml(dict.shopChooseCategory)].join('\n'),
+    text: `<b>${escapeHtml(dict.shopTitle)}</b>`,
     keyboard,
     page: 1,
     totalPages: 1,
@@ -570,11 +558,7 @@ export function renderCategoryProducts(
     { text: dict.backToCategories, callback_data: encodeCallback({ kind: 'catalog', page: 1 }) },
   ]);
   return {
-    text: [
-      `<b>${escapeHtml(dict.categoryTitle(group.label))}</b>`,
-      '',
-      escapeHtml(dict.categoryChoose),
-    ].join('\n'),
+    text: `<b>${escapeHtml(dict.categoryTitle(group.label))}</b>`,
     keyboard,
     page: current,
     totalPages,
@@ -606,7 +590,7 @@ export function renderAnnouncement(
 
 // ---------------------------------------------------------------- chi tiết
 
-/** Trang chi tiết một sản phẩm — bố cục 📦/📝 theo mẫu Lâm Shop. */
+/** Trang chi tiết — bố cục ⭐ tối giản theo mẫu Panda Shop. */
 export function renderProductDetail(
   product: ProductDto,
   lang: BotLang,
@@ -617,44 +601,35 @@ export function renderProductDetail(
   const dict = botDict(lang);
   const currency = CURRENCY_BY_LANG[lang];
 
-  const head: string[] = [`📦 <b>${escapeHtml(product.name)}</b>`];
-  if (product.category) head.push(escapeHtml(product.category));
+  const head: string[] = [
+    `<b>${escapeHtml(product.name)}</b>`,
+    escapeHtml(dict.detailPriceLine(productPriceLabel(product, lang, rates))),
+    escapeHtml(dict.detailStockLine(Math.max(0, product.availableStock))),
+    escapeHtml(dict.detailSoldLine(product.sold)),
+  ];
 
   const moTa: string[] = [];
-  if (product.shortDescription) {
-    moTa.push('', escapeHtml(dict.detailDescTitle), `<i>${escapeHtml(product.shortDescription)}</i>`);
+  if (product.shortDescription || product.description) {
+    moTa.push('', escapeHtml(dict.detailDescTitle));
+    if (product.shortDescription) moTa.push(escapeHtml(product.shortDescription));
   }
 
   const variantLines: string[] = [];
-  if (product.variants.length > 0) {
+  if (product.variants.length > 1) {
+    // Chỉ liệt kê khi có NHIỀU loại — một loại thì giá/kho ở đầu đã nói đủ.
     variantLines.push('', escapeHtml(dict.variantsTitle));
     for (const variant of product.variants) {
       const hien = displayPriceAmount(variant, currency, rates);
       const price = formatMoney(hien.amount, hien.currency);
       const stock =
-        variant.availableStock > 0
-          ? dict.inStock(variant.availableStock)
-          : dict.outOfStock;
+        variant.availableStock > 0 ? `📦 ${variant.availableStock}` : dict.outOfStock;
       variantLines.push(
         `• <b>${escapeHtml(variant.name)}</b> — ${escapeHtml(price)} — ${escapeHtml(stock)}`,
       );
     }
   }
 
-  const tail: string[] = [
-    '',
-    escapeHtml(dict.detailPriceLine(productPriceLabel(product, lang, rates))),
-    escapeHtml(dict.detailAutoLine),
-    escapeHtml(
-      product.availableStock > 0
-        ? dict.detailStatusIn(product.availableStock)
-        : dict.detailStatusOut,
-    ),
-  ];
-  if (product.sold > 0) tail.push(escapeHtml(dict.soldCount(product.sold)));
-  tail.push('', escapeHtml(dict.detailHowTo));
-  const support = supportLineText(lang, supportChannels);
-  if (support) tail.push(support);
+  const tail: string[] = ['', escapeHtml(dict.detailChoose)];
 
   // Mô tả dài nhét vừa phần còn lại của trần 4096 — dài quá thì cắt, âm thì bỏ.
   const fixed = [...head, ...moTa, ...variantLines, ...tail].join('\n');
@@ -662,7 +637,7 @@ export function renderProductDetail(
   if (product.description) {
     const budget = TG_TEXT_LIMIT - SAFETY_MARGIN - fixed.length - 2;
     const fitted = fitEscaped(product.description, budget);
-    if (fitted !== '') middle.push('', fitted);
+    if (fitted !== '') middle.push(fitted);
   }
 
   const keyboard: TgInlineKeyboard = [];
@@ -692,6 +667,46 @@ export function renderProductDetail(
     text: [...head, ...moTa, ...middle, ...variantLines, ...tail].join('\n'),
     keyboard,
   };
+}
+
+/** Kết quả 🔎 tìm kiếm — bố cục theo Panda Shop. */
+export function renderSearchResults(
+  matches: readonly ProductDto[],
+  query: string,
+  lang: BotLang,
+  rates: StoreRatesDto | null,
+): { text: string; keyboard: TgInlineKeyboard } {
+  const dict = botDict(lang);
+  const keyboard: TgInlineKeyboard = matches.slice(0, PAGE_MAX_ITEMS).map((product) => [
+    {
+      text: productButtonLabel(product, lang, rates),
+      callback_data: encodeCallback({ kind: 'product', productId: product.id, backPage: 1 }),
+    },
+  ]);
+  keyboard.push([
+    { text: dict.backToCategories, callback_data: encodeCallback({ kind: 'catalog', page: 1 }) },
+  ]);
+  return {
+    text: escapeHtml(dict.searchResults(query, matches.length)),
+    keyboard,
+  };
+}
+
+/**
+ * Lọc sản phẩm theo từ khoá — không phân biệt hoa thường lẫn DẤU tiếng Việt
+ * ("gôk" thì chịu, nhưng "grok"/"GROK"/"grók" đều ra).
+ */
+export function searchProducts(
+  products: readonly ProductDto[],
+  query: string,
+): ProductDto[] {
+  const bo_dau = (v: string) =>
+    v.toLowerCase().normalize('NFD').replace(/\p{M}/gu, '');
+  const q = bo_dau(query.trim());
+  if (q === '') return [];
+  return products.filter(
+    (p) => bo_dau(p.name).includes(q) || bo_dau(p.category ?? '').includes(q),
+  );
 }
 
 // ---------------------------------------------------------------- hỗ trợ + ngôn ngữ

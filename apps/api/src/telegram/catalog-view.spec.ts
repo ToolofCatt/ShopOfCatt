@@ -189,25 +189,26 @@ describe('encodeCallback / parseCallback', () => {
   });
 });
 
-describe('renderHub — bảng điều khiển kiểu Lâm Shop', () => {
-  it('chào theo tên + nút số dư đứng đầu + đủ các nhánh', () => {
+describe('renderHub — tối giản kiểu Panda Shop', () => {
+  it('chào ⭐ + số dư trong CHỮ + đủ các nhánh', () => {
     const { text, keyboard } = renderHub('An <x>', 3.5, 'vi', RATES);
-    expect(text).toContain('Xin chào 💎 An &lt;x&gt;!');
-    expect(text).toContain('HỆ THỐNG BÁN HÀNG TỰ ĐỘNG');
-    expect(keyboard[0][0].text).toContain('91.000 ₫'); // 3.5 × 26000
+    expect(text).toContain('⭐ Catt Store Xin Chào An &lt;x&gt; ⭐');
+    expect(text).toContain('⭐ Số dư: 91.000 ₫'); // 3.5 × 26000
     const data = keyboard.flat().map((b) => b.callback_data);
-    expect(data).toContain('c:1'); // Mua Hàng
-    expect(data).toContain('o'); // Đã Mua
+    expect(data).toContain('c:1'); // Cửa Hàng
+    expect(data).toContain('o'); // Đơn hàng
     expect(data).toContain('a'); // Tài khoản
     expect(data).toContain('d'); // Nạp tiền
     expect(data).toContain('s'); // Hỗ trợ
     expect(data).toContain('lg'); // Ngôn ngữ
+    // Panda: Cửa Hàng một mình một hàng trên cùng
+    expect(keyboard[0][0].callback_data).toBe('c:1');
   });
 
-  it('lời chào tuỳ chỉnh thay khối mặc định và được escape', () => {
+  it('lời chào tuỳ chỉnh thay câu mặc định và được escape', () => {
     const { text } = renderHub('An', 0, 'vi', RATES, 'Chào <bạn> & mua gì ^^');
     expect(text).toContain('Chào &lt;bạn&gt; &amp; mua gì ^^');
-    expect(text).not.toContain('HỆ THỐNG BÁN HÀNG TỰ ĐỘNG');
+    expect(text).not.toContain('Catt Store Xin Chào');
   });
 });
 
@@ -232,20 +233,20 @@ describe('renderStorefront — màn cửa hàng', () => {
     expect(data.filter((v) => v.startsWith('ct:'))).toHaveLength(0);
   });
 
-  it('NHIỀU hàng + nhiều danh mục → bảng danh mục 2 CỘT kèm đếm số', () => {
+  it('NHIỀU hàng + nhiều danh mục → 3 CỘT chữ HOA không đếm (kiểu Panda)', () => {
     const nhieu = [
       ...Array.from({ length: 20 }, (_, i) => product({ id: `g${i}`, category: 'ChatGPT' })),
       ...Array.from({ length: 15 }, (_, i) => product({ id: `c${i}`, category: 'Claude' })),
       product({ id: 'x1', category: null }),
     ];
     const view = renderStorefront(nhieu, 'vi', RATES);
-    expect(view.text).toContain('Chọn danh mục');
+    expect(view.text).toContain('⭐ Chọn sản phẩm bên dưới ⭐');
     const labels = view.keyboard.flat().map((b) => b.text);
-    expect(labels).toContain('ChatGPT (20)');
-    expect(labels).toContain('Claude (15)');
-    expect(labels).toContain('Khác (1)'); // không danh mục → gom vào "Khác"
-    // 2 cột: hàng đầu phải có 2 nút danh mục
-    expect(view.keyboard[0]).toHaveLength(2);
+    expect(labels).toContain('CHATGPT');
+    expect(labels).toContain('CLAUDE');
+    expect(labels).toContain('KHÁC'); // không danh mục → gom vào "Khác"
+    // 3 cột: hàng đầu phải có 3 nút danh mục
+    expect(view.keyboard[0]).toHaveLength(3);
     const data = view.keyboard.flat().map((b) => b.callback_data);
     expect(data.filter((v) => v.startsWith('ct:'))).toHaveLength(3);
   });
@@ -286,7 +287,7 @@ describe('renderCategoryProducts', () => {
     // sort theo tiếng Việt: ChatGPT (0), Claude (1)
     const view = renderCategoryProducts(nhieu, 1, 'vi', RATES);
     expect(view).not.toBeNull();
-    expect(view!.text).toContain('DANH MỤC: Claude');
+    expect(view!.text).toContain('⭐ Claude — chọn gói bên dưới ⭐');
     expect(view!.keyboard[0][0].callback_data).toBe('p:b1:1');
     expect(view!.keyboard[view!.keyboard.length - 1][0].callback_data).toBe('c:1');
   });
@@ -336,11 +337,11 @@ describe('renderProductDetail', () => {
       sold: 0,
     });
     const { text, keyboard } = renderProductDetail(p, 'vi', RATES, [], 3);
-    expect(text).toContain('• <b>Retail</b> — 250.000 ₫ — Còn 12');
+    expect(text).toContain('• <b>Retail</b> — 250.000 ₫ — 📦 12');
     expect(text).toContain('• <b>OEM</b> — 180.000 ₫ — Hết hàng');
-    // Kiểu Lâm Shop: hết hàng nói bằng dòng trạng thái ❌, không phải "Còn 0".
-    expect(text).toContain('❌ Trạng thái: Hết hàng');
-    expect(text).not.toContain('Đã bán');
+    // Kiểu Panda: kho/đã bán là dòng ⭐ ở đầu — "Đã bán: 0" vẫn hiện (số thật).
+    expect(text).toContain('⭐ Tồn kho: 0');
+    expect(text).toContain('⭐ Đã bán: 0');
     // Nút Mua: CHỈ loại còn hàng (Retail) — OEM hết hàng không chào nút hỏng.
     const data = keyboard.flat().map((b) => b.callback_data);
     expect(data).toContain('b:v1:ckqq1234567890abcdefghijk:3');
@@ -361,10 +362,11 @@ describe('renderProductDetail', () => {
     expect(text).toContain('&lt;chi tiết&gt;');
   });
 
-  it('sold > 0 → hiện Đã bán, còn hàng hiện dòng trạng thái ✅', () => {
+  it('đầu trang kiểu Panda: ⭐ Giá / Tồn kho / Đã bán', () => {
     const { text } = renderProductDetail(product(), 'vi', RATES, [], 1);
-    expect(text).toContain('Đã bán 3');
-    expect(text).toContain('✅ Trạng thái: Còn hàng (10)');
-    expect(text).toContain('Cách mua: Thanh toán');
+    expect(text).toContain('⭐ Giá: 75k');
+    expect(text).toContain('⭐ Tồn kho: 10');
+    expect(text).toContain('⭐ Đã bán: 3');
+    expect(text).toContain('⭐ Chọn loại muốn mua bên dưới:');
   });
 });
