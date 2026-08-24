@@ -352,6 +352,7 @@ export const zh: Dictionary = {
     BINANCE: 'Binance Pay（商户）',
     BINANCE_ID: 'Binance Pay · 转账至 ID',
     CRYPTO: 'USDT 链上转账',
+    BALANCE: '钱包余额（Telegram 机器人）',
     SEPAY: '银行转账（SePay）',
   },
 
@@ -840,6 +841,7 @@ export const zh: Dictionary = {
       '在 Telegram 上向 @BotFather 发送 /newbot 创建机器人并获取令牌。留空 = 保留当前令牌。',
     errTelegramTokenRequired: '启用 Telegram 机器人前请先粘贴机器人令牌',
     navTelegram: 'Telegram 机器人',
+    infoBalance: '钱包余额（机器人充值）',
     settingTelegramMoved: '机器人配置已移至独立页面，并带实时预览 →',
     telegramPageHint: '配置机器人销售渠道，并预览顾客在 Telegram 中看到的确切内容。',
     telegramStatusTitle: '状态',

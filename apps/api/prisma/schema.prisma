@@ -76,6 +76,9 @@ model User {
   /// key chạy NGOÀI mọi tương tác nên không có language_code nào để đoán —
   /// phải nhớ từ lần gặp trước. Rỗng = khách cũ trước cột này, lùi về "vi".
   telegramLang String @default("")
+  /// Số dư ví (USDT). MỌI thay đổi phải đi qua BalanceService và kèm đúng một
+  /// BalanceEntry — cột này mà lệch với sổ cái là có tiền không giải thích được.
+  balance Decimal @default(0) @db.Decimal(18, 6)
   role         Role     @default(USER)
   /// Khác null = tài khoản đang bị khóa (không đăng nhập/gọi API được)
   lockedAt DateTime?
@@ -84,6 +87,60 @@ model User {
   createdAt         DateTime   @default(now())
   orders            Order[]
   auditLogs         AuditLog[]
+  deposits          Deposit[]
+  balanceEntries    BalanceEntry[]
+}
+
+enum DepositStatus {
+  PENDING
+  SUCCESS
+  EXPIRED
+  CANCELLED
+}
+
+/// Một lần NẠP TIỀN vào ví qua chuyển khoản ngân hàng: khách chuyển đúng số
+/// VND với nội dung là mã "NAP-XXXXXX", webhook SePay khớp bằng CHÍNH bộ
+/// matcher của đơn hàng (mã trong nội dung + số tiền tuyệt đối, fail-closed).
+model Deposit {
+  id     String        @id @default(cuid())
+  code   String        @unique
+  userId String
+  user   User          @relation(fields: [userId], references: [id])
+  status DepositStatus @default(PENDING)
+  /// USDT sẽ cộng vào ví — chốt theo tỉ giá LÚC TẠO, không tính lại lúc tiền về.
+  amountUsdt Decimal @db.Decimal(18, 6)
+  /// Số VND phải chuyển, chốt lúc tạo — khớp TUYỆT ĐỐI, thiếu là không cộng.
+  vndAmount Decimal @db.Decimal(18, 2)
+  /// Id giao dịch SePay đã khớp. @unique là trọng tài: hai webhook trùng thì
+  /// chỉ một bên ghi được — không cộng ví hai lần.
+  sepayRef  String?   @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  paidAt    DateTime?
+  /// Outbox cho bot báo "đã cộng tiền" — cùng cơ chế với Order.telegramNotifiedAt.
+  telegramNotifiedAt DateTime?
+
+  @@index([status, expiresAt])
+  @@index([userId, createdAt])
+}
+
+/// SỔ CÁI ví — dấu vết mọi lần cộng/trừ. Có tranh cãi thì đọc bảng này,
+/// không đọc cột balance.
+model BalanceEntry {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+  /// Dương = cộng (nạp tiền), âm = trừ (mua hàng).
+  amount Decimal @db.Decimal(18, 6)
+  /// Số dư SAU giao dịch — đọc lại sổ khỏi phải cộng dồn từ đầu.
+  balanceAfter Decimal @db.Decimal(18, 6)
+  /// "deposit" | "purchase" (| "admin" khi có chỉnh tay sau này).
+  reason  String
+  /// Mã tham chiếu: NAP-xxx hoặc DH-xxx.
+  refCode String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 /// Nhật ký thao tác của quản trị viên — ai làm gì, lúc nào.

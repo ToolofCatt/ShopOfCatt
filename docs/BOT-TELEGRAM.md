@@ -33,6 +33,19 @@
 > mất key; khách chặn bot thì đánh dấu luôn để khỏi thử lại vô hạn, key vẫn
 > nằm ở "🧾 Đơn của tôi". Ngôn ngữ đẩy lấy từ `User.telegramLang` nhớ từ lần
 > mua (vòng đẩy chạy ngoài mọi tương tác, không có language_code để đoán).
+> **GĐ ví số dư + menu cố định đã xong** (mô phỏng các shop bot VN như
+> "Lâm Shop"): menu cố định dưới ô nhập (🛒 Mua hàng │ 💰 Nạp tiền │ 🧾 Đơn của
+> tôi │ 👤 Tài khoản │ ☎️ Hỗ trợ — nhãn so trên CẢ BA ngôn ngữ); ví
+> `User.balance` với SỔ CÁI `BalanceEntry` (mọi thay đổi số dư đi qua
+> `balance/balance.service.ts` và kèm đúng một entry — sổ cái là sự thật, cột
+> balance chỉ là ảnh chụp); nạp qua chuyển khoản với mã `NAP-xxx` (bảng
+> `Deposit`, hạn 10 phút, khớp bằng CHÍNH matcher SePay của đơn hàng — mã trong
+> nội dung + số tiền tuyệt đối, `sepayRef @unique` chống webhook trùng, tiền về
+> muộn sau hạn vẫn cộng); mua hàng có nút "💳 Trả bằng số dư" khi đủ tiền — trừ
+> ví và chốt đơn trong MỘT transaction (khoá Order → User), bấm đúp chỉ trừ một
+> lần, thiếu tiền lăn ngược sạch (test tích hợp trên PG thật ở
+> `balance.integration.spec.ts`); vòng đẩy báo "đã cộng ví" dùng chung outbox.
+> Payment.mode có thêm giá trị `BALANCE`; trang khách hàng admin hiện số dư.
 > Tiếp theo: GĐ5 (báo chủ shop: đơn mới/kẹt/kho cạn vào chat riêng).
 
 Mục tiêu: khách duyệt sản phẩm, đặt đơn, thanh toán và **nhận key ngay trong

@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus } from '@webcatt/shared';
 import { FulfillmentService } from '../orders/fulfillment.service';
+import { BalanceService } from '../balance/balance.service';
 import { SettingsService } from '../settings/settings.service';
 import {
   matchSepayTransaction,
@@ -33,6 +34,7 @@ export class PaymentsService {
     private readonly config: ConfigService,
     private readonly fulfillment: FulfillmentService,
     private readonly settings: SettingsService,
+    private readonly balance: BalanceService,
   ) {}
 
 
@@ -57,6 +59,9 @@ export class PaymentsService {
     });
     if (daCo) {
       return `bo qua: giao dich ${ref} da duoc ghi nhan truoc do`;
+    }
+    if (await this.balance.findDepositBySepayRef(ref)) {
+      return `bo qua: giao dich ${ref} da duoc ghi cho mot ma nap truoc do`;
     }
 
     const cauHinh = await this.settings.getSepayConfig();
@@ -96,6 +101,30 @@ export class PaymentsService {
     );
 
     if (!kq.payment) {
+      /*
+       * Không khớp đơn nào — thử MÃ NẠP VÍ (NAP-xxx) bằng CHÍNH bộ matcher
+       * này: cùng luật mã-trong-nội-dung + số tiền tuyệt đối, không có nhánh
+       * nới lỏng riêng cho nạp tiền.
+       */
+      const napKq = matchSepayTransaction(
+        tx,
+        (await this.balance.listAwaitingDeposits()).map((d) => ({
+          orderId: d.id, // matcher gọi là orderId nhưng chỉ là id tham chiếu
+          code: d.code,
+          expectedVnd: d.expectedVnd,
+        })),
+        { expectedAccountNumber: cauHinh.accountNumber },
+      );
+      if (napKq.payment) {
+        const daCong = await this.balance.creditDeposit(napKq.payment.orderId, ref);
+        if (daCong) {
+          this.logger.log(
+            `SePay ${ref}: da cong vi (ma nap) — ${tx.transferAmount} VND`,
+          );
+          return 'da cong vi (ma nap)';
+        }
+        return `bo qua: ma nap vua duoc mot tien trinh khac ghi nhan`;
+      }
       const themVao =
         kq.reason === 'sai-so-tien' ? ` (lech ${kq.shortfall} VND)` : '';
       this.logger.warn(

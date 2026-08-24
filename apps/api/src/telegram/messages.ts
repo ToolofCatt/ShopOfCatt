@@ -82,6 +82,29 @@ const vi = {
     EXPIRED: '⌛ Hết hạn',
   } as Record<string, string>,
   orderClosed: 'Đơn này đã đóng. Bạn có thể đặt đơn mới từ bảng hàng.',
+
+  /** ---- Menu cố định + ví số dư ---- */
+  menuShop: '🛒 Mua hàng',
+  menuDeposit: '💰 Nạp tiền',
+  menuOrders: '🧾 Đơn của tôi',
+  menuAccount: '👤 Tài khoản',
+  menuSupport: '☎️ Hỗ trợ',
+  menuHint: 'Dùng menu bên dưới để mua hàng, nạp tiền, xem đơn 👇',
+  accountTitle: '👤 Tài khoản của bạn',
+  accountCode: (code: number) => `Mã khách hàng: #${code}`,
+  accountBalance: (balance: string) => `Số dư ví: ${balance}`,
+  accountOrders: (n: number) => `Tổng số đơn: ${n}`,
+  depositTitle: '💰 Nạp tiền vào ví',
+  depositChooseAmount:
+    'Chọn số tiền nạp — chuyển khoản xong tiền TỰ cộng vào ví, mua hàng sau này trừ thẳng số dư:',
+  depositWillCredit: (usdt: string) => `Sẽ cộng vào ví: ${usdt}`,
+  depositCredited: (amount: string, balance: string) =>
+    `💰 Đã nhận nạp tiền! Cộng ${amount} vào ví. Số dư hiện tại: ${balance}`,
+  depositStillPending: 'Chưa thấy tiền vào. Sau khi chuyển, đợi khoảng 1 phút rồi bấm lại.',
+  depositExpired: 'Mã nạp đã hết hạn. Tạo mã mới để nạp — tiền đã lỡ chuyển theo mã cũ vẫn được cộng khi về tới nơi.',
+  depositCancelled: (code: string) => `Đã huỷ mã nạp ${code}.`,
+  depositUnavailable: 'Nạp tiền qua chuyển khoản chưa mở — cửa hàng chưa bật kênh ngân hàng.',
+  payWithBalance: (balance: string) => `💳 Trả bằng số dư (${balance})`,
 };
 
 type BotDictionary = typeof vi;
@@ -155,6 +178,28 @@ const en: BotDictionary = {
     EXPIRED: '⌛ Expired',
   } as Record<string, string>,
   orderClosed: 'This order is closed. You can place a new one from the product list.',
+
+  menuShop: '🛒 Shop',
+  menuDeposit: '💰 Top up',
+  menuOrders: '🧾 My orders',
+  menuAccount: '👤 Account',
+  menuSupport: '☎️ Support',
+  menuHint: 'Use the menu below to shop, top up and view orders 👇',
+  accountTitle: '👤 Your account',
+  accountCode: (code: number) => `Customer ID: #${code}`,
+  accountBalance: (balance: string) => `Wallet balance: ${balance}`,
+  accountOrders: (n: number) => `Total orders: ${n}`,
+  depositTitle: '💰 Top up your wallet',
+  depositChooseAmount:
+    'Pick an amount — once the transfer lands it is credited AUTOMATICALLY, and future purchases are paid straight from your balance:',
+  depositWillCredit: (usdt: string) => `Will credit: ${usdt}`,
+  depositCredited: (amount: string, balance: string) =>
+    `💰 Top-up received! ${amount} added to your wallet. Current balance: ${balance}`,
+  depositStillPending: 'No transfer detected yet. After sending, wait about a minute and press again.',
+  depositExpired: 'This top-up code expired. Create a new one — money already sent with the old code is still credited when it arrives.',
+  depositCancelled: (code: string) => `Top-up ${code} cancelled.`,
+  depositUnavailable: 'Bank top-ups are not open yet — the store has not enabled the bank channel.',
+  payWithBalance: (balance: string) => `💳 Pay with balance (${balance})`,
 };
 
 const zh: BotDictionary = {
@@ -223,6 +268,27 @@ const zh: BotDictionary = {
     EXPIRED: '⌛ 已过期',
   } as Record<string, string>,
   orderClosed: '该订单已关闭。您可以从商品列表下新单。',
+
+  menuShop: '🛒 购物',
+  menuDeposit: '💰 充值',
+  menuOrders: '🧾 我的订单',
+  menuAccount: '👤 账户',
+  menuSupport: '☎️ 客服',
+  menuHint: '使用下方菜单购物、充值、查看订单 👇',
+  accountTitle: '👤 您的账户',
+  accountCode: (code: number) => `客户编号：#${code}`,
+  accountBalance: (balance: string) => `钱包余额：${balance}`,
+  accountOrders: (n: number) => `订单总数：${n}`,
+  depositTitle: '💰 为钱包充值',
+  depositChooseAmount: '选择充值金额——转账到账后自动入账，之后购物直接从余额扣款：',
+  depositWillCredit: (usdt: string) => `将入账：${usdt}`,
+  depositCredited: (amount: string, balance: string) =>
+    `💰 充值到账！已向钱包存入 ${amount}。当前余额：${balance}`,
+  depositStillPending: '尚未检测到转账。转账后请等待约 1 分钟再点击。',
+  depositExpired: '该充值码已过期。请创建新码——按旧码已转出的款项到账后仍会入账。',
+  depositCancelled: (code: string) => `充值码 ${code} 已取消。`,
+  depositUnavailable: '银行充值尚未开放——商店未启用银行渠道。',
+  payWithBalance: (balance: string) => `💳 用余额支付（${balance}）`,
 };
 
 const DICTIONARIES: Record<BotLang, BotDictionary> = { vi, en, zh };

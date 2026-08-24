@@ -360,6 +360,7 @@ export const en: Dictionary = {
     BINANCE: 'Binance Pay (merchant)',
     BINANCE_ID: 'Binance Pay · send to ID',
     CRYPTO: 'USDT on-chain',
+    BALANCE: 'Wallet balance (Telegram bot)',
     SEPAY: 'Bank transfer (SePay)',
   },
 
@@ -872,6 +873,7 @@ export const en: Dictionary = {
       'Message /newbot to @BotFather on Telegram to create a bot and get a token. Leave empty to keep the current token.',
     errTelegramTokenRequired: 'Enabling the Telegram bot requires a bot token',
     navTelegram: 'Telegram bot',
+    infoBalance: 'Wallet balance (bot top-ups)',
     settingTelegramMoved: 'Bot configuration moved to its own page, with a live preview →',
     telegramPageHint:
       'Configure the bot sales channel and preview exactly what customers see in Telegram.',

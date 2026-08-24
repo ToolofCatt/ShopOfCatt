@@ -375,6 +375,7 @@ export const vi = {
     BINANCE_ID: 'Binance Pay · chuyển tới ID',
     CRYPTO: 'USDT on-chain',
     SEPAY: 'Chuyển khoản ngân hàng (SePay)',
+    BALANCE: 'Số dư ví (bot Telegram)',
   },
 
   admin: {
@@ -891,6 +892,7 @@ export const vi = {
       'Nhắn /newbot cho @BotFather trên Telegram để tạo bot và lấy token. Để trống = giữ token đang dùng.',
     errTelegramTokenRequired: 'Bật bot Telegram thì phải dán token bot',
     navTelegram: 'Bot Telegram',
+    infoBalance: 'Số dư ví (nạp qua bot)',
     settingTelegramMoved: 'Cấu hình bot đã chuyển sang trang riêng, kèm khung xem trước →',
     telegramPageHint:
       'Cấu hình kênh bán qua bot và xem trước đúng những gì khách sẽ thấy trong Telegram.',

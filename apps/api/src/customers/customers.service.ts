@@ -258,6 +258,7 @@ export class CustomersService {
       code: user.code,
       email: user.email,
       telegramName: user.telegramName,
+      balance: Number(user.balance),
       role: user.role,
       lockedAt: user.lockedAt ? user.lockedAt.toISOString() : null,
       createdAt: user.createdAt.toISOString(),

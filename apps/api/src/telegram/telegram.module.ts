@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AnnouncementModule } from '../announcement/announcement.module';
 import { AuthModule } from '../auth/auth.module';
+import { BalanceModule } from '../balance/balance.module';
 import { OrdersModule } from '../orders/orders.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { ProductsModule } from '../products/products.module';
@@ -17,6 +18,7 @@ import { TelegramService } from './telegram.service';
 @Module({
   imports: [
     AuthModule,
+    BalanceModule,
     SettingsModule,
     ProductsModule,
     AnnouncementModule,

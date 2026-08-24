@@ -127,7 +127,13 @@ export type BotCallback =
   | { kind: 'cancelOrder'; orderCode: string }
   | { kind: 'mockConfirm'; orderCode: string }
   | { kind: 'orders' }
-  | { kind: 'order'; orderCode: string };
+  | { kind: 'order'; orderCode: string }
+  | { kind: 'account' }
+  | { kind: 'depositMenu' }
+  | { kind: 'depositAmount'; vnd: number }
+  | { kind: 'depositCheck'; code: string }
+  | { kind: 'depositCancel'; code: string }
+  | { kind: 'payBalance'; orderCode: string };
 
 /** Bot API chặt cứng callback_data ở 64 byte. */
 const CALLBACK_MAX_BYTES = 64;
@@ -170,6 +176,18 @@ export function encodeCallback(cb: BotCallback): string {
       return 'o';
     case 'order':
       return `v:${cb.orderCode}`;
+    case 'account':
+      return 'a';
+    case 'depositMenu':
+      return 'd';
+    case 'depositAmount':
+      return `dn:${cb.vnd}`;
+    case 'depositCheck':
+      return `dk:${cb.code}`;
+    case 'depositCancel':
+      return `dx:${cb.code}`;
+    case 'payBalance':
+      return `mb:${cb.orderCode}`;
   }
 }
 
@@ -216,6 +234,21 @@ export function parseCallback(data: string | undefined): BotCallback | null {
   if (data === 'o') return { kind: 'orders' };
   if ((m = new RegExp(`^v:${ORDER_CODE_RE}$`).exec(data))) {
     return { kind: 'order', orderCode: m[1] };
+  }
+  if (data === 'a') return { kind: 'account' };
+  if (data === 'd') return { kind: 'depositMenu' };
+  if ((m = /^dn:([1-9][0-9]{3,8})$/.exec(data))) {
+    // Chặn thô ở codec; chặn tinh (min/max) nằm ở BalanceService.
+    return { kind: 'depositAmount', vnd: Number(m[1]) };
+  }
+  if ((m = new RegExp(`^dk:${ORDER_CODE_RE}$`).exec(data))) {
+    return { kind: 'depositCheck', code: m[1] };
+  }
+  if ((m = new RegExp(`^dx:${ORDER_CODE_RE}$`).exec(data))) {
+    return { kind: 'depositCancel', code: m[1] };
+  }
+  if ((m = new RegExp(`^mb:${ORDER_CODE_RE}$`).exec(data))) {
+    return { kind: 'payBalance', orderCode: m[1] };
   }
   return null;
 }

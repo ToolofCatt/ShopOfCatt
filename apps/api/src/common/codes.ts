@@ -19,6 +19,12 @@ export function generateOrderCode(): string {
   return `DH-${randomString(ORDER_CODE_ALPHABET, 6)}`;
 }
 
+/** Mã nạp tiền: NAP- + 6 ký tự — cùng bảng chữ với mã đơn, khác tiền tố để
+ *  nội dung chuyển khoản không bao giờ khớp nhầm giữa nạp và mua. */
+export function generateDepositCode(): string {
+  return `NAP-${randomString(ORDER_CODE_ALPHABET, 6)}`;
+}
+
 /**
  * merchantTradeNo: mã đơn bỏ dấu gạch + 10 ký tự chữ-số ngẫu nhiên
  * (≤32 ký tự, chỉ gồm chữ và số).

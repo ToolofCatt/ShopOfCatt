@@ -103,6 +103,8 @@ export function renderMethodChooser(
   lang: BotLang,
   rates: StoreRatesDto | null,
   minutesLeft: number | null,
+  /** Số dư ví của khách (USDT); đủ trả thì chào nút "trả bằng số dư" TRÊN CÙNG. */
+  balanceUsdt = 0,
 ): BotView {
   const dict = botDict(lang);
   const lines = [
@@ -112,16 +114,29 @@ export function renderMethodChooser(
   if (minutesLeft !== null) lines.push(escapeHtml(dict.payDeadline(minutesLeft)));
   lines.push('', escapeHtml(dict.chooseMethod));
 
-  const keyboard: TgInlineKeyboard = methods.map((entry) => [
-    {
-      text: dict.methodNames[entry.method] ?? entry.method,
-      callback_data: encodeCallback({
-        kind: 'method',
-        orderCode: order.code,
-        method: entry.method,
-      }),
-    },
-  ]);
+  const keyboard: TgInlineKeyboard = [];
+  // Chỉ chào khi ĐỦ trả — nút "trả bằng số dư" mà bấm ra lỗi thiếu tiền thì
+  // thà đừng chào; service vẫn kiểm lại lần cuối trong transaction.
+  if (balanceUsdt >= order.totalAmount) {
+    keyboard.push([
+      {
+        text: dict.payWithBalance(orderMoney(balanceUsdt, lang, rates)),
+        callback_data: encodeCallback({ kind: 'payBalance', orderCode: order.code }),
+      },
+    ]);
+  }
+  for (const entry of methods) {
+    keyboard.push([
+      {
+        text: dict.methodNames[entry.method] ?? entry.method,
+        callback_data: encodeCallback({
+          kind: 'method',
+          orderCode: order.code,
+          method: entry.method,
+        }),
+      },
+    ]);
+  }
   keyboard.push([
     {
       text: dict.btnCancelOrder,

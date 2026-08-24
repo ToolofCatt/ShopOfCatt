@@ -51,6 +51,16 @@ export interface TgInlineKeyboardButton {
 /** Mảng hàng nút — mỗi hàng một mảng nút. */
 export type TgInlineKeyboard = TgInlineKeyboardButton[][];
 
+/**
+ * Bàn phím CỐ ĐỊNH dưới ô nhập (khác inline: nút bấm sẽ GỬI text của nó thành
+ * tin nhắn, không có callback_data — bot nhận diện bằng cách so text).
+ */
+export interface TgReplyKeyboard {
+  keyboard: { text: string }[][];
+  resize_keyboard: boolean;
+  is_persistent: boolean;
+}
+
 export class TelegramApiError extends Error {
   constructor(
     readonly method: string,

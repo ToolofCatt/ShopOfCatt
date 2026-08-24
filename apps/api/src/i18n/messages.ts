@@ -185,6 +185,9 @@ export const K = {
   adminTelegramTokenRequired: 'admin.telegram_token_required',
   adminTelegramTokenInvalid: 'admin.telegram_token_invalid',
   adminTelegramGreetingTooLong: 'admin.telegram_greeting_too_long',
+  depositAmountInvalid: 'deposit.amount_invalid',
+  balanceInsufficient: 'balance.insufficient',
+  balanceOrderNotPending: 'balance.order_not_pending',
   adminVndRateInvalid: 'admin.vnd_rate_invalid',
   adminCnyRateInvalid: 'admin.cny_rate_invalid',
   adminRateMarkupInvalid: 'admin.rate_markup_invalid',
@@ -871,6 +874,21 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Lời chào của bot quá dài (tối đa 500 ký tự)',
     en: 'The bot greeting is too long (500 characters max)',
     zh: '机器人问候语过长（最多 500 个字符）',
+  },
+  [K.depositAmountInvalid]: {
+    vi: 'Số tiền nạp không hợp lệ (tối thiểu 10.000 ₫, tối đa 100.000.000 ₫)',
+    en: 'Invalid top-up amount (min 10,000 ₫, max 100,000,000 ₫)',
+    zh: '充值金额无效（最低 10,000 ₫，最高 100,000,000 ₫）',
+  },
+  [K.balanceInsufficient]: {
+    vi: 'Số dư không đủ để thanh toán đơn này — hãy nạp thêm hoặc chọn cách trả khác',
+    en: 'Your balance is not enough for this order — top up or choose another payment method',
+    zh: '余额不足以支付该订单——请充值或选择其他付款方式',
+  },
+  [K.balanceOrderNotPending]: {
+    vi: 'Đơn này không còn chờ thanh toán',
+    en: 'This order is no longer awaiting payment',
+    zh: '该订单已不在待付款状态',
   },
   [K.adminCnyRateInvalid]: {
     vi: 'Tỉ giá CNY phải là số dương, tối đa 4 chữ số thập phân',

@@ -184,6 +184,10 @@ export default function AdminCustomerDetailPage({
               label={t.admin.infoEmail}
               value={<span className="break-all">{customerLabel(customer)}</span>}
             />
+            <InfoRow
+              label={t.admin.infoBalance}
+              value={`${customer.balance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT`}
+            />
             <InfoRow label={t.admin.infoRole} value={<RoleBadge role={customer.role} />} />
             <InfoRow label={t.admin.infoCreatedAt} value={formatDate(customer.createdAt)} />
             <InfoRow

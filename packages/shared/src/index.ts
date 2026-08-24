@@ -14,7 +14,8 @@ export type StockStatus = 'AVAILABLE' | 'RESERVED' | 'SOLD' | 'WITHDRAWN';
  * `BINANCE_ID` = khách chuyển USDT thẳng tới Binance ID cá nhân của chủ shop —
  * chỉ cần khoá đọc là đối soát được, khác hẳn merchant.
  */
-export type PaymentMode = 'MOCK' | 'BINANCE' | 'BINANCE_ID' | 'CRYPTO' | 'SEPAY';
+/** BALANCE = trả bằng số dư ví (bot Telegram) — không có phiên cổng ngoài nào. */
+export type PaymentMode = 'MOCK' | 'BINANCE' | 'BINANCE_ID' | 'CRYPTO' | 'SEPAY' | 'BALANCE';
 
 /** Phương thức thanh toán khách chọn ở trang thanh toán. */
 export type PaymentMethod =
@@ -713,6 +714,8 @@ export interface AdminCustomerDto {
   email: string | null;
   /** Tên hiển thị Telegram lúc gặp gần nhất; rỗng với khách web. */
   telegramName: string;
+  /** Số dư ví (USDT) — nạp/tiêu qua bot Telegram. */
+  balance: number;
   role: Role;
   /** Khác null = đang bị khóa. */
   lockedAt: string | null;

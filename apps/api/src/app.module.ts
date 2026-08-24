@@ -5,6 +5,7 @@ import { AnalyticsModule } from './analytics/analytics.module';
 import { AnnouncementModule } from './announcement/announcement.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthModule } from './auth/auth.module';
+import { BalanceModule } from './balance/balance.module';
 import { BinanceExchangeModule } from './binance-exchange/binance-exchange.module';
 import { CouponsModule } from './coupons/coupons.module';
 import { CustomersModule } from './customers/customers.module';
@@ -35,6 +36,7 @@ import { TranslationModule } from './translation/translation.module';
     TranslationModule,
     LegalModule,
     SettingsModule,
+    BalanceModule,
     TelegramModule,
     CouponsModule,
     OrdersModule,

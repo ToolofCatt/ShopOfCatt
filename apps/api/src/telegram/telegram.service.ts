@@ -5,6 +5,7 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { AnnouncementService } from '../announcement/announcement.service';
+import { BalanceService } from '../balance/balance.service';
 import { isMessageKey, parseMessage, translate } from '../i18n/messages';
 import { OrdersService } from '../orders/orders.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -29,6 +30,15 @@ import {
   type BotView,
 } from './order-view';
 import { TelegramUsersService } from './telegram-users.service';
+import {
+  mainMenuKeyboard,
+  matchMenuAction,
+  renderAccount,
+  renderDepositCredited,
+  renderDepositInstructions,
+  renderDepositMenu,
+  type MenuAction,
+} from './wallet-view';
 import { botDict, botLang, type BotLang } from './messages';
 import {
   TelegramApiError,
@@ -37,6 +47,7 @@ import {
   type TgCallbackQuery,
   type TgInlineKeyboard,
   type TgMessage,
+  type TgReplyKeyboard,
   type TgUpdate,
   type TgUser,
 } from './telegram-api';
@@ -136,6 +147,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly orders: OrdersService,
     private readonly payments: PaymentsService,
     private readonly users: TelegramUsersService,
+    private readonly balance: BalanceService,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -304,9 +316,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     token: string,
     chatId: number,
     text: string,
-    keyboard: TgInlineKeyboard | null,
+    // Mảng = bàn phím inline; object = bàn phím CỐ ĐỊNH dưới ô nhập.
+    keyboard: TgInlineKeyboard | TgReplyKeyboard | null,
     stop: AbortSignal,
   ): Promise<void> {
+    const replyMarkup = keyboard
+      ? Array.isArray(keyboard)
+        ? { inline_keyboard: keyboard }
+        : keyboard
+      : null;
     await tgCall(
       token,
       'sendMessage',
@@ -316,7 +334,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         parse_mode: 'HTML',
         // Link t.me trong kênh hỗ trợ sẽ kéo preview to đùng che tin nếu không tắt.
         link_preview_options: { is_disabled: true },
-        ...(keyboard ? { reply_markup: { inline_keyboard: keyboard } } : {}),
+        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
       },
       15_000,
       stop,
@@ -342,26 +360,37 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const lang = botLang(message.from?.language_code);
     const dict = botDict(lang);
     const chatId = message.chat.id;
+    const text = message.text.trim();
     try {
-      if (message.text.trim().startsWith('/orders')) {
-        const user = await this.users.findByChat(chatId);
-        const [orders, rates] = await Promise.all([
-          user ? this.orders.listOwn(user.id) : Promise.resolve([]),
-          this.settings.getPublicRates(),
-        ]);
-        const view = renderOrderList(orders, lang, rates);
-        await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+      // Nút menu cố định gửi TEXT của nó — so với nhãn của cả ba ngôn ngữ.
+      const menu: MenuAction | null = text.startsWith('/orders')
+        ? 'orders'
+        : matchMenuAction(text);
+      if (menu !== null && menu !== 'shop') {
+        await this.handleMenuAction(token, chatId, message.from, lang, menu, stop);
         return;
       }
+
       const data = await this.loadStorefront(lang);
-      if (data.sendAnnouncement && message.text.trim().startsWith('/start')) {
-        const announcement = renderAnnouncement(
-          await this.announcements.getPublic(lang),
-          lang,
-        );
-        if (announcement !== null) {
-          await this.sendHtml(token, chatId, announcement, null, stop);
+      if (text.startsWith('/start')) {
+        if (data.sendAnnouncement) {
+          const announcement = renderAnnouncement(
+            await this.announcements.getPublic(lang),
+            lang,
+          );
+          if (announcement !== null) {
+            await this.sendHtml(token, chatId, announcement, null, stop);
+          }
         }
+        // Tin riêng gắn bàn phím CỐ ĐỊNH: Telegram chỉ cho một reply_markup
+        // mỗi tin, mà bảng hàng đã dùng chỗ đó cho nút inline sản phẩm.
+        await this.sendHtml(
+          token,
+          chatId,
+          escapeText(dict.menuHint),
+          mainMenuKeyboard(lang),
+          stop,
+        );
       }
       const view = renderStorefront(
         data.products,
@@ -479,6 +508,69 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  /** Một nút menu cố định (hoặc lệnh /orders) — gửi TIN MỚI, không sửa tin cũ. */
+  private async handleMenuAction(
+    token: string,
+    chatId: number,
+    from: TgUser | undefined,
+    lang: BotLang,
+    action: Exclude<MenuAction, 'shop'>,
+    stop: AbortSignal,
+  ): Promise<void> {
+    const dict = botDict(lang);
+    switch (action) {
+      case 'orders': {
+        const user = await this.users.findByChat(chatId);
+        const [orders, rates] = await Promise.all([
+          user ? this.orders.listOwn(user.id) : Promise.resolve([]),
+          this.settings.getPublicRates(),
+        ]);
+        const view = renderOrderList(orders, lang, rates);
+        await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+        return;
+      }
+      case 'account': {
+        const user = await this.users.findOrCreate(chatId, tgDisplayName(from), lang);
+        const [ordersCount, rates] = await Promise.all([
+          this.prisma.order.count({ where: { userId: user.id } }),
+          this.settings.getPublicRates(),
+        ]);
+        const view = renderAccount(
+          { code: user.code, balance: Number(user.balance), ordersCount },
+          lang,
+          rates,
+        );
+        await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+        return;
+      }
+      case 'deposit': {
+        const cfg = await this.settings.getSepayConfig();
+        if (!cfg.ready || cfg.vndPerUsdt <= 0) {
+          // Fail-closed: chưa có đường đối soát thì nói thẳng, không chào mã nạp.
+          await this.sendHtml(token, chatId, escapeText(dict.depositUnavailable), null, stop);
+          return;
+        }
+        const [user, rates] = await Promise.all([
+          this.users.findByChat(chatId),
+          this.settings.getPublicRates(),
+        ]);
+        const view = renderDepositMenu(lang, user ? Number(user.balance) : null, rates);
+        await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+        return;
+      }
+      case 'support': {
+        const info = await this.settings.getSupportInfo();
+        const channels = info.supportChannels
+          .map((channel) => `${channel.label}: ${channel.value}`)
+          .join(' • ');
+        const text =
+          channels !== '' ? dict.supportLine(channels) : dict.menuHint;
+        await this.sendHtml(token, chatId, escapeText(text), null, stop);
+        return;
+      }
+    }
+  }
+
   /** Ngữ cảnh một cú bấm — gom lại cho các nhánh khỏi 6 tham số lẻ. */
   private async runCallback(
     token: string,
@@ -560,8 +652,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         ]);
         await answer();
         const phut = minutesLeft(created.order.expiresAt);
-        if (methods.length > 1) {
-          await edit(renderMethodChooser(created.order, methods, lang, rates, phut));
+        const soDu = Number(user.balance);
+        // Đủ số dư thì LUÔN qua bảng chọn để nút "trả bằng số dư" xuất hiện,
+        // kể cả khi cửa hàng chỉ bật một cổng.
+        if (methods.length > 1 || soDu >= created.order.totalAmount) {
+          await edit(
+            renderMethodChooser(created.order, methods, lang, rates, phut, soDu),
+          );
           return;
         }
         // Chỉ một phương thức — create() đã áp nó sẵn, vào thẳng hướng dẫn.
@@ -662,6 +759,137 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         await edit({ text: view.text, keyboard: view.keyboard });
         return;
       }
+      case 'account': {
+        const user = await this.users.findOrCreate(chatId, tgDisplayName(ctx.from), lang);
+        const [ordersCount, rates] = await Promise.all([
+          this.prisma.order.count({ where: { userId: user.id } }),
+          this.settings.getPublicRates(),
+        ]);
+        await answer();
+        await edit(
+          renderAccount(
+            { code: user.code, balance: Number(user.balance), ordersCount },
+            lang,
+            rates,
+          ),
+        );
+        return;
+      }
+      case 'depositMenu': {
+        const cfg = await this.settings.getSepayConfig();
+        if (!cfg.ready || cfg.vndPerUsdt <= 0) {
+          await answer({ text: dict.depositUnavailable, show_alert: true });
+          return;
+        }
+        const [user, rates] = await Promise.all([
+          this.users.findByChat(chatId),
+          this.settings.getPublicRates(),
+        ]);
+        await answer();
+        await edit(renderDepositMenu(lang, user ? Number(user.balance) : null, rates));
+        return;
+      }
+      case 'depositAmount': {
+        const user = await this.users.findOrCreate(chatId, tgDisplayName(ctx.from), lang);
+        const kq = await this.balance.createDeposit(user, parsed.vnd);
+        await answer();
+        const view = renderDepositInstructions(
+          {
+            code: kq.deposit.code,
+            vndAmount: Number(kq.deposit.vndAmount),
+            amountUsdt: Number(kq.deposit.amountUsdt),
+          },
+          kq,
+          lang,
+          minutesLeft(kq.deposit.expiresAt.toISOString()),
+        );
+        await edit({ text: view.text, keyboard: view.keyboard });
+        if (view.photo) {
+          try {
+            await tgCall(
+              token,
+              'sendPhoto',
+              {
+                chat_id: chatId,
+                photo: view.photo,
+                caption: escapeText(dict.payMemo(kq.deposit.code)),
+                parse_mode: 'HTML',
+              },
+              20_000,
+              stop,
+            );
+          } catch (err) {
+            // Ảnh QR trượt không chặn nạp — hướng dẫn chữ đã đủ số liệu.
+            this.logger.warn(`sendPhoto QR nạp trượt (chat ${chatId}): ${errText(err)}`);
+          }
+        }
+        return;
+      }
+      case 'depositCheck': {
+        const user = await this.requireUser(chatId);
+        const deposit = await this.balance.getOwnDeposit(user.id, parsed.code);
+        if (!deposit) {
+          await answer({ text: dict.tryAgain, show_alert: true });
+          return;
+        }
+        if (deposit.status === 'SUCCESS') {
+          const [rates, soDu] = await Promise.all([
+            this.settings.getPublicRates(),
+            this.balance.getBalance(user.id),
+          ]);
+          await answer();
+          await edit(
+            renderDepositCredited(Number(deposit.amountUsdt), soDu, lang, rates),
+          );
+          await this.balance.markDepositNotified(deposit.id);
+          return;
+        }
+        if (deposit.status === 'PENDING') {
+          await answer({ text: dict.depositStillPending, show_alert: true });
+          return;
+        }
+        await answer();
+        await edit({
+          text: escapeText(
+            deposit.status === 'CANCELLED'
+              ? dict.depositCancelled(deposit.code)
+              : dict.depositExpired,
+          ),
+          keyboard: [
+            [
+              {
+                text: dict.menuDeposit,
+                callback_data: 'd',
+              },
+            ],
+          ],
+        });
+        return;
+      }
+      case 'depositCancel': {
+        const user = await this.requireUser(chatId);
+        await this.balance.cancelDeposit(user.id, parsed.code);
+        await answer();
+        await edit({
+          text: escapeText(dict.depositCancelled(parsed.code)),
+          keyboard: [[{ text: dict.btnBackToShop, callback_data: 'c:1' }]],
+        });
+        return;
+      }
+      case 'payBalance': {
+        const user = await this.requireUser(chatId);
+        const kq = await this.balance.payOrderWithBalance(user.id, parsed.orderCode);
+        if (kq.delivered) {
+          const detail = await this.orders.getOwnDetail(user.id, parsed.orderCode);
+          await answer();
+          await edit(renderOrderDelivered(detail, lang));
+          await this.markNotified(detail.id);
+          return;
+        }
+        // Trả xong nhưng kho thiếu lúc giao — sweeper sẽ cứu, khách tự kiểm lại.
+        await answer({ text: dict.checkPaidWaitDelivery, show_alert: true });
+        return;
+      }
     }
   }
 
@@ -730,6 +958,36 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           } else {
             // Lỗi mạng/CSDL thoáng qua — để nguyên, lượt sau thử lại.
             this.logger.warn(`Đẩy key đơn ${order.code} trượt: ${errText(err)}`);
+          }
+        }
+      }
+      // Tin nạp đã cộng — cùng cơ chế outbox với key.
+      const napCho = await this.balance.listUnnotifiedDeposits(NOTIFY_BATCH);
+      for (const nap of napCho) {
+        if (this.activeToken !== token) return;
+        const lang: BotLang = (['vi', 'en', 'zh'] as readonly string[]).includes(nap.lang)
+          ? (nap.lang as BotLang)
+          : 'vi';
+        try {
+          const rates = await this.settings.getPublicRates();
+          const view = renderDepositCredited(nap.amountUsdt, nap.balance, lang, rates);
+          await this.sendHtml(
+            token,
+            Number(nap.chatId),
+            view.text,
+            view.keyboard,
+            this.stopController.signal,
+          );
+          await this.balance.markDepositNotified(nap.id);
+          this.logger.log(`Đã báo cộng ví mã nạp ${nap.code}`);
+        } catch (err) {
+          if (err instanceof TelegramApiError) {
+            this.logger.warn(
+              `Báo cộng ví ${nap.code} bị Telegram từ chối (${errText(err)}) — thôi không thử lại.`,
+            );
+            await this.balance.markDepositNotified(nap.id);
+          } else {
+            this.logger.warn(`Báo cộng ví ${nap.code} trượt: ${errText(err)}`);
           }
         }
       }
