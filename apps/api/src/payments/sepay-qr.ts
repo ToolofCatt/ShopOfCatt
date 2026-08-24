@@ -32,7 +32,13 @@ export interface SepayQrInput {
 export function sepayQrUrl(input: SepayQrInput): string {
   const params = new URLSearchParams({
     acc: input.accountNumber,
-    bank: input.bank,
+    /*
+     * BỎ DẤU CÁCH trong tên ngân hàng: chủ shop gõ "MB Bank" là qr.sepay.vn
+     * trả về HTML "Ngân hàng này không được hỗ trợ" với status 200 — ảnh QR
+     * chết im lặng cả trên web lẫn bot (đã gặp thật). Tên ngắn của SePay
+     * không bao giờ chứa dấu cách ("MBBank", "VPBank", "Vietcombank"…).
+     */
+    bank: input.bank.replace(/\s+/g, ''),
     amount: String(Math.round(input.amountVnd)),
     des: input.description,
     template: 'compact',

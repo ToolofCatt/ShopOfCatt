@@ -334,7 +334,20 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     try {
       const res = await fetch(url, { signal: AbortSignal.timeout(15_000) });
       if (!res.ok) throw new Error(`tai QR duoc HTTP ${res.status}`);
-      await tgSendPhotoUpload(token, chatId, await res.arrayBuffer(), caption, stop);
+      const bytes = await res.arrayBuffer();
+      /*
+       * qr.sepay.vn trả LỖI DẠNG HTML với status 200 ("Ngân hàng này không
+       * được hỗ trợ") — kiểm magic bytes PNG/JPEG trước khi đẩy cho Telegram,
+       * không thì lỗi hiện ra là IMAGE_PROCESS_FAILED vô nghĩa.
+       */
+      const dau = new Uint8Array(bytes.slice(0, 3));
+      const laPng = dau[0] === 0x89 && dau[1] === 0x50 && dau[2] === 0x4e;
+      const laJpeg = dau[0] === 0xff && dau[1] === 0xd8;
+      if (!laPng && !laJpeg) {
+        const loi = Buffer.from(bytes.slice(0, 120)).toString('utf8');
+        throw new Error(`SePay không trả ảnh mà trả: ${loi}`);
+      }
+      await tgSendPhotoUpload(token, chatId, bytes, caption, stop);
     } catch (err) {
       this.logger.warn(`Gửi ảnh QR trượt (chat ${chatId}): ${errText(err)}`);
     }
