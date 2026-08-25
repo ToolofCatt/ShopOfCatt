@@ -24,6 +24,7 @@ import {
   type StoreRatesDto,
   type SupportChannelDto,
 } from '@webcatt/shared';
+import { brandEmojiHtml } from './animated-emoji';
 import { botDict, type BotLang } from './messages';
 import type { TgInlineKeyboard, TgInlineKeyboardButton } from './telegram-api';
 
@@ -602,7 +603,8 @@ export function renderProductDetail(
   const currency = CURRENCY_BY_LANG[lang];
 
   const head: string[] = [
-    `<b>${escapeHtml(product.name)}</b>`,
+    // Logo hãng thật (nếu nhận ra) đứng trước tên — xem BRAND_EMOJI.
+    `${brandEmojiHtml(product.name)}<b>${escapeHtml(product.name)}</b>`,
     escapeHtml(dict.detailPriceLine(productPriceLabel(product, lang, rates))),
     escapeHtml(dict.detailStockLine(Math.max(0, product.availableStock))),
     escapeHtml(dict.detailSoldLine(product.sold)),

@@ -193,6 +193,13 @@ Khách xem KHÔNG cần premium; máy không render được tự rơi về emoj
   (cần tài khoản premium), **kiểm `alt` của document đúng emoji** rồi thêm một
   dòng vào bảng — search trả cả emoji "liên quan", bỏ bước kiểm alt là hiện
   SAI hình.
+- **Logo hãng theo tên sản phẩm** (`BRAND_EMOJI` cùng file): tên sản phẩm chứa
+  từ khoá hãng (chatgpt, claude, grok, netflix, spotify, canva, steam…) là bot
+  tự gắn LOGO THẬT của hãng trước tên ở các màn chữ (chi tiết, chọn số lượng,
+  tin giao hàng). Id lấy từ các bộ custom emoji chủ shop đã lưu trên tài khoản
+  (ApplicationEmoji/ApplicationEmojiVn) — alt các bộ này đặt lung tung nên
+  nhận diện bằng MẮT từng logo rồi khớp theo từ khoá, không tự nhận theo emoji
+  được. Thứ tự trong bảng là ưu tiên: cụ thể trước chung chung.
 - Nút bấm không nhận entity → emoji trên nút luôn tĩnh (giới hạn Telegram).
 - `animateEmoji` chừa vùng `<code>`/`<pre>` — key giao khách mà dính thẻ
   `tg-emoji` bên trong là Telegram trả 400 cho cả tin giao hàng.

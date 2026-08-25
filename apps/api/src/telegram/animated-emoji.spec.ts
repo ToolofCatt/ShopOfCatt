@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANIMATED_EMOJI, animateEmoji } from './animated-emoji';
+import { ANIMATED_EMOJI, animateEmoji, brandEmojiHtml } from './animated-emoji';
 
 describe('animateEmoji', () => {
   it('bọc emoji có trong bảng bằng thẻ tg-emoji, chữ khác giữ nguyên', () => {
@@ -50,5 +50,42 @@ describe('animateEmoji', () => {
       expect(emoji.length, emoji).toBeGreaterThan(0);
       expect(id).toMatch(/^\d{10,25}$/);
     }
+  });
+});
+
+describe('brandEmojiHtml — logo hãng theo từ khoá tên sản phẩm', () => {
+  it('nhận ra các hãng shop đang bán thật', () => {
+    expect(brandEmojiHtml('Tài khoản ChatGPT Plus 30 ngày')).toContain(
+      'emoji-id="5359726582447487916"',
+    );
+    expect(brandEmojiHtml('Super grok account 7D')).toContain(
+      'emoji-id="6237935849883835173"',
+    );
+    expect(brandEmojiHtml('Claude Pro 7 ngày (Không bảo hành)')).toContain(
+      'emoji-id="6240235242230126724"',
+    );
+  });
+
+  it('cụ thể thắng chung chung: youtube music ≠ youtube, photoshop ≠ adobe', () => {
+    const ytm = brandEmojiHtml('YouTube Music 1 năm');
+    expect(ytm).toContain('emoji-id="6240196213862308747"');
+    expect(brandEmojiHtml('YouTube Premium 1 năm')).toContain(
+      'emoji-id="5334681713316479679"',
+    );
+    expect(brandEmojiHtml('Adobe Photoshop 2026')).toContain(
+      'emoji-id="5359480394922082925"',
+    );
+    expect(brandEmojiHtml('Adobe full bộ')).toContain('emoji-id="6240060303917195060"');
+  });
+
+  it('không nhận ra hãng → chuỗi rỗng, tên thường không dính logo bừa', () => {
+    expect(brandEmojiHtml('Key bản quyền ABC')).toBe('');
+    expect(brandEmojiHtml('Vé số kiến thiết')).toBe('');
+  });
+
+  it('logo đi qua animateEmoji không bị bọc lồng thẻ', () => {
+    const html = `${brandEmojiHtml('Netflix 1 tháng')}<b>Netflix</b>`;
+    const sau = animateEmoji(html);
+    expect(sau).toBe(html); // 📺 fallback nằm TRONG thẻ tg-emoji — vùng cấm
   });
 });

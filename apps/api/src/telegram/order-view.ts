@@ -18,6 +18,7 @@ import {
   type ProductVariantDto,
   type StoreRatesDto,
 } from '@webcatt/shared';
+import { brandEmojiHtml } from './animated-emoji';
 import {
   CURRENCY_BY_LANG,
   compactMoney,
@@ -64,7 +65,7 @@ export function renderQuantityPicker(
   const dict = botDict(lang);
   const gia = displayVariantPrice(variant, lang, rates);
   const text = [
-    `<b>${escapeHtml(product.name)}</b>`,
+    `${brandEmojiHtml(product.name)}<b>${escapeHtml(product.name)}</b>`,
     escapeHtml(dict.qtyTitle(variant.name)),
     `${escapeHtml(gia)} × 1`,
     escapeHtml(dict.inStock(variant.availableStock)),
@@ -260,7 +261,7 @@ export function renderOrderDelivered(order: OrderDetailDto, lang: BotLang): BotV
     const ten = item.variantName
       ? `${item.productName} – ${item.variantName}`
       : item.productName;
-    lines.push('', `<b>${escapeHtml(ten)}</b> ×${item.quantity}`);
+    lines.push('', `${brandEmojiHtml(ten)}<b>${escapeHtml(ten)}</b> ×${item.quantity}`);
     for (const line of item.deliveredLines ?? []) {
       // Spoiler + monospace: che key khỏi người nhìn trộm màn hình, bấm vào
       // mới hiện, và bấm giữ là sao chép nguyên văn.
