@@ -145,6 +145,7 @@ const vi = {
   depositChooseMethod: (amount: string) => `💰 Nạp ${amount} — chọn cách nạp:`,
   depositUsdtExact:
     'Chuyển ĐÚNG số USDT bên dưới tới từng số lẻ — hệ thống nhận diện mã nạp theo số tiền (bấm số để sao chép):',
+  depositRefCode: (code: string) => `Mã nạp (đưa cho hỗ trợ khi cần đối chiếu): ${code}`,
   langTitle: '🌐 CHỌN NGÔN NGỮ / LANGUAGE',
   langCurrent: (name: string) => `Ngôn ngữ hiện tại: ${name}`,
   langChoose: 'Chọn ngôn ngữ bên dưới:',
@@ -282,6 +283,7 @@ const en: BotDictionary = {
   depositChooseMethod: (amount: string) => `💰 Top up ${amount} — choose a method:`,
   depositUsdtExact:
     'Send EXACTLY the USDT amount below, down to the last digit — the system matches your top-up by amount (tap to copy):',
+  depositRefCode: (code: string) => `Top-up code (give to support if needed): ${code}`,
   langTitle: '🌐 CHỌN NGÔN NGỮ / LANGUAGE',
   langCurrent: (name: string) => `Current language: ${name}`,
   langChoose: 'Pick a language below:',
@@ -413,6 +415,7 @@ const zh: BotDictionary = {
   depositConfirmBtn: (amount: string) => `💰 确认充值 ${amount}`,
   depositChooseMethod: (amount: string) => `💰 充值 ${amount} — 请选择充值方式：`,
   depositUsdtExact: '请转账与下方完全一致的 USDT 金额（点击复制）——系统按金额识别您的充值单：',
+  depositRefCode: (code: string) => `充值单号（需要客服核对时提供）：${code}`,
   langTitle: '🌐 CHỌN NGÔN NGỮ / LANGUAGE',
   langCurrent: (name: string) => `当前语言：${name}`,
   langChoose: '请选择语言：',

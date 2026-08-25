@@ -252,6 +252,9 @@ export function renderDepositInstructions(
     if (deposit.mode === 'BINANCE_ID') {
       // Lời nhắn là đường khớp CHẮC nhất bên Binance Pay — nhấn mạnh.
       lines.push('', `<b>${escapeHtml(dict.payMemoBinance(deposit.code))}</b>`);
+    } else {
+      // On-chain không có memo — mã chỉ để khách đưa cho hỗ trợ khi đối chiếu.
+      lines.push('', escapeHtml(dict.depositRefCode(deposit.code)));
     }
   }
   if (minutesLeft !== null) lines.push('', escapeHtml(dict.payDeadline(minutesLeft)));

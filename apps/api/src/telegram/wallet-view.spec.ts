@@ -124,6 +124,8 @@ describe('màn nạp tiền', () => {
     // Đủ 6 chữ số lẻ — phần lẻ là "chữ ký" nhận diện, không được cắt.
     expect(view.text).toContain('<code>3.846300</code> USDT');
     expect(view.text).toContain('BEP20');
+    // Mã nạp hiện để khách đưa cho hỗ trợ — on-chain không có chỗ ghi memo.
+    expect(view.text).toContain('NAP-CRY001');
     expect(view.text).toContain('29 phút');
     expect(view.photo ?? null).toBeNull();
     const data = view.keyboard.flat().map((b) => b.callback_data);
