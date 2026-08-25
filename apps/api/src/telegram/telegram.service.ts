@@ -476,6 +476,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       }
 
       if (text.startsWith('/start')) {
+        const khach = await this.users.findByChat(chatId);
+        if (!khach?.telegramLangChosen) {
+          /*
+           * Lần đầu: CHỌN NGÔN NGỮ trước đã — menu hiện sẵn theo language_code
+           * của app, khách xác nhận hoặc đổi. Emoji đứng RIÊNG một tin để app
+           * Telegram tự phát bản động to (bot không nhét được emoji động vào
+           * chữ/nút — giới hạn của Telegram).
+           */
+          await this.sendHtml(token, chatId, '👋', null, stop);
+          const view = renderLanguageMenu(lang);
+          await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+          return;
+        }
         const cfg = await this.settings.getTelegramConfig();
         if (cfg.sendAnnouncement) {
           const announcement = renderAnnouncement(
@@ -753,11 +766,27 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       case 'setLang': {
+        // Lần chọn ĐẦU TIÊN (luồng /start mới) thì sau khi chốt ngôn ngữ mới
+        // gửi thông báo admin — gửi trước lúc chọn là sai thứ tiếng.
+        const truoc = await this.users.findByChat(chatId);
+        const lanDau = !truoc?.telegramLangChosen;
         await this.users.setLanguage(chatId, tgDisplayName(ctx.from), parsed.lang);
         const dictMoi = botDict(parsed.lang);
         await answer({
           text: dictMoi.langSet(dictMoi.langNames[parsed.lang] ?? parsed.lang),
         });
+        if (lanDau) {
+          const cfg = await this.settings.getTelegramConfig();
+          if (cfg.sendAnnouncement) {
+            const announcement = renderAnnouncement(
+              await this.announcements.getPublic(parsed.lang),
+              parsed.lang,
+            );
+            if (announcement !== null) {
+              await this.sendHtml(token, chatId, announcement, null, stop);
+            }
+          }
+        }
         // HUB vẽ lại bằng ngôn ngữ mới + bàn phím CỐ ĐỊNH mới (nhãn đổi tiếng).
         const hub = await this.hubFor(chatId, ctx.from, parsed.lang);
         await edit(hub);
