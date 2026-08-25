@@ -43,8 +43,11 @@ export const ANIMATED_EMOJI: Record<string, string> = {
   '🇻🇳': '5474626200385104596',
   '🇬🇧': '5202196682497859879',
   '🇨🇳': '5431782733376399004',
-  // 🧾 💳 ⬅️ 🟡 📧 KHÔNG có bản động nào trên Telegram (đã tra 25/08/2026) —
-  // đành để tĩnh, đừng mất công tra lại.
+  '📝': '5334882760735598374',
+  '🛍️': '5193028817106508091',
+  '💸': '5231005931550030290',
+  // 🧾 💳 ⬅️ 🟡 📧 🏷️ KHÔNG có bản động nào trên Telegram (đã tra 25/08/2026)
+  // — đành để tĩnh, đừng mất công tra lại.
 
   // ---- Emoji hay gõ vào tên/mô tả SẢN PHẨM ----
   '🔑': '5330115548900501467',

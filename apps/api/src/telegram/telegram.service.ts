@@ -46,6 +46,8 @@ import {
   renderDepositCredited,
   renderDepositInstructions,
   renderDepositMenu,
+  renderDepositMethodChooser,
+  type DepositPayMode,
   type MenuAction,
 } from './wallet-view';
 import { botDict, botLang, type BotLang } from './messages';
@@ -964,8 +966,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       case 'depositMenu': {
-        const cfg = await this.settings.getSepayConfig();
-        if (!cfg.ready || cfg.vndPerUsdt <= 0) {
+        // Mở khi CÒN BẤT KỲ kênh nạp nào (ngân hàng/crypto/Binance ID) —
+        // không còn buộc riêng vào SePay như hồi ví chỉ có một kênh.
+        const methods = await this.balance.listDepositMethods();
+        if (methods.length === 0) {
           await answer({ text: dict.depositUnavailable, show_alert: true });
           return;
         }
@@ -978,29 +982,30 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       case 'depositAmount': {
-        const user = await this.users.findOrCreate(chatId, tgDisplayName(ctx.from), lang);
-        const kq = await this.balance.createDeposit(user, parsed.vnd);
-        await answer();
-        const view = renderDepositInstructions(
-          {
-            code: kq.deposit.code,
-            vndAmount: Number(kq.deposit.vndAmount),
-            amountUsdt: Number(kq.deposit.amountUsdt),
-          },
-          kq,
-          lang,
-          minutesLeft(kq.deposit.expiresAt.toISOString()),
-        );
-        await edit({ text: view.text, keyboard: view.keyboard });
-        if (view.photo) {
-          await this.sendQrPhoto(
-            token,
-            chatId,
-            view.photo,
-            escapeText(dict.payMemo(kq.deposit.code)),
-            stop,
-          );
+        const methods = await this.balance.listDepositMethods();
+        if (methods.length === 0) {
+          await answer({ text: dict.depositUnavailable, show_alert: true });
+          return;
         }
+        // Một kênh duy nhất thì tạo mã luôn — bắt khách bấm qua bảng chọn
+        // chỉ có đúng một nút là thêm một cú bấm vô nghĩa.
+        if (methods.length === 1) {
+          await this.taoMaNap(token, ctx, parsed.vnd, methods[0]);
+          return;
+        }
+        await answer();
+        await edit(renderDepositMethodChooser(parsed.vnd, methods, lang));
+        return;
+      }
+      case 'depositMethod': {
+        // createDeposit tự kiểm phương thức có đang mở không (fail-closed) —
+        // callback_data là dữ liệu client, khách sửa được tuỳ ý.
+        await this.taoMaNap(
+          token,
+          ctx,
+          parsed.vnd,
+          parsed.method as Parameters<BalanceService['createDeposit']>[2],
+        );
         return;
       }
       case 'depositCheck': {
@@ -1068,6 +1073,51 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         await answer({ text: dict.checkPaidWaitDelivery, show_alert: true });
         return;
       }
+    }
+  }
+
+  /** Tạo mã nạp theo phương thức đã chọn rồi vẽ hướng dẫn — dùng chung cho
+   *  nhánh "một kênh duy nhất" và nhánh khách bấm nút chọn kênh. */
+  private async taoMaNap(
+    token: string,
+    ctx: {
+      chatId: number;
+      from: TgUser;
+      lang: BotLang;
+      answer: (payload?: Record<string, unknown>) => Promise<void>;
+      edit: (view: { text: string; keyboard: TgInlineKeyboard }) => Promise<void>;
+      stop: AbortSignal;
+    },
+    vnd: number,
+    method: Parameters<BalanceService['createDeposit']>[2],
+  ): Promise<void> {
+    const { chatId, lang, answer, edit, stop } = ctx;
+    const dict = botDict(lang);
+    const user = await this.users.findOrCreate(chatId, tgDisplayName(ctx.from), lang);
+    const kq = await this.balance.createDeposit(user, vnd, method);
+    await answer();
+    const view = renderDepositInstructions(
+      {
+        code: kq.deposit.code,
+        vndAmount: Number(kq.deposit.vndAmount),
+        amountUsdt: Number(kq.deposit.amountUsdt),
+        mode: kq.deposit.mode as DepositPayMode,
+        cryptoNetwork: kq.deposit.cryptoNetwork,
+        cryptoAddress: kq.deposit.cryptoAddress,
+      },
+      kq.bank,
+      lang,
+      minutesLeft(kq.deposit.expiresAt.toISOString()),
+    );
+    await edit({ text: view.text, keyboard: view.keyboard });
+    if (view.photo) {
+      await this.sendQrPhoto(
+        token,
+        chatId,
+        view.photo,
+        escapeText(dict.payMemo(kq.deposit.code)),
+        stop,
+      );
     }
   }
 

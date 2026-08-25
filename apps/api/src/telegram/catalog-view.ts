@@ -136,6 +136,7 @@ export type BotCallback =
   | { kind: 'account' }
   | { kind: 'depositMenu' }
   | { kind: 'depositAmount'; vnd: number }
+  | { kind: 'depositMethod'; vnd: number; method: PaymentMethod }
   | { kind: 'depositCheck'; code: string }
   | { kind: 'depositCancel'; code: string }
   | { kind: 'payBalance'; orderCode: string }
@@ -194,6 +195,8 @@ export function encodeCallback(cb: BotCallback): string {
       return 'd';
     case 'depositAmount':
       return `dn:${cb.vnd}`;
+    case 'depositMethod':
+      return `dw:${cb.vnd}:${METHOD_TO_SHORT[cb.method]}`;
     case 'depositCheck':
       return `dk:${cb.code}`;
     case 'depositCancel':
@@ -262,6 +265,14 @@ export function parseCallback(data: string | undefined): BotCallback | null {
   if ((m = /^dn:([1-9][0-9]{3,8})$/.exec(data))) {
     // Chặn thô ở codec; chặn tinh (min/max) nằm ở BalanceService.
     return { kind: 'depositAmount', vnd: Number(m[1]) };
+  }
+  if ((m = /^dw:([1-9][0-9]{3,8}):([a-z]{2})$/.exec(data))) {
+    // Phương thức có thật hay không do codec quyết; có được NẠP bằng phương
+    // thức đó không thì BalanceService quyết (fail-closed).
+    const method = SHORT_TO_METHOD[m[2]];
+    return method
+      ? { kind: 'depositMethod', vnd: Number(m[1]), method }
+      : null;
   }
   if ((m = new RegExp(`^dk:${ORDER_CODE_RE}$`).exec(data))) {
     return { kind: 'depositCheck', code: m[1] };

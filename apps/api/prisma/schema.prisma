@@ -101,22 +101,42 @@ enum DepositStatus {
   CANCELLED
 }
 
-/// Một lần NẠP TIỀN vào ví qua chuyển khoản ngân hàng: khách chuyển đúng số
-/// VND với nội dung là mã "NAP-XXXXXX", webhook SePay khớp bằng CHÍNH bộ
-/// matcher của đơn hàng (mã trong nội dung + số tiền tuyệt đối, fail-closed).
+/// Kênh nạp tiền — mỗi kênh một nguồn đối soát riêng, không lẫn được:
+/// SEPAY = webhook ngân hàng, CRYPTO = lịch sử nạp USDT on-chain,
+/// BINANCE_ID = lịch sử Binance Pay. Cùng bộ mode với Payment cho dễ soi.
+enum DepositMode {
+  SEPAY
+  CRYPTO
+  BINANCE_ID
+}
+
+/// Một lần NẠP TIỀN vào ví. SEPAY: khách chuyển đúng số VND với nội dung là mã
+/// "NAP-XXXXXX", webhook SePay khớp bằng CHÍNH bộ matcher của đơn hàng.
+/// CRYPTO/BINANCE_ID: khớp bằng CHÍNH bộ đối soát của đơn hàng
+/// (matchDeposits/matchPayTransfers) — số USDT được cộng lệch bước 0.0001 để
+/// là DUY NHẤT giữa các khoản đang chờ, vì on-chain không có chỗ ghi mã.
 model Deposit {
   id     String        @id @default(cuid())
   code   String        @unique
   userId String
   user   User          @relation(fields: [userId], references: [id])
   status DepositStatus @default(PENDING)
+  mode   DepositMode   @default(SEPAY)
   /// USDT sẽ cộng vào ví — chốt theo tỉ giá LÚC TẠO, không tính lại lúc tiền về.
   amountUsdt Decimal @db.Decimal(18, 6)
-  /// Số VND phải chuyển, chốt lúc tạo — khớp TUYỆT ĐỐI, thiếu là không cộng.
+  /// Số VND phải chuyển (kênh SEPAY: khớp TUYỆT ĐỐI, thiếu là không cộng;
+  /// kênh crypto: chỉ để hiển thị cho khách hình dung).
   vndAmount Decimal @db.Decimal(18, 2)
   /// Id giao dịch SePay đã khớp. @unique là trọng tài: hai webhook trùng thì
   /// chỉ một bên ghi được — không cộng ví hai lần.
   sepayRef  String?   @unique
+  /// Mạng khi mode=CRYPTO ("BEP20"/"TRC20") — chụp lại lúc tạo.
+  cryptoNetwork String?
+  /// Địa chỉ ví / Binance ID đã báo khách — đổi cấu hình sau đó thì mã đang
+  /// chờ vẫn trỏ đúng chỗ đã báo.
+  cryptoAddress String?
+  /// TxID on-chain / mã giao dịch Pay đã khớp. @unique cùng vai trò sepayRef.
+  cryptoTxId String? @unique
   createdAt DateTime  @default(now())
   expiresAt DateTime
   paidAt    DateTime?

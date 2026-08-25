@@ -6,13 +6,16 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { CryptoNetwork } from '@webcatt/shared';
+import { WalletCreditService } from '../balance/wallet-credit.service';
 import { BinanceExchangeService } from '../binance-exchange/binance-exchange.service';
 import {
   matchDeposits,
+  type BinanceDeposit,
   type PendingCryptoPayment,
 } from '../binance-exchange/deposit-matcher';
 import {
   matchPayTransfers,
+  type BinancePayTransfer,
   type PendingPayPayment,
 } from '../binance-exchange/pay-matcher';
 import { PrismaService } from '../prisma/prisma.service';
@@ -41,6 +44,7 @@ export class CryptoReconcileService implements OnModuleInit, OnModuleDestroy {
     private readonly binanceExchange: BinanceExchangeService,
     private readonly fulfillment: FulfillmentService,
     private readonly settings: SettingsService,
+    private readonly walletCredit: WalletCreditService,
   ) {}
 
   onModuleInit(): void {
@@ -83,7 +87,29 @@ export class CryptoReconcileService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Đơn USDT on-chain — khớp với lịch sử NẠP. */
+  /**
+   * Trong các mã giao dịch của `txIds`, mã nào đã được ghi cho MỘT ĐƠN hoặc
+   * MỘT MÃ NẠP — một khoản tiền không bao giờ vừa giao hàng vừa cộng ví.
+   * Truy vấn theo `in` thay vì tải toàn bộ: chi phí bám theo lịch sử vừa tải,
+   * không phình theo tổng số đơn đã bán.
+   */
+  private async usedAcrossTables(txIds: string[]): Promise<Set<string>> {
+    if (txIds.length === 0) return new Set();
+    const [donRows, napUsed] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: { cryptoTxId: { in: txIds } },
+        select: { cryptoTxId: true },
+      }),
+      this.walletCredit.usedTxIds(txIds),
+    ]);
+    return new Set([
+      ...donRows.map((row) => row.cryptoTxId as string),
+      ...napUsed,
+    ]);
+  }
+
+  /** Đơn + MÃ NẠP VÍ USDT on-chain — khớp với lịch sử NẠP trong cùng một tick,
+   *  chung một bảng txId đã dùng, để hai bên không bao giờ giành nhau một khoản. */
   private async tickCrypto(): Promise<void> {
     const payments = await this.prisma.payment.findMany({
       where: {
@@ -101,21 +127,36 @@ export class CryptoReconcileService implements OnModuleInit, OnModuleDestroy {
         order: { select: { code: true, createdAt: true } },
       },
     });
-    if (payments.length === 0) return;
+    const naps = await this.walletCredit.listAwaiting('CRYPTO');
+    if (payments.length === 0 && naps.length === 0) return;
 
     const oldestMs = Math.min(
       ...payments.map((p) => p.order.createdAt.getTime()),
+      ...naps.map((n) => n.createdAtMs),
     );
     const deposits = await this.binanceExchange.listUsdtDeposits(
       oldestMs - CRYPTO_SLACK_MS,
     );
+    const usedTxIds = await this.usedAcrossTables(deposits.map((d) => d.txId));
 
-    const usedRows = await this.prisma.payment.findMany({
-      where: { cryptoTxId: { not: null } },
-      select: { cryptoTxId: true },
-    });
-    const usedTxIds = new Set(usedRows.map((row) => row.cryptoTxId as string));
+    // ĐƠN trước, MÃ NẠP sau — cùng thứ tự ở mọi nơi để kết quả ổn định; các
+    // mã giao dịch đơn vừa nhận được đưa vào used trước khi khớp mã nạp.
+    await this.matchCryptoOrders(payments, deposits, usedTxIds);
+    await this.creditCryptoDeposits(naps, deposits, usedTxIds);
+  }
 
+  private async matchCryptoOrders(
+    payments: {
+      id: string;
+      orderId: string;
+      cryptoNetwork: string | null;
+      cryptoAmount: Prisma.Decimal | null;
+      order: { code: string; createdAt: Date };
+    }[],
+    deposits: BinanceDeposit[],
+    usedTxIds: Set<string>,
+  ): Promise<void> {
+    if (payments.length === 0) return;
     const pending: PendingCryptoPayment[] = payments.map((p) => ({
       orderId: p.orderId,
       network: p.cryptoNetwork as CryptoNetwork,
@@ -146,10 +187,50 @@ export class CryptoReconcileService implements OnModuleInit, OnModuleDestroy {
         }
         throw error;
       }
+      usedTxIds.add(match.txId);
       await this.fulfillment.markPaidAndDeliver({ orderId: match.orderId });
       this.logger.log(
         `Đối soát nền: đã khớp đơn ${payment.order.code} với ${match.amount} USDT (${match.network}, tx ${match.txId})`,
       );
+    }
+  }
+
+  /** Cộng ví các mã nạp on-chain khớp được — cùng bộ matchDeposits với đơn. */
+  private async creditCryptoDeposits(
+    naps: {
+      id: string;
+      code: string;
+      amountUsdt: number;
+      cryptoNetwork: string | null;
+      createdAtMs: number;
+    }[],
+    deposits: BinanceDeposit[],
+    usedTxIds: Set<string>,
+  ): Promise<void> {
+    if (naps.length === 0) return;
+    const pending: PendingCryptoPayment[] = naps
+      .filter((n) => n.cryptoNetwork !== null)
+      .map((n) => ({
+        orderId: n.id, // matcher gọi là orderId nhưng chỉ là id tham chiếu
+        network: n.cryptoNetwork as CryptoNetwork,
+        expected: n.amountUsdt,
+        createdAtMs: n.createdAtMs,
+      }));
+
+    const matches = matchDeposits(pending, deposits, usedTxIds);
+    for (const match of matches) {
+      const nap = naps.find((n) => n.id === match.orderId);
+      if (!nap) continue;
+      // credit tự chống trùng bằng gate + @unique; false = bên khác đã xử lý.
+      const daCong = await this.walletCredit.credit(nap.id, {
+        cryptoTxId: match.txId,
+      });
+      usedTxIds.add(match.txId);
+      if (daCong) {
+        this.logger.log(
+          `Đối soát nền: đã cộng ví mã nạp ${nap.code} — ${match.amount} USDT (${match.network}, tx ${match.txId})`,
+        );
+      }
     }
   }
 
@@ -175,21 +256,37 @@ export class CryptoReconcileService implements OnModuleInit, OnModuleDestroy {
         order: { select: { code: true, createdAt: true } },
       },
     });
-    if (payments.length === 0) return;
+    const naps = await this.walletCredit.listAwaiting('BINANCE_ID');
+    if (payments.length === 0 && naps.length === 0) return;
 
     const oldestMs = Math.min(
       ...payments.map((p) => p.order.createdAt.getTime()),
+      ...naps.map((n) => n.createdAtMs),
     );
     const transfers = await this.binanceExchange.listPayTransactions(
       oldestMs - CRYPTO_SLACK_MS,
     );
+    const used = await this.usedAcrossTables(
+      transfers.map((t) => t.transactionId),
+    );
+    const receiverBinanceId = await this.settings.getBinanceId();
 
-    const usedRows = await this.prisma.payment.findMany({
-      where: { cryptoTxId: { not: null } },
-      select: { cryptoTxId: true },
-    });
-    const used = new Set(usedRows.map((row) => row.cryptoTxId as string));
+    await this.matchPayOrders(payments, transfers, used, receiverBinanceId);
+    await this.creditPayDeposits(naps, transfers, used, receiverBinanceId);
+  }
 
+  private async matchPayOrders(
+    payments: {
+      id: string;
+      orderId: string;
+      cryptoAmount: Prisma.Decimal | null;
+      order: { code: string; createdAt: Date };
+    }[],
+    transfers: BinancePayTransfer[],
+    used: Set<string>,
+    receiverBinanceId: string,
+  ): Promise<void> {
+    if (payments.length === 0) return;
     const pending: PendingPayPayment[] = payments.map((p) => ({
       orderId: p.orderId,
       code: p.order.code,
@@ -198,7 +295,7 @@ export class CryptoReconcileService implements OnModuleInit, OnModuleDestroy {
     }));
 
     const matches = matchPayTransfers(pending, transfers, used, {
-      receiverBinanceId: await this.settings.getBinanceId(),
+      receiverBinanceId,
     });
     for (const match of matches) {
       const payment = payments.find((p) => p.orderId === match.orderId);
@@ -222,11 +319,52 @@ export class CryptoReconcileService implements OnModuleInit, OnModuleDestroy {
         }
         throw error;
       }
+      used.add(match.transactionId);
       await this.fulfillment.markPaidAndDeliver({ orderId: match.orderId });
       this.logger.log(
         `Đối soát Binance Pay: đã khớp đơn ${payment.order.code} với ${match.amount} USDT ` +
           `(giao dịch ${match.transactionId}, khớp theo ${match.by === 'memo' ? 'ghi chú' : 'số tiền'})`,
       );
+    }
+  }
+
+  /** Cộng ví các mã nạp Binance ID — khách ghi mã NAP- vào lời nhắn là khớp
+   *  chắc; quên ghi thì chỉ khớp khi duy nhất một khoản cùng số tiền. */
+  private async creditPayDeposits(
+    naps: {
+      id: string;
+      code: string;
+      amountUsdt: number;
+      createdAtMs: number;
+    }[],
+    transfers: BinancePayTransfer[],
+    used: Set<string>,
+    receiverBinanceId: string,
+  ): Promise<void> {
+    if (naps.length === 0) return;
+    const pending: PendingPayPayment[] = naps.map((n) => ({
+      orderId: n.id, // matcher gọi là orderId nhưng chỉ là id tham chiếu
+      code: n.code,
+      expected: n.amountUsdt,
+      createdAtMs: n.createdAtMs,
+    }));
+
+    const matches = matchPayTransfers(pending, transfers, used, {
+      receiverBinanceId,
+    });
+    for (const match of matches) {
+      const nap = naps.find((n) => n.id === match.orderId);
+      if (!nap) continue;
+      const daCong = await this.walletCredit.credit(nap.id, {
+        cryptoTxId: match.transactionId,
+      });
+      used.add(match.transactionId);
+      if (daCong) {
+        this.logger.log(
+          `Đối soát Binance Pay: đã cộng ví mã nạp ${nap.code} — ${match.amount} USDT ` +
+            `(giao dịch ${match.transactionId}, khớp theo ${match.by === 'memo' ? 'ghi chú' : 'số tiền'})`,
+        );
+      }
     }
   }
 }

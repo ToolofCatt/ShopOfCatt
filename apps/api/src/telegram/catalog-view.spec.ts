@@ -193,7 +193,7 @@ describe('renderHub — tối giản kiểu Panda Shop', () => {
   it('chào ⭐ + số dư trong CHỮ + đủ các nhánh', () => {
     const { text, keyboard } = renderHub('An <x>', 3.5, 'vi', RATES);
     expect(text).toContain('⭐ Catt Store Xin Chào An &lt;x&gt; ⭐');
-    expect(text).toContain('⭐ Số dư: 91.000 ₫'); // 3.5 × 26000
+    expect(text).toContain('💰 Số dư: 91.000 ₫'); // 3.5 × 26000
     const data = keyboard.flat().map((b) => b.callback_data);
     expect(data).toContain('c:1'); // Cửa Hàng
     expect(data).toContain('o'); // Đơn hàng
@@ -240,7 +240,7 @@ describe('renderStorefront — màn cửa hàng', () => {
       product({ id: 'x1', category: null }),
     ];
     const view = renderStorefront(nhieu, 'vi', RATES);
-    expect(view.text).toContain('⭐ Chọn sản phẩm bên dưới ⭐');
+    expect(view.text).toContain('🛍️ Chọn sản phẩm bên dưới 👇');
     const labels = view.keyboard.flat().map((b) => b.text);
     expect(labels).toContain('CHATGPT');
     expect(labels).toContain('CLAUDE');
@@ -287,7 +287,7 @@ describe('renderCategoryProducts', () => {
     // sort theo tiếng Việt: ChatGPT (0), Claude (1)
     const view = renderCategoryProducts(nhieu, 1, 'vi', RATES);
     expect(view).not.toBeNull();
-    expect(view!.text).toContain('⭐ Claude — chọn gói bên dưới ⭐');
+    expect(view!.text).toContain('📦 Claude — chọn gói bên dưới 👇');
     expect(view!.keyboard[0][0].callback_data).toBe('p:b1:1');
     expect(view!.keyboard[view!.keyboard.length - 1][0].callback_data).toBe('c:1');
   });
@@ -340,8 +340,8 @@ describe('renderProductDetail', () => {
     expect(text).toContain('• <b>Retail</b> — 250.000 ₫ — 📦 12');
     expect(text).toContain('• <b>OEM</b> — 180.000 ₫ — Hết hàng');
     // Kiểu Panda: kho/đã bán là dòng ⭐ ở đầu — "Đã bán: 0" vẫn hiện (số thật).
-    expect(text).toContain('⭐ Tồn kho: 0');
-    expect(text).toContain('⭐ Đã bán: 0');
+    expect(text).toContain('📦 Tồn kho: 0');
+    expect(text).toContain('🔥 Đã bán: 0');
     // Nút Mua: CHỈ loại còn hàng (Retail) — OEM hết hàng không chào nút hỏng.
     const data = keyboard.flat().map((b) => b.callback_data);
     expect(data).toContain('b:v1:ckqq1234567890abcdefghijk:3');
@@ -362,11 +362,11 @@ describe('renderProductDetail', () => {
     expect(text).toContain('&lt;chi tiết&gt;');
   });
 
-  it('đầu trang kiểu Panda: ⭐ Giá / Tồn kho / Đã bán', () => {
+  it('đầu trang: 💵 Giá / 📦 Tồn kho / 🔥 Đã bán — icon đa dạng theo yêu cầu chủ shop', () => {
     const { text } = renderProductDetail(product(), 'vi', RATES, [], 1);
-    expect(text).toContain('⭐ Giá: 75k');
-    expect(text).toContain('⭐ Tồn kho: 10');
-    expect(text).toContain('⭐ Đã bán: 3');
-    expect(text).toContain('⭐ Chọn loại muốn mua bên dưới:');
+    expect(text).toContain('💵 Giá: 75k');
+    expect(text).toContain('📦 Tồn kho: 10');
+    expect(text).toContain('🔥 Đã bán: 3');
+    expect(text).toContain('🛒 Chọn loại muốn mua bên dưới:');
   });
 });

@@ -10,6 +10,7 @@ import {
   renderDepositCredited,
   renderDepositInstructions,
   renderDepositMenu,
+  renderDepositMethodChooser,
 } from './wallet-view';
 
 const RATES: StoreRatesDto = { vndPerUsdt: 26000, cnyPerUsdt: 7.2, updatedAt: null };
@@ -20,6 +21,8 @@ describe('callback ví — codec', () => {
       { kind: 'account' },
       { kind: 'depositMenu' },
       { kind: 'depositAmount', vnd: 50_000 },
+      { kind: 'depositMethod', vnd: 50_000, method: 'crypto_bep20' },
+      { kind: 'depositMethod', vnd: 100_000_000, method: 'sepay' },
       { kind: 'depositCheck', code: 'NAP-ABC123' },
       { kind: 'depositCancel', code: 'NAP-ABC123' },
       { kind: 'payBalance', orderCode: 'DH-ABC123' },
@@ -66,7 +69,14 @@ describe('màn nạp tiền', () => {
 
   it('hướng dẫn nạp: số VND + mã NAP bắt buộc + QR đúng nội dung', () => {
     const view = renderDepositInstructions(
-      { code: 'NAP-XYZ789', vndAmount: 100_000, amountUsdt: 3.846153 },
+      {
+        code: 'NAP-XYZ789',
+        vndAmount: 100_000,
+        amountUsdt: 3.846153,
+        mode: 'SEPAY',
+        cryptoNetwork: null,
+        cryptoAddress: null,
+      },
       { accountNumber: '007', bank: 'Vietcombank', accountHolder: 'NGUYEN VAN A' },
       'vi',
       9,
@@ -80,6 +90,64 @@ describe('màn nạp tiền', () => {
     // Không còn nút kiểm tra — tiền vào là vòng đẩy tự báo cộng ví.
     expect(data).not.toContain('dk:NAP-XYZ789');
     expect(data).toContain('dx:NAP-XYZ789');
+  });
+
+  it('bảng chọn cách nạp: mỗi kênh một nút dw:, có nút quay lại', () => {
+    const view = renderDepositMethodChooser(
+      100_000,
+      ['sepay', 'crypto_bep20', 'binance_id'],
+      'vi',
+    );
+    const data = view.keyboard.flat().map((b) => b.callback_data);
+    expect(data).toContain('dw:100000:sp');
+    expect(data).toContain('dw:100000:cb');
+    expect(data).toContain('dw:100000:bi');
+    expect(data).toContain('d'); // quay lại màn nạp
+    expect(view.text).toContain('100.000 ₫');
+  });
+
+  it('hướng dẫn nạp CRYPTO: địa chỉ + số USDT đủ 6 số lẻ trong <code>, không QR', () => {
+    const view = renderDepositInstructions(
+      {
+        code: 'NAP-CRY001',
+        vndAmount: 100_000,
+        amountUsdt: 3.8463, // đã lệch bước duy nhất
+        mode: 'CRYPTO',
+        cryptoNetwork: 'BEP20',
+        cryptoAddress: '0xabc',
+      },
+      null,
+      'vi',
+      29,
+    );
+    expect(view.text).toContain('<code>0xabc</code>');
+    // Đủ 6 chữ số lẻ — phần lẻ là "chữ ký" nhận diện, không được cắt.
+    expect(view.text).toContain('<code>3.846300</code> USDT');
+    expect(view.text).toContain('BEP20');
+    expect(view.text).toContain('29 phút');
+    expect(view.photo ?? null).toBeNull();
+    const data = view.keyboard.flat().map((b) => b.callback_data);
+    expect(data).toContain('dx:NAP-CRY001');
+  });
+
+  it('hướng dẫn nạp BINANCE_ID: id nhận tiền + mã NAP trong lời nhắn', () => {
+    const view = renderDepositInstructions(
+      {
+        code: 'NAP-BID001',
+        vndAmount: 260_000,
+        amountUsdt: 10.0001,
+        mode: 'BINANCE_ID',
+        cryptoNetwork: null,
+        cryptoAddress: '123456789',
+      },
+      null,
+      'vi',
+      29,
+    );
+    expect(view.text).toContain('<code>123456789</code>');
+    expect(view.text).toContain('<code>10.000100</code> USDT');
+    expect(view.text).toContain('NAP-BID001');
+    expect(view.photo ?? null).toBeNull();
   });
 
   it('tin đã cộng ví: số tiền + số dư mới theo ngôn ngữ', () => {

@@ -787,11 +787,21 @@ export class OrdersService {
    */
   private async getUsedTxIds(txIds: string[]): Promise<Set<string>> {
     if (txIds.length === 0) return new Set();
-    const rows = await this.prisma.payment.findMany({
-      where: { cryptoTxId: { in: txIds } },
-      select: { cryptoTxId: true },
-    });
-    return new Set(rows.map((row) => row.cryptoTxId as string));
+    // Soát CẢ bảng Deposit: một khoản nạp đã cộng ví thì không được đem khai
+    // cho đơn nữa (và ngược lại) — một khoản tiền chỉ đổi được một thứ.
+    const [donRows, napRows] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: { cryptoTxId: { in: txIds } },
+        select: { cryptoTxId: true },
+      }),
+      this.prisma.deposit.findMany({
+        where: { cryptoTxId: { in: txIds } },
+        select: { cryptoTxId: true },
+      }),
+    ]);
+    return new Set(
+      [...donRows, ...napRows].map((row) => row.cryptoTxId as string),
+    );
   }
 
   private async loadOwnDetail(

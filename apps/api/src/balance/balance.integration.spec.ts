@@ -7,6 +7,7 @@ import { FulfillmentService } from '../orders/fulfillment.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { SettingsService } from '../settings/settings.service';
 import { BalanceService } from './balance.service';
+import { WalletCreditService } from './wallet-credit.service';
 
 /**
  * Test TÍCH HỢP tiền ví trên PostgreSQL thật — theo khuôn
@@ -49,6 +50,7 @@ async function isPostgresReachable(): Promise<boolean> {
 let reachable = false;
 let prisma: PrismaClient;
 let service: BalanceService;
+let walletCredit: WalletCreditService;
 
 function itDb(name: string, fn: () => Promise<void>, timeout?: number): void {
   it(
@@ -85,7 +87,7 @@ async function applyMigrations(client: PrismaClient): Promise<void> {
   }
 }
 
-/** SettingsService giả — BalanceService chỉ gọi getSepayConfig khi TẠO mã nạp. */
+/** SettingsService giả — đủ cho createDeposit cả ba kênh (sepay/crypto/binance). */
 const settingsStub = {
   getSepayConfig: async () => ({
     ready: true,
@@ -96,6 +98,18 @@ const settingsStub = {
     apiKey: 'x',
     webhookSecret: '',
   }),
+  getPublicRates: async () => ({
+    vndPerUsdt: 26_000,
+    cnyPerUsdt: 7.2,
+    updatedAt: null,
+  }),
+  getEnabledMethods: async () => [
+    { method: 'sepay' },
+    { method: 'crypto_bep20' },
+    { method: 'binance_id' },
+  ],
+  getCryptoAddress: async () => '0xVI-TEST',
+  getBinanceId: async () => '123456789',
 } as unknown as SettingsService;
 
 let userId: string;
@@ -159,10 +173,12 @@ beforeAll(async () => {
   }
   prisma = newClient(TEST_DB);
   await applyMigrations(prisma);
+  walletCredit = new WalletCreditService(prisma as unknown as PrismaService);
   service = new BalanceService(
     prisma as unknown as PrismaService,
     settingsStub,
     new FulfillmentService(prisma as unknown as PrismaService),
+    walletCredit,
   );
 
   const user = await prisma.user.create({
@@ -209,7 +225,7 @@ describe('BalanceService (tích hợp — tiền thật, chạy trên PG thật)
     // 100000 / 26000 = 3.846153846… → floor về 6 chữ số
     expect(Number(kq.deposit.amountUsdt)).toBe(3.846153);
     expect(kq.deposit.code.startsWith('NAP-')).toBe(true);
-    expect(kq.accountNumber).toBe('007');
+    expect(kq.bank?.accountNumber).toBe('007');
 
     await expect(service.createDeposit(user, 5_000)).rejects.toThrow();
     await expect(service.createDeposit(user, 123.45 as unknown as number)).rejects.toThrow();
@@ -300,5 +316,59 @@ describe('BalanceService (tích hợp — tiền thật, chạy trên PG thật)
     await expect(
       service.payOrderWithBalance('user-khong-ton-tai', 'DH-BAL003'),
     ).rejects.toThrow();
+  });
+
+  itDb('mã nạp crypto: số USDT DUY NHẤT giữa các khoản chờ, cách nhau ≥ 0.0002', async () => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    // Ba mã cùng 100k VND — nếu không có bước lệch thì cả ba trùng 3.846153.
+    const a = await service.createDeposit(user, 100_000, 'crypto_bep20');
+    const b = await service.createDeposit(user, 100_000, 'crypto_bep20');
+    const c = await service.createDeposit(user, 100_000, 'binance_id');
+    const so = [a, b, c].map((kq) => Number(kq.deposit.amountUsdt)).sort();
+    expect(new Set(so).size).toBe(3);
+    expect(so[1] - so[0]).toBeGreaterThanOrEqual(0.0002 - 1e-9);
+    expect(so[2] - so[1]).toBeGreaterThanOrEqual(0.0002 - 1e-9);
+    expect(a.bank).toBeNull();
+    expect(a.deposit.mode).toBe('CRYPTO');
+    expect(a.deposit.cryptoNetwork).toBe('BEP20');
+    expect(a.deposit.cryptoAddress).toBe('0xVI-TEST');
+    expect(c.deposit.mode).toBe('BINANCE_ID');
+    expect(c.deposit.cryptoAddress).toBe('123456789');
+
+    // Webhook SePay KHÔNG được nhìn thấy mã crypto — khớp VND cho mã crypto
+    // là cộng theo con số chưa từng hứa với khách.
+    const choSepay = await service.listAwaitingDeposits();
+    for (const kq of [a, b, c]) {
+      expect(choSepay.some((d) => d.code === kq.deposit.code)).toBe(false);
+    }
+
+    // Phương thức chưa mở (trc20 không nằm trong stub) → fail-closed.
+    await expect(
+      service.createDeposit(user, 100_000, 'crypto_trc20'),
+    ).rejects.toThrow();
+
+    for (const kq of [a, b, c]) {
+      await service.cancelDeposit(user.id, kq.deposit.code);
+    }
+  });
+
+  itDb('cộng ví mã crypto đúng MỘT lần dù hai vòng đối soát đua nhau', async () => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const truoc = await service.getBalance(user.id);
+    const { deposit } = await service.createDeposit(user, 260_000, 'crypto_bep20');
+
+    const [a, b] = await Promise.all([
+      walletCredit.credit(deposit.id, { cryptoTxId: 'tx-vi-1' }),
+      walletCredit.credit(deposit.id, { cryptoTxId: 'tx-vi-1-song-song' }),
+    ]);
+    expect([a, b].filter(Boolean)).toHaveLength(1);
+    // Tick sau quét lại cùng giao dịch cũng không cộng thêm.
+    expect(await walletCredit.credit(deposit.id, { cryptoTxId: 'tx-vi-2' })).toBe(false);
+
+    const sau = await service.getBalance(user.id);
+    expect(sau - truoc).toBeCloseTo(Number(deposit.amountUsdt), 6);
+    // Giao dịch đã cộng ví thì bảng dùng-rồi phải thấy — chặn đem khai cho đơn.
+    const used = await walletCredit.usedTxIds(['tx-vi-1', 'tx-vi-1-song-song', 'tx-vi-2']);
+    expect(used.size).toBe(1);
   });
 });

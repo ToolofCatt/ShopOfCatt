@@ -2,13 +2,14 @@ import { Module } from '@nestjs/common';
 import { OrdersModule } from '../orders/orders.module';
 import { SettingsModule } from '../settings/settings.module';
 import { BalanceService } from './balance.service';
+import { WalletCreditModule } from './wallet-credit.module';
 
 /**
  * Ví số dư của khách — không có controller: hiện chỉ bot Telegram (in-process)
  * và webhook SePay (qua PaymentsService) chạm vào ví.
  */
 @Module({
-  imports: [OrdersModule, SettingsModule],
+  imports: [OrdersModule, SettingsModule, WalletCreditModule],
   providers: [BalanceService],
   exports: [BalanceService],
 })

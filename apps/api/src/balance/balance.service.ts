@@ -8,12 +8,14 @@ import {
   type OnModuleInit,
 } from '@nestjs/common';
 import { Prisma, type Deposit, type User } from '@prisma/client';
-import { floorUsdt } from '@webcatt/shared';
+import { floorUsdt, type CryptoNetwork, type PaymentMethod } from '@webcatt/shared';
 import { generateDepositCode } from '../common/codes';
 import { K } from '../i18n/messages';
 import { FulfillmentService } from '../orders/fulfillment.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { pickUniqueUsdt } from './unique-amount';
+import { WalletCreditService } from './wallet-credit.service';
 
 /** Chặn dưới/trên một lần nạp (VND) — dưới 10k phí chuyển ăn hết ý nghĩa,
  *  trên 100tr thì chắc chắn là gõ nhầm. */
@@ -23,6 +25,20 @@ export const DEPOSIT_MAX_VND = 100_000_000;
 /** Hạn của một mã nạp — NGẮN như đơn SePay và cùng lý do: mã VietQR chốt cứng
  *  số VND theo tỉ giá lúc tạo, để lâu là khách quét mã cũ chuyển số không còn khớp. */
 const DEPOSIT_EXPIRE_MINUTES = 10;
+
+/** Kênh crypto cho hạn rộng hơn: khoản nạp on-chain phải chờ xác nhận block +
+ *  Binance ghi có + vòng đối soát 60 giây — 10 phút là dồn khách vô cớ. */
+const DEPOSIT_EXPIRE_MINUTES_CRYPTO = 30;
+
+/** Các phương thức được phép NẠP VÍ — mock (giả lập) và binance_pay (cần phiên
+ *  checkout gắn với đơn) cố ý không có mặt. */
+export const DEPOSIT_METHODS = [
+  'sepay',
+  'crypto_bep20',
+  'crypto_trc20',
+  'binance_id',
+] as const satisfies readonly PaymentMethod[];
+export type DepositMethod = (typeof DEPOSIT_METHODS)[number];
 
 /** Chu kỳ quét mã nạp quá hạn. */
 const EXPIRE_SWEEP_MS = 60_000;
@@ -47,6 +63,7 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
     private readonly fulfillment: FulfillmentService,
+    private readonly walletCredit: WalletCreditService,
   ) {}
 
   onModuleInit(): void {
@@ -82,15 +99,36 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Tạo mã nạp qua chuyển khoản. Số USDT cộng vào ví chốt theo tỉ giá LÚC TẠO
-   * và làm tròn XUỐNG (floorUsdt) — phần lẻ dưới một phần triệu USDT thuộc về
-   * cửa hàng, không bao giờ cộng lố cho khách.
+   * Các phương thức đang MỞ cho nạp ví — giao của danh sách phương thức thanh
+   * toán đang bật (fail-closed sẵn trong getEnabledMethods) với DEPOSIT_METHODS.
+   * Không có tỉ giá VND thì không kênh nào mở: mọi mức nạp đều nhập bằng VND.
    */
-  async createDeposit(user: User, vndAmount: number): Promise<{
+  async listDepositMethods(): Promise<DepositMethod[]> {
+    const rates = await this.settings.getPublicRates();
+    if (rates.vndPerUsdt <= 0) return [];
+    const enabled = await this.settings.getEnabledMethods();
+    return DEPOSIT_METHODS.filter((m) =>
+      enabled.some((e) => e.method === m),
+    );
+  }
+
+  /**
+   * Tạo mã nạp. Số USDT cộng vào ví chốt theo tỉ giá LÚC TẠO và làm tròn
+   * XUỐNG (floorUsdt) — phần lẻ thuộc về cửa hàng, không bao giờ cộng lố.
+   *
+   * Kênh crypto/Binance ID: số USDT được đẩy lệch bước 0.0001 để DUY NHẤT
+   * giữa mọi khoản đang chờ (cả mã nạp lẫn đơn hàng crypto) — on-chain không
+   * có chỗ ghi mã nạp, số tiền là thứ duy nhất chỉ ra khoản nào của ai. Số
+   * cộng vào ví = đúng số khách đã chuyển, gồm cả phần lẻ đó.
+   */
+  async createDeposit(
+    user: User,
+    vndAmount: number,
+    method: DepositMethod = 'sepay',
+  ): Promise<{
     deposit: Deposit;
-    accountNumber: string;
-    bank: string;
-    accountHolder: string;
+    /** Thông tin chuyển khoản — chỉ kênh SEPAY, kênh khác là null. */
+    bank: { accountNumber: string; bank: string; accountHolder: string } | null;
   }> {
     if (
       !Number.isInteger(vndAmount) ||
@@ -99,19 +137,93 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
     ) {
       throw new BadRequestException(K.depositAmountInvalid);
     }
-    const cfg = await this.settings.getSepayConfig();
-    // Fail-closed như thanh toán: SePay chưa sẵn sàng thì không nhận nạp,
-    // tuyệt đối không tạo mã mà không có đường đối soát.
-    if (!cfg.ready || cfg.vndPerUsdt <= 0) {
+    // Fail-closed: phương thức không nằm trong danh sách đang mở thì từ chối
+    // — callback_data là dữ liệu client, khách sửa được tuỳ ý.
+    const open = await this.listDepositMethods();
+    if (!open.includes(method)) {
       throw new ServiceUnavailableException(K.paymentMethodUnavailable);
     }
 
-    const amountUsdt = floorUsdt(vndAmount / cfg.vndPerUsdt);
-    if (amountUsdt <= 0) {
-      throw new BadRequestException(K.depositAmountInvalid);
+    if (method === 'sepay') {
+      const cfg = await this.settings.getSepayConfig();
+      // Đường đối soát là webhook SePay — chưa sẵn sàng thì không tạo mã.
+      if (!cfg.ready || cfg.vndPerUsdt <= 0) {
+        throw new ServiceUnavailableException(K.paymentMethodUnavailable);
+      }
+      const amountUsdt = floorUsdt(vndAmount / cfg.vndPerUsdt);
+      if (amountUsdt <= 0) {
+        throw new BadRequestException(K.depositAmountInvalid);
+      }
+      const deposit = await this.prisma.deposit.create({
+        data: {
+          code: await this.freshCode(),
+          userId: user.id,
+          mode: 'SEPAY',
+          amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
+          vndAmount: new Prisma.Decimal(vndAmount),
+          expiresAt: new Date(Date.now() + DEPOSIT_EXPIRE_MINUTES * 60_000),
+        },
+      });
+      return {
+        deposit,
+        bank: {
+          accountNumber: cfg.accountNumber,
+          bank: cfg.bank,
+          accountHolder: cfg.accountHolder,
+        },
+      };
     }
 
-    // Mã trùng thì thử lại — cùng cách với mã đơn hàng.
+    // ---- crypto_bep20 / crypto_trc20 / binance_id ----
+    const network: CryptoNetwork | null =
+      method === 'crypto_bep20'
+        ? 'BEP20'
+        : method === 'crypto_trc20'
+          ? 'TRC20'
+          : null;
+    const address =
+      network !== null
+        ? await this.settings.getCryptoAddress(network)
+        : await this.settings.getBinanceId();
+    if (address === '') {
+      throw new ServiceUnavailableException(K.paymentMethodUnavailable);
+    }
+
+    const rates = await this.settings.getPublicRates();
+    const base = floorUsdt(vndAmount / rates.vndPerUsdt);
+    if (base <= 0) {
+      throw new BadRequestException(K.depositAmountInvalid);
+    }
+    const amountUsdt = pickUniqueUsdt(
+      base,
+      await this.walletCredit.takenUsdtAmounts(),
+    );
+    if (amountUsdt === null) {
+      // 200 khoản chờ chen chúc quanh cùng một số tiền — gần như không thể,
+      // nhưng nếu xảy ra thì từ chối rõ ràng thay vì tạo mã không khớp nổi.
+      this.logger.error('Hết chỗ chọn số USDT duy nhất cho mã nạp crypto');
+      throw new ServiceUnavailableException(K.paymentMethodUnavailable);
+    }
+
+    const deposit = await this.prisma.deposit.create({
+      data: {
+        code: await this.freshCode(),
+        userId: user.id,
+        mode: network !== null ? 'CRYPTO' : 'BINANCE_ID',
+        amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
+        vndAmount: new Prisma.Decimal(vndAmount),
+        cryptoNetwork: network,
+        cryptoAddress: address,
+        expiresAt: new Date(
+          Date.now() + DEPOSIT_EXPIRE_MINUTES_CRYPTO * 60_000,
+        ),
+      },
+    });
+    return { deposit, bank: null };
+  }
+
+  /** Mã NAP- chưa ai dùng — trùng thì thử lại, cùng cách với mã đơn hàng. */
+  private async freshCode(): Promise<string> {
     let code = generateDepositCode();
     for (let attempt = 0; attempt < 10; attempt++) {
       const existed = await this.prisma.deposit.findUnique({
@@ -121,31 +233,18 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
       if (!existed) break;
       code = generateDepositCode();
     }
-
-    const deposit = await this.prisma.deposit.create({
-      data: {
-        code,
-        userId: user.id,
-        amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
-        vndAmount: new Prisma.Decimal(vndAmount),
-        expiresAt: new Date(Date.now() + DEPOSIT_EXPIRE_MINUTES * 60_000),
-      },
-    });
-    return {
-      deposit,
-      accountNumber: cfg.accountNumber,
-      bank: cfg.bank,
-      accountHolder: cfg.accountHolder,
-    };
+    return code;
   }
 
   /** Mã nạp đang chờ tiền — cho webhook SePay đối soát. Nhận cả EXPIRED chưa
-   *  được cộng: tiền đã rời tài khoản khách thì phải cộng, muộn cũng cộng. */
+   *  được cộng: tiền đã rời tài khoản khách thì phải cộng, muộn cũng cộng.
+   *  CHỈ kênh SEPAY — mã crypto có số VND chỉ để hiển thị, khớp bên này là
+   *  cộng theo một con số chưa từng hứa với ai. */
   async listAwaitingDeposits(): Promise<
     { id: string; code: string; expectedVnd: number }[]
   > {
     const rows = await this.prisma.deposit.findMany({
-      where: { status: { in: ['PENDING', 'EXPIRED'] }, sepayRef: null },
+      where: { mode: 'SEPAY', status: { in: ['PENDING', 'EXPIRED'] }, sepayRef: null },
       select: { id: true, code: true, vndAmount: true },
     });
     return rows.map((row) => ({
@@ -161,63 +260,11 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Cộng tiền một mã nạp đã khớp giao dịch. Idempotent hai lớp: guard trạng
-   * thái (updateMany điều kiện) + `sepayRef @unique` — webhook trùng hay hai
-   * tiến trình đua nhau thì chỉ một bên cộng được.
+   * Cộng tiền một mã nạp SePay đã khớp giao dịch — uỷ quyền xuống
+   * WalletCreditService (một chỗ ghi SUCCESS duy nhất cho mọi kênh).
    */
   async creditDeposit(depositId: string, sepayRef: string): Promise<boolean> {
-    try {
-      return await this.prisma.$transaction(async (tx) => {
-        const gate = await tx.deposit.updateMany({
-          where: {
-            id: depositId,
-            status: { in: ['PENDING', 'EXPIRED'] },
-            sepayRef: null,
-          },
-          data: { status: 'SUCCESS', sepayRef, paidAt: new Date() },
-        });
-        if (gate.count === 0) return false;
-
-        const deposit = await tx.deposit.findUniqueOrThrow({
-          where: { id: depositId },
-          select: { userId: true, amountUsdt: true, code: true },
-        });
-
-        /*
-         * Khoá dòng User trước khi đọc-cộng: không khoá thì hai lần cộng/trừ
-         * song song cùng đọc một số dư cũ và balanceAfter trong sổ cái nói dối.
-         */
-        await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${deposit.userId} FOR UPDATE`;
-        const user = await tx.user.findUniqueOrThrow({
-          where: { id: deposit.userId },
-          select: { balance: true },
-        });
-        const balanceAfter = user.balance.add(deposit.amountUsdt);
-        await tx.user.update({
-          where: { id: deposit.userId },
-          data: { balance: balanceAfter },
-        });
-        await tx.balanceEntry.create({
-          data: {
-            userId: deposit.userId,
-            amount: deposit.amountUsdt,
-            balanceAfter,
-            reason: 'deposit',
-            refCode: deposit.code,
-          },
-        });
-        return true;
-      });
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        // Bên kia vừa ghi cùng sepayRef — coi như đã xử lý.
-        return false;
-      }
-      throw err;
-    }
+    return this.walletCredit.credit(depositId, { sepayRef });
   }
 
   /**

@@ -5,12 +5,21 @@
  * nạp của khách, con số phải đúng tuyệt đối vì khách chuyển đúng số bot nói.
  */
 
-import { formatMoney, formatUsdt, type StoreRatesDto } from '@webcatt/shared';
+import {
+  formatMoney,
+  formatUsdt,
+  type PaymentMethod,
+  type StoreRatesDto,
+} from '@webcatt/shared';
 import { sepayQrUrl } from '../payments/sepay-qr';
 import { encodeCallback, escapeHtml } from './catalog-view';
 import { orderMoney, type BotView } from './order-view';
 import { botDict, type BotLang } from './messages';
 import type { TgInlineKeyboard, TgReplyKeyboard } from './telegram-api';
+
+/** Kênh của một mã nạp — trùng tên enum DepositMode bên Prisma, khai lại để
+ *  module này giữ được tính THUẦN (không import @prisma/client). */
+export type DepositPayMode = 'SEPAY' | 'CRYPTO' | 'BINANCE_ID';
 
 /** Các mức nạp chào trên nút (VND) — cần số khác thì bấm hai lần. */
 export const DEPOSIT_VND_OPTIONS = [
@@ -150,27 +159,101 @@ export function renderDepositConfirm(
 }
 
 /**
- * Hướng dẫn chuyển khoản cho một mã nạp — mọi con số lấy từ Deposit đã CHỐT
- * lúc tạo, cùng nguyên tắc với hướng dẫn trả đơn.
+ * Bảng chọn CÁCH NẠP sau khi khách chốt số tiền — mỗi phương thức đang mở một
+ * nút, nhãn dùng chung methodNames với luồng trả đơn.
+ */
+export function renderDepositMethodChooser(
+  vnd: number,
+  methods: readonly PaymentMethod[],
+  lang: BotLang,
+): BotView {
+  const dict = botDict(lang);
+  const keyboard: TgInlineKeyboard = methods.map((method) => [
+    {
+      text: dict.methodNames[method] ?? method,
+      callback_data: encodeCallback({ kind: 'depositMethod', vnd, method }),
+    },
+  ]);
+  keyboard.push([
+    { text: dict.hubBackBtn, callback_data: encodeCallback({ kind: 'depositMenu' }) },
+  ]);
+  return {
+    text: escapeHtml(dict.depositChooseMethod(formatMoney(vnd, 'VND'))),
+    keyboard,
+  };
+}
+
+/**
+ * Hướng dẫn nạp cho một mã — mọi con số lấy từ Deposit đã CHỐT lúc tạo, cùng
+ * nguyên tắc với hướng dẫn trả đơn. Ba kênh ba bài:
+ * - SEPAY: chuyển đúng VND, nội dung là mã NAP- (webhook khớp mã + số tiền).
+ * - CRYPTO: on-chain không có chỗ ghi mã — chuyển ĐÚNG số USDT duy nhất.
+ * - BINANCE_ID: ghi mã NAP- vào lời nhắn + đúng số USDT.
  */
 export function renderDepositInstructions(
-  deposit: { code: string; vndAmount: number; amountUsdt: number },
-  bank: { accountNumber: string; bank: string; accountHolder: string },
+  deposit: {
+    code: string;
+    vndAmount: number;
+    amountUsdt: number;
+    mode: DepositPayMode;
+    cryptoNetwork: string | null;
+    cryptoAddress: string | null;
+  },
+  bank: { accountNumber: string; bank: string; accountHolder: string } | null,
   lang: BotLang,
   minutesLeft: number | null,
 ): BotView {
   const dict = botDict(lang);
-  const lines = [
-    `<b>${escapeHtml(dict.depositTitle)}</b>`,
-    escapeHtml(dict.payBankLine(bank.bank, bank.accountNumber)),
-  ];
-  if (bank.accountHolder.trim() !== '') lines.push(escapeHtml(bank.accountHolder.trim()));
-  lines.push(
-    escapeHtml(dict.payAmount(formatMoney(deposit.vndAmount, 'VND'))),
-    escapeHtml(dict.depositWillCredit(formatUsdt(deposit.amountUsdt))),
-    '',
-    `<b>${escapeHtml(dict.payMemo(deposit.code))}</b>`,
-  );
+  const lines = [`<b>${escapeHtml(dict.depositTitle)}</b>`];
+  let photo: string | undefined;
+
+  if (deposit.mode === 'SEPAY' && bank !== null) {
+    lines.push(escapeHtml(dict.payBankLine(bank.bank, bank.accountNumber)));
+    if (bank.accountHolder.trim() !== '') {
+      lines.push(escapeHtml(bank.accountHolder.trim()));
+    }
+    lines.push(
+      escapeHtml(dict.payAmount(formatMoney(deposit.vndAmount, 'VND'))),
+      escapeHtml(dict.depositWillCredit(formatUsdt(deposit.amountUsdt))),
+      '',
+      `<b>${escapeHtml(dict.payMemo(deposit.code))}</b>`,
+    );
+    photo = sepayQrUrl({
+      accountNumber: bank.accountNumber,
+      bank: bank.bank,
+      amountVnd: deposit.vndAmount,
+      description: deposit.code,
+      accountHolder: bank.accountHolder,
+    });
+  } else {
+    // Kênh crypto/Binance ID — số USDT hiện đủ 6 chữ số lẻ trong <code>:
+    // phần lẻ 0.0001 chính là "chữ ký" nhận diện mã nạp, cắt là mất dấu.
+    const soUsdt = deposit.amountUsdt.toFixed(6);
+    if (deposit.mode === 'CRYPTO') {
+      if (deposit.cryptoNetwork) {
+        lines.push(escapeHtml(dict.payCryptoNetwork(deposit.cryptoNetwork)));
+      }
+      lines.push(
+        escapeHtml(dict.payAddressLabel),
+        `<code>${escapeHtml(deposit.cryptoAddress ?? '')}</code>`,
+      );
+    } else {
+      lines.push(
+        escapeHtml(dict.payBinanceIdLabel),
+        `<code>${escapeHtml(deposit.cryptoAddress ?? '')}</code>`,
+      );
+    }
+    lines.push(
+      '',
+      escapeHtml(dict.depositUsdtExact),
+      `<code>${soUsdt}</code> USDT`,
+      escapeHtml(dict.payAmount(formatMoney(deposit.vndAmount, 'VND'))),
+    );
+    if (deposit.mode === 'BINANCE_ID') {
+      // Lời nhắn là đường khớp CHẮC nhất bên Binance Pay — nhấn mạnh.
+      lines.push('', `<b>${escapeHtml(dict.payMemoBinance(deposit.code))}</b>`);
+    }
+  }
   if (minutesLeft !== null) lines.push('', escapeHtml(dict.payDeadline(minutesLeft)));
 
   return {
@@ -184,13 +267,7 @@ export function renderDepositInstructions(
         },
       ],
     ],
-    photo: sepayQrUrl({
-      accountNumber: bank.accountNumber,
-      bank: bank.bank,
-      amountVnd: deposit.vndAmount,
-      description: deposit.code,
-      accountHolder: bank.accountHolder,
-    }),
+    photo,
   };
 }
 
