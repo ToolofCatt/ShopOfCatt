@@ -167,10 +167,8 @@ export function renderPaymentInstructions(
   const keyboard: TgInlineKeyboard = [];
   let photo: string | null = null;
 
-  const nutDaChuyen: TgInlineKeyboardButton = {
-    text: dict.btnPaid,
-    callback_data: encodeCallback({ kind: 'check', orderCode: order.code }),
-  };
+  // KHÔNG còn nút "Tôi đã chuyển": vòng đẩy tự giao hàng khi tiền vào (GĐ4),
+  // nút kiểm tra chỉ làm khách tưởng phải bấm mới nhận được hàng.
   const nutHuy: TgInlineKeyboardButton = {
     text: dict.btnCancelOrder,
     callback_data: encodeCallback({ kind: 'cancelOrder', orderCode: order.code }),
@@ -199,7 +197,6 @@ export function renderPaymentInstructions(
           `<a href="${escapeHtml(payment.checkoutUrl)}">${escapeHtml(payment.checkoutUrl)}</a>`,
         );
       }
-      keyboard.push([nutDaChuyen]);
       break;
     }
     case 'BINANCE_ID': {
@@ -210,7 +207,6 @@ export function renderPaymentInstructions(
         '',
         `<b>${escapeHtml(dict.payMemoBinance(order.code))}</b>`,
       );
-      keyboard.push([nutDaChuyen]);
       break;
     }
     case 'CRYPTO': {
@@ -222,7 +218,6 @@ export function renderPaymentInstructions(
         '',
         `<b>${escapeHtml(dict.payExactAmount)}</b>`,
       );
-      keyboard.push([nutDaChuyen]);
       break;
     }
     case 'SEPAY': {
@@ -238,20 +233,14 @@ export function renderPaymentInstructions(
         `<b>${escapeHtml(dict.payMemo(order.code))}</b>`,
       );
       photo = payment.sepayQrUrl ?? null;
-      keyboard.push([nutDaChuyen]);
       break;
     }
     default: {
       // Chưa/không có phiên thanh toán — chỉ còn nước huỷ hoặc kiểm tra.
       lines.push(escapeHtml(dict.orderTotalLine(orderMoney(order.totalAmount, lang, rates))));
-      keyboard.push([nutDaChuyen]);
     }
   }
 
-  // MOCK không có đối soát tự động — đừng hứa "bot tự gửi" ở cổng giả lập.
-  if (payment?.mode !== 'MOCK') {
-    lines.push('', escapeHtml(dict.payAutoNote));
-  }
   if (minutesLeft !== null) {
     lines.push('', escapeHtml(dict.payDeadline(minutesLeft)));
   }

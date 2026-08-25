@@ -77,7 +77,8 @@ describe('màn nạp tiền', () => {
     expect(view.photo).toContain('qr.sepay.vn');
     expect(view.photo).toContain('NAP-XYZ789');
     const data = view.keyboard.flat().map((b) => b.callback_data);
-    expect(data).toContain('dk:NAP-XYZ789');
+    // Không còn nút kiểm tra — tiền vào là vòng đẩy tự báo cộng ví.
+    expect(data).not.toContain('dk:NAP-XYZ789');
     expect(data).toContain('dx:NAP-XYZ789');
   });
 

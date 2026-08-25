@@ -103,7 +103,8 @@ describe('renderPaymentInstructions', () => {
     expect(view.text).toContain('12 phút');
     expect(view.photo ?? null).toBeNull();
     const data = view.keyboard.flat().map((b) => b.callback_data);
-    expect(data).toContain('k:DH-ABC123');
+    // Không còn nút "Tôi đã chuyển" — vòng đẩy tự giao khi tiền vào.
+    expect(data).not.toContain('k:DH-ABC123');
     expect(data).toContain('x:DH-ABC123');
   });
 

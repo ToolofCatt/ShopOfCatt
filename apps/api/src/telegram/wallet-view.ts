@@ -170,20 +170,13 @@ export function renderDepositInstructions(
     escapeHtml(dict.depositWillCredit(formatUsdt(deposit.amountUsdt))),
     '',
     `<b>${escapeHtml(dict.payMemo(deposit.code))}</b>`,
-    '',
-    escapeHtml(dict.payAutoNote),
   );
   if (minutesLeft !== null) lines.push('', escapeHtml(dict.payDeadline(minutesLeft)));
 
   return {
     text: lines.join('\n'),
+    // Không nút "Tôi đã chuyển": tiền vào là vòng đẩy tự báo cộng ví.
     keyboard: [
-      [
-        {
-          text: dict.btnPaid,
-          callback_data: encodeCallback({ kind: 'depositCheck', code: deposit.code }),
-        },
-      ],
       [
         {
           text: dict.btnCancelOrder,
