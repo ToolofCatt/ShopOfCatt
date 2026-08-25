@@ -6,7 +6,6 @@ import type {
   StoreRatesDto,
 } from '@webcatt/shared';
 import {
-  animateEmoji,
   encodeCallback,
   escapeHtml,
   htmlToPlainText,
@@ -68,16 +67,6 @@ function product(over: Partial<ProductDto> = {}): ProductDto {
     ...over,
   };
 }
-
-describe('animateEmoji', () => {
-  it('bọc ⭐ và 👋 bằng thẻ tg-emoji, chữ khác giữ nguyên', () => {
-    const out = animateEmoji('⭐ Xin chào 👋 <b>abc</b>');
-    expect(out).toContain('<tg-emoji emoji-id="5226928895189598791">⭐</tg-emoji>');
-    expect(out).toContain('<tg-emoji emoji-id="5458904472598095631">👋</tg-emoji>');
-    expect(out).toContain('<b>abc</b>');
-    expect(animateEmoji('khong co gi')).toBe('khong co gi');
-  });
-});
 
 describe('escapeHtml / htmlToPlainText', () => {
   it('escape đủ năm ký tự hiểm', () => {

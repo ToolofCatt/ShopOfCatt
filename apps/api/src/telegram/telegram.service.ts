@@ -12,8 +12,8 @@ import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { SettingsService } from '../settings/settings.service';
+import { animateEmoji } from './animated-emoji';
 import {
-  animateEmoji,
   parseCallback,
   renderAnnouncement,
   renderCategoryProducts,
@@ -350,7 +350,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         const loi = Buffer.from(bytes.slice(0, 120)).toString('utf8');
         throw new Error(`SePay không trả ảnh mà trả: ${loi}`);
       }
-      await tgSendPhotoUpload(token, chatId, bytes, caption, stop);
+      // Caption cũng là HTML có parse_mode — emoji động áp được như text thường.
+      await tgSendPhotoUpload(token, chatId, bytes, animateEmoji(caption), stop);
     } catch (err) {
       this.logger.warn(`Gửi ảnh QR trượt (chat ${chatId}): ${errText(err)}`);
     }

@@ -181,6 +181,23 @@ mới sang giai đoạn sau.
 | Lỗi mới từ API | `i18n/messages.ts` — khoá + đủ ba ngôn ngữ |
 | Chữ bot | `telegram/messages.ts` — vi là nguồn chuẩn, en/zh khai kiểu để thiếu là lỗi biên dịch |
 
+## Emoji ĐỘNG (custom emoji)
+
+Mọi tin bot gửi đi qua `animateEmoji()` (`telegram/animated-emoji.ts`): emoji
+nào có trong bảng `ANIMATED_EMOJI` được bọc thẻ `tg-emoji` và hiện ĐỘNG trên
+app khách — kể cả emoji chủ shop gõ vào **tên/mô tả sản phẩm** trong `/admin`.
+Khách xem KHÔNG cần premium; máy không render được tự rơi về emoji thường.
+
+- Bảng hiện có ~68 emoji: bộ giao diện bot + bộ hay dùng cho sản phẩm
+  (🔑💻📱🎮🎬🎵📺🤖✨🔥🚀💎👑…). Muốn thêm: tra id bằng SearchCustomEmoji
+  (cần tài khoản premium), **kiểm `alt` của document đúng emoji** rồi thêm một
+  dòng vào bảng — search trả cả emoji "liên quan", bỏ bước kiểm alt là hiện
+  SAI hình.
+- Nút bấm không nhận entity → emoji trên nút luôn tĩnh (giới hạn Telegram).
+- `animateEmoji` chừa vùng `<code>`/`<pre>` — key giao khách mà dính thẻ
+  `tg-emoji` bên trong là Telegram trả 400 cho cả tin giao hàng.
+- 🧾 💳 ⬅️ 🟡 📧 không tồn tại bản động nào (tra 25/08/2026) — đành tĩnh.
+
 ## Nhắc lại ràng buộc không được phá
 
 Toàn bộ mục "Ràng buộc không được phá" trong `CLAUDE.md` áp dụng nguyên vẹn —
