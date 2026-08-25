@@ -50,6 +50,30 @@ export const PAGE_MAX_ITEMS = 30;
  *  giá và tồn kho (nửa sau nhãn) không bao giờ bị mất. */
 const BUTTON_LABEL_MAX = 60;
 
+// ---------------------------------------------------------------- emoji động
+
+/**
+ * Emoji ĐỘNG (custom emoji) — bot gửi được qua Bot API, đã thử thật ngày
+ * 25/08/2026 (200 OK, entity được lưu; tài liệu cũ nói cần username Fragment
+ * nhưng thực nghiệm cho thấy không). Id lấy từ SearchCustomEmoji bằng tài
+ * khoản premium của chủ shop; máy khách nào không render được thì tự rơi về
+ * emoji thường bên trong thẻ.
+ *
+ * CHỈ áp cho TEXT — nút bấm không nhận entity nên emoji trên nút luôn tĩnh.
+ */
+const ANIMATED_EMOJI: Record<string, string> = {
+  '⭐': '5226928895189598791',
+  '👋': '5458904472598095631',
+};
+
+/** Bọc các emoji có bản động bằng thẻ tg-emoji — gọi SAU CÙNG, trên HTML đã dựng xong. */
+export function animateEmoji(html: string): string {
+  return html.replace(/[⭐👋]/gu, (m) => {
+    const id = ANIMATED_EMOJI[m];
+    return id ? `<tg-emoji emoji-id="${id}">${m}</tg-emoji>` : m;
+  });
+}
+
 // ---------------------------------------------------------------- chuỗi an toàn
 
 /** Escape cho parse_mode HTML — tên sản phẩm/kênh liên hệ do admin gõ tự do. */

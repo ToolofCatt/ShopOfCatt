@@ -13,6 +13,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { SettingsService } from '../settings/settings.service';
 import {
+  animateEmoji,
   parseCallback,
   renderAnnouncement,
   renderCategoryProducts,
@@ -373,7 +374,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       'sendMessage',
       {
         chat_id: chatId,
-        text,
+        text: animateEmoji(text),
         parse_mode: 'HTML',
         // Link t.me trong kênh hỗ trợ sẽ kéo preview to đùng che tin nếu không tắt.
         link_preview_options: { is_disabled: true },
@@ -587,7 +588,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           {
             chat_id: chatId,
             message_id: message.message_id,
-            text: view.text,
+            text: animateEmoji(view.text),
             parse_mode: 'HTML',
             link_preview_options: { is_disabled: true },
             reply_markup: { inline_keyboard: view.keyboard },
