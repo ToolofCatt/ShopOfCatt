@@ -906,6 +906,10 @@ export const vi = {
     telegramSendAnnouncementLabel: 'Gửi "Thông báo từ Admin" khi khách bấm /start',
     telegramSendAnnouncementHint:
       'Nội dung lấy từ hộp Thông báo trang chủ — sửa ở trang Thông báo.',
+    telegramStockAlertsLabel: 'Tự thông báo hàng mới',
+    telegramStockAlertsHint:
+      'Khi nhập thêm key cho loại đang bán, bot gửi giá, số lượng và nút mua tới những khách đã từng mở bot.',
+    telegramStockAlertsPreview: 'Xem mẫu hàng mới',
     telegramGreetingLabel: 'Lời chào tuỳ chỉnh',
     telegramGreetingHint:
       'Để trống = câu chào mặc định theo ngôn ngữ khách. Có nội dung thì dùng nguyên văn cho mọi ngôn ngữ.',

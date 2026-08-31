@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { RotateCcw, SendHorizontal } from 'lucide-react';
+import { PackagePlus, RotateCcw, SendHorizontal } from 'lucide-react';
 import type { TelegramPreviewDto } from '@webcatt/shared';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -178,6 +178,34 @@ export function TelegramSimulator({
     setError(t.admin.telegramSimBuyNote);
   };
 
+  const showStockAlert = async () => {
+    if (!token) return;
+    setError(null);
+    setTyping(true);
+    try {
+      const data = await fetchPreview(lang, 1);
+      if (!data.screens['stock-alert']) {
+        setError(t.admin.telegramSimBuyNote);
+        return;
+      }
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId.current++,
+          from: 'bot',
+          kind: 'screens',
+          data,
+          view: 'stock-alert',
+          time: gioBayGio(),
+        },
+      ]);
+    } catch {
+      setError(t.common.connectionError);
+    } finally {
+      setTyping(false);
+    }
+  };
+
   const tenBot = botName ?? t.admin.telegramSimBotName;
 
   return (
@@ -192,17 +220,28 @@ export function TelegramSimulator({
           value={lang}
           onChange={setLang}
         />
-        <button
-          type="button"
-          onClick={() => {
-            setMessages([]);
-            void sendCustomer('/start', lang);
-          }}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-950"
-        >
-          <RotateCcw strokeWidth={1.75} className="h-3.5 w-3.5" />
-          {t.admin.telegramSimReset}
-        </button>
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => void showStockAlert()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-950"
+          >
+            <PackagePlus strokeWidth={1.75} className="h-3.5 w-3.5" />
+            {t.admin.telegramStockAlertsPreview}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setMessages([]);
+              void sendCustomer('/start', lang);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-950"
+            title={t.admin.telegramSimReset}
+            aria-label={t.admin.telegramSimReset}
+          >
+            <RotateCcw strokeWidth={1.75} className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* ------------------------- khung điện thoại ------------------------- */}

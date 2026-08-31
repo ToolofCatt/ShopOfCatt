@@ -51,6 +51,7 @@ import {
 } from './order-view';
 import { botDict } from './messages';
 import { TelegramService } from './telegram.service';
+import { renderStockAlert } from './stock-alert-view';
 import type { TgInlineKeyboard } from './telegram-api';
 import {
   DEPOSIT_VND_OPTIONS,
@@ -249,6 +250,30 @@ export class TelegramAdminController {
     dua('lg', renderLanguageMenu(lang));
     dua('a', renderAccount({ name: 'Khách', code: 100000, balance: 0, spentUsdt: 0, doneCount: 0 }, lang, rates));
     dua('o', renderOrderList([], lang, rates));
+
+    const stockProduct = products.find((product) => product.variants.length > 0);
+    const stockVariant = stockProduct?.variants[0];
+    if (stockProduct && stockVariant) {
+      dua(
+        'stock-alert',
+        renderStockAlert(
+          {
+            productId: stockProduct.id,
+            productName: stockProduct.name,
+            variantName: stockVariant.name,
+            price: stockVariant.price,
+            priceCurrency: stockVariant.priceCurrency,
+            priceAmount: stockVariant.priceAmount,
+            added: 5,
+            total: Math.max(5, stockVariant.availableStock),
+            createdAt: new Date(),
+          },
+          lang,
+          rates,
+          this.telegram.getStatus().botUsername ?? '@cattstore_shop_bot',
+        ),
+      );
+    }
 
     const depositMethods = enabledMethods
       .map((entry) => entry.method)

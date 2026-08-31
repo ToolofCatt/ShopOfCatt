@@ -53,6 +53,7 @@ import {
   type MenuAction,
 } from './wallet-view';
 import { botDict, botLang, type BotLang } from './messages';
+import { renderStockAlert } from './stock-alert-view';
 import {
   TelegramApiError,
   isTelegramTokenRejected,
@@ -111,6 +112,9 @@ const NOTIFY_MS = 15_000;
 
 /** Mỗi lượt đẩy tối đa bấy nhiêu đơn — phần dư sang lượt sau, khỏi giữ vòng lặp lâu. */
 const NOTIFY_BATCH = 10;
+
+/** Marketing gửi chậm có chủ đích: dưới hạn mức toàn cục của Bot API. */
+const STOCK_ALERT_BATCH = 10;
 
 /**
  * Bot Telegram bán hàng — khung Giai đoạn 1 (xem docs/BOT-TELEGRAM.md).
@@ -1245,6 +1249,93 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           }
         }
       }
+
+      // Thông báo hàng mới là outbox theo từng khách. Một chat chặn bot không
+      // được làm kẹt những khách còn lại; lỗi mạng thì dừng lượt để thử lại sau.
+      const stockRecipients = await this.prisma.telegramStockAlertRecipient.findMany({
+        where: { sentAt: null, failedAt: null },
+        select: {
+          alertId: true,
+          userId: true,
+          lang: true,
+          user: { select: { telegramChatId: true } },
+          alert: true,
+        },
+        orderBy: { createdAt: 'asc' },
+        take: STOCK_ALERT_BATCH,
+      });
+      const stockRates = stockRecipients.length > 0
+        ? await this.settings.getPublicRates()
+        : null;
+      for (const recipient of stockRecipients) {
+        if (this.activeToken !== token) return;
+        const chatId = Number(recipient.user.telegramChatId);
+        const lang: BotLang = (['vi', 'en', 'zh'] as readonly string[]).includes(
+          recipient.lang,
+        )
+          ? (recipient.lang as BotLang)
+          : 'vi';
+        if (!Number.isSafeInteger(chatId)) {
+          await this.markStockAlertFailed(
+            recipient.alertId,
+            recipient.userId,
+            'Telegram chat ID không hợp lệ',
+          );
+          continue;
+        }
+        try {
+          const view = renderStockAlert(
+            {
+              productId: recipient.alert.productId,
+              productName: recipient.alert.productName,
+              variantName: recipient.alert.variantName,
+              price: Number(recipient.alert.price),
+              priceCurrency: recipient.alert.priceCurrency as 'USDT' | 'VND' | 'USD' | 'CNY',
+              priceAmount: Number(recipient.alert.priceAmount),
+              added: recipient.alert.added,
+              total: recipient.alert.total,
+              createdAt: recipient.alert.createdAt,
+            },
+            lang,
+            stockRates,
+            this.botUsername,
+          );
+          await this.sendHtml(token, chatId, view.text, view.keyboard, this.stopController.signal);
+          await this.prisma.telegramStockAlertRecipient.updateMany({
+            where: {
+              alertId: recipient.alertId,
+              userId: recipient.userId,
+              sentAt: null,
+              failedAt: null,
+            },
+            data: { sentAt: new Date(), lastError: null },
+          });
+        } catch (err) {
+          if (
+            err instanceof TelegramApiError &&
+            (err.code === 400 || err.code === 403)
+          ) {
+            await this.markStockAlertFailed(
+              recipient.alertId,
+              recipient.userId,
+              errText(err),
+            );
+            continue;
+          }
+          // 429/5xx/mất mạng là lỗi tạm thời. Dừng cả batch để không dội thêm
+          // request vào Telegram và giữ người nhận này cho lượt sau.
+          this.logger.warn(`Báo hàng mới trượt: ${errText(err)}`);
+          break;
+        }
+      }
+
+      // Giữ lịch sử 30 ngày để soi lỗi, sau đó dọn alert đã xử lý hết.
+      await this.prisma.telegramStockAlert.deleteMany({
+        where: {
+          createdAt: { lt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1_000) },
+          recipients: { none: { sentAt: null, failedAt: null } },
+        },
+      });
     } catch (err) {
       this.logger.warn(`Vòng đẩy key trượt: ${errText(err)}`);
     } finally {
@@ -1262,6 +1353,17 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.logger.warn(`Đánh dấu đã báo đơn ${orderId} trượt: ${errText(err)}`);
     }
+  }
+
+  private async markStockAlertFailed(
+    alertId: string,
+    userId: string,
+    reason: string,
+  ): Promise<void> {
+    await this.prisma.telegramStockAlertRecipient.updateMany({
+      where: { alertId, userId, sentAt: null, failedAt: null },
+      data: { failedAt: new Date(), lastError: reason.slice(0, 500) },
+    });
   }
 
   /**

@@ -1,6 +1,6 @@
 # Bot Telegram bán hàng — thiết kế và lộ trình
 
-> Trạng thái: **Giai đoạn 2 (duyệt hàng) đã xong.** Bố cục theo mẫu chủ shop
+> Trạng thái: **Bot bán hàng, thanh toán, ví và giao key tự động đã chạy.** Bố cục theo mẫu chủ shop
 > chốt (kiểu bot "Piggy AI Premium"): /start → tin "Thông báo từ Admin" (từ hộp
 > thông báo trang chủ) + tin chào; sản phẩm là NÚT BẤM inline — nhãn
 > `{tên} | {giá} | 📦 {tồn kho}` — bấm vào là chi tiết (các loại, giá neo theo
@@ -59,6 +59,11 @@
 > `telegramLangChosen` — đã tự chọn thì language_code của app không ghi đè nữa.
 > Preview /admin/telegram đổi sang BẢN ĐỒ MÀN HÌNH (`screens` khoá theo
 > callback_data) — giả lập tra khoá, không chép logic điều hướng.
+> **Thông báo hàng mới đã có**: nhập thêm ít nhất một key vào sản phẩm/loại đang
+> bán sẽ tạo outbox theo từng khách Telegram trong cùng transaction với kho.
+> Worker gửi theo lô, đúng ngôn ngữ và giá hiển thị của khách, kèm logo dịch vụ
+> động + nút mua thẳng sản phẩm. Dòng trùng, loại đã tắt, sản phẩm đã tắt và
+> khách bị khoá không được phát tin. Công tắc và preview nằm ở `/admin/telegram`.
 > Tiếp theo: GĐ5 (báo chủ shop: đơn mới/kẹt/kho cạn vào chat riêng).
 
 Mục tiêu: khách duyệt sản phẩm, đặt đơn, thanh toán và **nhận key ngay trong

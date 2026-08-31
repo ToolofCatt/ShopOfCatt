@@ -158,6 +158,14 @@ const vi = {
   langChoose: 'Chọn ngôn ngữ bên dưới:',
   langNames: { vi: '🇻🇳 Tiếng Việt', en: '🇬🇧 English', zh: '🇨🇳 中文' } as Record<string, string>,
   langSet: (name: string) => `✅ Đã chuyển sang ${name}.`,
+  stockAlertTitle: '🆕 HÀNG MỚI VỀ!',
+  stockAlertProductLabel: 'Sản phẩm',
+  stockAlertAdded: (n: number) => `📥 Vừa thêm: ${n}`,
+  stockAlertPrice: (price: string) => `💵 Giá: ${price}`,
+  stockAlertInventory: (n: number) => `📦 Tồn kho hiện tại: ${n}`,
+  stockAlertTime: (time: string) => `⏰ Thời gian: ${time}`,
+  stockAlertOrderAt: (username: string) => `🛒 Đặt hàng tại ${username}`,
+  stockAlertBuyButton: '🛒 Mua ngay',
 };
 
 type BotDictionary = typeof vi;
@@ -303,6 +311,14 @@ const en: BotDictionary = {
   langChoose: 'Pick a language below:',
   langNames: { vi: '🇻🇳 Tiếng Việt', en: '🇬🇧 English', zh: '🇨🇳 中文' } as Record<string, string>,
   langSet: (name: string) => `✅ Switched to ${name}.`,
+  stockAlertTitle: '🆕 BACK IN STOCK!',
+  stockAlertProductLabel: 'Product',
+  stockAlertAdded: (n: number) => `📥 Newly added: ${n}`,
+  stockAlertPrice: (price: string) => `💵 Price: ${price}`,
+  stockAlertInventory: (n: number) => `📦 Available now: ${n}`,
+  stockAlertTime: (time: string) => `⏰ Time: ${time}`,
+  stockAlertOrderAt: (username: string) => `🛒 Order at ${username}`,
+  stockAlertBuyButton: '🛒 Buy now',
 };
 
 const zh: BotDictionary = {
@@ -442,6 +458,14 @@ const zh: BotDictionary = {
   langChoose: '请选择语言：',
   langNames: { vi: '🇻🇳 Tiếng Việt', en: '🇬🇧 English', zh: '🇨🇳 中文' } as Record<string, string>,
   langSet: (name: string) => `✅ 已切换为 ${name}。`,
+  stockAlertTitle: '🆕 商品到货！',
+  stockAlertProductLabel: '商品',
+  stockAlertAdded: (n: number) => `📥 新增：${n}`,
+  stockAlertPrice: (price: string) => `💵 价格：${price}`,
+  stockAlertInventory: (n: number) => `📦 当前库存：${n}`,
+  stockAlertTime: (time: string) => `⏰ 时间：${time}`,
+  stockAlertOrderAt: (username: string) => `🛒 下单：${username}`,
+  stockAlertBuyButton: '🛒 立即购买',
 };
 
 const DICTIONARIES: Record<BotLang, BotDictionary> = { vi, en, zh };

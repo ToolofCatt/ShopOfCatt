@@ -853,6 +853,10 @@ export const zh: Dictionary = {
     telegramStatusRefresh: '刷新',
     telegramSendAnnouncementLabel: '顾客发送 /start 时附带"管理员公告"',
     telegramSendAnnouncementHint: '内容取自首页公告框——请在公告页面编辑。',
+    telegramStockAlertsLabel: '自动发送到货通知',
+    telegramStockAlertsHint:
+      '为在售规格补充密钥后，机器人会向曾使用过机器人的客户发送价格、数量和购买按钮。',
+    telegramStockAlertsPreview: '预览到货通知',
     telegramGreetingLabel: '自定义问候语',
     telegramGreetingHint: '留空 = 按顾客语言使用默认问候语。填写后对所有语言原样使用。',
     telegramPreviewTitle: '与机器人试聊',

@@ -333,6 +333,8 @@ export interface AdminStoreSettingDto {
   telegramBotTokenHint: string;
   /** Gửi kèm tin "Thông báo từ Admin" (hộp thông báo trang chủ) khi khách /start. */
   telegramSendAnnouncement: boolean;
+  /** Tự gửi tin hàng mới tới những khách đã từng mở bot. */
+  telegramStockAlertsEnabled: boolean;
   /** Lời chào tuỳ chỉnh của bot; rỗng = câu mặc định theo ngôn ngữ khách. */
   telegramGreeting: string;
   /** Các kênh liên hệ hiển thị ở khối "Quên mật khẩu". */

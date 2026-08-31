@@ -887,6 +887,10 @@ export const en: Dictionary = {
     telegramSendAnnouncementLabel: 'Send the "Announcement from Admin" on /start',
     telegramSendAnnouncementHint:
       'Content comes from the homepage announcement box — edit it on the Announcement page.',
+    telegramStockAlertsLabel: 'Send restock alerts automatically',
+    telegramStockAlertsHint:
+      'When keys are added to an active option, the bot sends its price, quantity and buy button to previous bot customers.',
+    telegramStockAlertsPreview: 'Preview restock alert',
     telegramGreetingLabel: 'Custom greeting',
     telegramGreetingHint:
       'Leave empty for the default greeting per customer language. If set, it is used verbatim for all languages.',

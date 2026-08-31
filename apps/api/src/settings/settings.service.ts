@@ -217,6 +217,7 @@ export class SettingsService {
     enabled: boolean;
     token: string;
     sendAnnouncement: boolean;
+    stockAlertsEnabled: boolean;
     greeting: string;
   }> {
     const setting = await this.getSetting();
@@ -224,6 +225,7 @@ export class SettingsService {
       enabled: setting.telegramBotEnabled,
       token: setting.telegramBotToken.trim(),
       sendAnnouncement: setting.telegramSendAnnouncement,
+      stockAlertsEnabled: setting.telegramStockAlertsEnabled,
       greeting: setting.telegramGreeting.trim(),
     };
   }
@@ -256,6 +258,8 @@ export class SettingsService {
         telegramBotToken: token === undefined ? before.telegramBotToken : token,
         telegramSendAnnouncement:
           dto.telegramSendAnnouncement ?? before.telegramSendAnnouncement,
+        telegramStockAlertsEnabled:
+          dto.telegramStockAlertsEnabled ?? before.telegramStockAlertsEnabled,
         telegramGreeting:
           dto.telegramGreeting === undefined
             ? before.telegramGreeting
@@ -539,6 +543,7 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     telegramBotTokenSet: setting.telegramBotToken.trim() !== '',
     telegramBotTokenHint: setting.telegramBotToken.trim().slice(-4),
     telegramSendAnnouncement: setting.telegramSendAnnouncement,
+    telegramStockAlertsEnabled: setting.telegramStockAlertsEnabled,
     telegramGreeting: setting.telegramGreeting,
     aiProvider: normalizeProvider(setting.aiProvider),
     aiBaseUrl: setting.aiBaseUrl,
@@ -575,6 +580,7 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
     telegramBotEnabled: setting.telegramBotEnabled,
     telegramBotTokenSet: setting.telegramBotToken.trim() !== '',
     telegramSendAnnouncement: setting.telegramSendAnnouncement,
+    telegramStockAlertsEnabled: setting.telegramStockAlertsEnabled,
     telegramGreeting: setting.telegramGreeting,
     aiProvider: setting.aiProvider,
     aiBaseUrl: setting.aiBaseUrl,

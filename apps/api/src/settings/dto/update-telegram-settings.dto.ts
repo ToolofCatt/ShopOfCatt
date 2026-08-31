@@ -33,6 +33,10 @@ export class UpdateTelegramSettingsDto {
   telegramSendAnnouncement?: boolean;
 
   @IsOptional()
+  @IsBoolean({ message: K.adminSettingsFlagInvalid })
+  telegramStockAlertsEnabled?: boolean;
+
+  @IsOptional()
   @IsString({ message: K.adminTelegramGreetingTooLong })
   @MaxLength(TELEGRAM_GREETING_MAX_LENGTH, {
     message: K.adminTelegramGreetingTooLong,

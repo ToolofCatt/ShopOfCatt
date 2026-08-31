@@ -792,7 +792,15 @@ export class AdminService {
   ): Promise<AddStockResponse> {
     const variant = await this.prisma.productVariant.findUnique({
       where: { id: variantId },
-      select: { id: true, name: true, product: { select: { name: true } } },
+      select: {
+        id: true,
+        name: true,
+        active: true,
+        price: true,
+        priceCurrency: true,
+        priceAmount: true,
+        product: { select: { id: true, name: true, active: true } },
+      },
     });
     if (!variant) {
       throw new NotFoundException(K.variantNotFound);
@@ -827,13 +835,64 @@ export class AdminService {
       toInsert = lines;
     }
 
-    if (toInsert.length > 0) {
-      await this.prisma.stockItem.createMany({
-        data: toInsert.map((content) => ({ variantId, content })),
+    const total = await this.prisma.$transaction(async (tx) => {
+      if (toInsert.length > 0) {
+        await tx.stockItem.createMany({
+          data: toInsert.map((content) => ({ variantId, content })),
+        });
+      }
+      const available = await tx.stockItem.count({
+        where: { variantId, status: 'AVAILABLE' },
       });
-    }
-    const total = await this.prisma.stockItem.count({
-      where: { variantId, status: 'AVAILABLE' },
+
+      /*
+       * Xếp thông báo trong CÙNG transaction với key mới: API chết sau commit
+       * thì worker vẫn gửi được; transaction trượt thì tuyệt đối không có tin
+       * "hàng mới" cho số key chưa từng vào kho.
+       */
+      if (toInsert.length > 0 && variant.active && variant.product.active) {
+        const setting = await tx.storeSetting.findUnique({
+          where: { id: 'main' },
+          select: {
+            telegramBotEnabled: true,
+            telegramBotToken: true,
+            telegramStockAlertsEnabled: true,
+          },
+        });
+        if (
+          setting?.telegramBotEnabled &&
+          setting.telegramBotToken.trim() !== '' &&
+          setting.telegramStockAlertsEnabled
+        ) {
+          const recipients = await tx.user.findMany({
+            where: { role: 'USER', lockedAt: null, telegramChatId: { not: null } },
+            select: { id: true, telegramLang: true },
+          });
+          if (recipients.length > 0) {
+            await tx.telegramStockAlert.create({
+              data: {
+                productId: variant.product.id,
+                productName: variant.product.name,
+                variantName: variant.name,
+                price: variant.price,
+                priceCurrency: variant.priceCurrency,
+                priceAmount: variant.priceAmount,
+                added: toInsert.length,
+                total: available,
+                recipients: {
+                  createMany: {
+                    data: recipients.map((recipient) => ({
+                      userId: recipient.id,
+                      lang: recipient.telegramLang,
+                    })),
+                  },
+                },
+              },
+            });
+          }
+        }
+      }
+      return available;
     });
     await this.audit.log(
       actor,

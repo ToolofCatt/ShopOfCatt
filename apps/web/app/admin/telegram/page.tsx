@@ -29,6 +29,7 @@ export default function AdminTelegramPage() {
   // Ô token: rỗng nghĩa là "giữ token cũ" — token thật không bao giờ xuống đây.
   const [tokenInput, setTokenInput] = useState('');
   const [sendAnnouncement, setSendAnnouncement] = useState(true);
+  const [stockAlertsEnabled, setStockAlertsEnabled] = useState(true);
   const [greeting, setGreeting] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -41,6 +42,7 @@ export default function AdminTelegramPage() {
     setSettings(next);
     setEnabled(next.telegramBotEnabled);
     setSendAnnouncement(next.telegramSendAnnouncement);
+    setStockAlertsEnabled(next.telegramStockAlertsEnabled);
     setGreeting(next.telegramGreeting);
     setTokenInput('');
   };
@@ -91,6 +93,7 @@ export default function AdminTelegramPage() {
         body: {
           telegramBotEnabled: enabled,
           telegramSendAnnouncement: sendAnnouncement,
+          telegramStockAlertsEnabled: stockAlertsEnabled,
           telegramGreeting: greeting.trim(),
           // Rỗng = giữ token cũ; máy chủ phân biệt bằng việc KHÔNG gửi trường.
           ...(tokenInput.trim() === '' ? {} : { telegramBotToken: tokenInput.trim() }),
@@ -235,6 +238,17 @@ export default function AdminTelegramPage() {
             }}
             label={t.admin.telegramSendAnnouncementLabel}
             hint={t.admin.telegramSendAnnouncementHint}
+          />
+
+          <ToggleRow
+            id="telegram-stock-alerts"
+            checked={stockAlertsEnabled}
+            onChange={(checked) => {
+              setStockAlertsEnabled(checked);
+              setSaved(false);
+            }}
+            label={t.admin.telegramStockAlertsLabel}
+            hint={t.admin.telegramStockAlertsHint}
           />
 
           <Field
