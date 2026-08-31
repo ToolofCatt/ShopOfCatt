@@ -51,6 +51,8 @@ export const zh: Dictionary = {
     breadcrumbHome: '首页',
     descriptionTitle: '商品详情',
     viewImage: (n: number) => `查看第 ${n} 张图片`,
+    previousImage: '上一张图片',
+    nextImage: '下一张图片',
     noDescription: '该商品暂无详情。',
     outOfStock: '缺货',
     inStockShort: (n: number) => `剩 ${n}`,

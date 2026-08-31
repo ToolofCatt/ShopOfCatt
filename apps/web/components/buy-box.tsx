@@ -17,7 +17,7 @@ import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { usePrices } from '@/lib/prices';
 import { useI18n } from '@/lib/i18n/client';
-import { Button, Card, Input, Label } from '@/components/ui';
+import { Badge, Button, Card, Input, Label } from '@/components/ui';
 import { VariantSelector } from '@/components/variant-selector';
 import { PaymentMethodTabs } from '@/components/payment-method-tabs';
 
@@ -96,9 +96,9 @@ export function BuyBox({ product }: { product: ProductDto }) {
     };
   }, []);
 
-  /** Tên các phương thức, gộp BEP20/TRC20 thành một dòng "USDT (BEP20, TRC20)". */
-  const paymentLabel = useMemo(() => {
-    if (!methods || methods.length === 0) return null;
+  /** Tên các phương thức, gộp BEP20/TRC20 thành một nhãn "USDT (BEP20, TRC20)". */
+  const paymentLabels = useMemo(() => {
+    if (!methods || methods.length === 0) return [];
     const parts: string[] = [];
     if (methods.includes('binance_pay')) parts.push(t.product.payBinancePay);
     if (methods.includes('binance_id')) parts.push(t.product.payBinanceId);
@@ -109,7 +109,7 @@ export function BuyBox({ product }: { product: ProductDto }) {
     ].filter(Boolean);
     if (networks.length > 0) parts.push(t.product.payCrypto(networks.join(', ')));
     if (methods.includes('mock')) parts.push(t.product.payMock);
-    return parts.join(' · ');
+    return parts;
   }, [methods, t.product]);
 
   /** Chưa bật phương thức nào → đặt hàng chắc chắn lỗi 503, chặn ngay tại đây. */
@@ -258,13 +258,17 @@ export function BuyBox({ product }: { product: ProductDto }) {
   };
 
   return (
-    <Card className="space-y-5 p-5 shadow-sm">
+    <Card className="space-y-6 rounded-lg border-neutral-300 p-5 shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:p-6">
       {/*
-        Dưới giá từng có dòng "Còn N sản phẩm · Đã bán N". Bỏ theo yêu cầu chủ
-        shop: tồn kho đã hiện ở nhãn từng loại và ở dòng "Tối đa N" dưới ô số
-        lượng, còn trạng thái hết hàng thì nút mua tự đổi chữ.
+        Tổng đã bán nằm cạnh tiêu đề sản phẩm; hộp mua chỉ nêu trạng thái của
+        loại đang chọn để khách không hiểu nhầm tổng kho là kho của một loại.
       */}
-      <p className="text-3xl font-semibold tabular-nums tracking-tight">{priceLabel}</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <p className="text-3xl font-semibold tabular-nums text-neutral-950">{priceLabel}</p>
+        <Badge variant={outOfStock ? 'muted' : 'success'} className="mt-1">
+          {outOfStock ? t.product.outOfStock : t.product.inStockShort(availableStock)}
+        </Badge>
+      </div>
 
       {variants.length > 1 && (
         <VariantSelector
@@ -356,7 +360,7 @@ export function BuyBox({ product }: { product: ProductDto }) {
             )}
           </div>
 
-          <div className="space-y-1 border-t border-neutral-100 pt-4">
+          <div className="space-y-1 border-t border-neutral-200 pt-4">
             {coupon && (
               <>
                 <div className="flex items-center justify-between text-sm text-neutral-500">
@@ -381,7 +385,7 @@ export function BuyBox({ product }: { product: ProductDto }) {
 
       <div className="space-y-2">
         <Button
-          className="w-full"
+          className="h-12 w-full text-base"
           loading={submitting}
           disabled={outOfStock || noPaymentMethod}
           onClick={() => void handleBuy()}
@@ -402,17 +406,12 @@ export function BuyBox({ product }: { product: ProductDto }) {
       </div>
 
       {/*
-        Dòng "Giao tự động ngay sau khi thanh toán" đã bỏ theo yêu cầu chủ shop.
-        Khối này phải bọc trong điều kiện: nó có đường kẻ trên: còn mỗi nhãn
-        phương thức thanh toán, mà nhãn đó rỗng khi cửa hàng chưa bật phương
-        thức nào — không bọc thì đáy thẻ hiện một vạch kẻ thừa không nội dung.
-      */}
-      {/*
         Nhiều phương thức thì cho chọn hẳn; chỉ một thì nêu tên cho khách biết
-        mình sẽ trả bằng gì, không cần bắt chọn giữa một lựa chọn.
+        mình sẽ trả bằng gì, không cần bắt chọn giữa một lựa chọn. Khi hết hàng
+        vẫn giữ các nhãn để khách biết cửa hàng hỗ trợ cách thanh toán nào.
       */}
       {methods && methods.length > 1 && !outOfStock ? (
-        <div className="space-y-2 border-t border-neutral-100 pt-4">
+        <div className="space-y-2 border-t border-neutral-200 pt-4">
           <Label htmlFor="pay-method">{t.checkout.methodTitle}</Label>
           <PaymentMethodTabs
             methods={methods}
@@ -422,12 +421,22 @@ export function BuyBox({ product }: { product: ProductDto }) {
           />
         </div>
       ) : (
-        paymentLabel && (
-          <div className="border-t border-neutral-100 pt-4 text-sm text-neutral-500">
-            <p className="flex items-center gap-2">
+        paymentLabels.length > 0 && (
+          <div className="space-y-2.5 border-t border-neutral-200 pt-4">
+            <p className="flex items-center gap-2 text-sm font-medium text-neutral-800">
               <Wallet className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-              {paymentLabel}
+              {t.checkout.methodTitle}
             </p>
+            <div className="flex flex-wrap gap-2">
+              {paymentLabels.map((label) => (
+                <span
+                  key={label}
+                  className="rounded-md border border-neutral-200 bg-neutral-50 px-2.5 py-1.5 text-xs font-medium text-neutral-600"
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
           </div>
         )
       )}

@@ -37,31 +37,56 @@ export function VariantSelector({ variants, selectedId, onSelect }: VariantSelec
               disabled={soldOut}
               onClick={() => onSelect(variant)}
               className={cn(
-                'flex w-full items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                'flex min-h-16 w-full items-center justify-between gap-3 rounded-lg border p-3 text-left transition-colors',
                 'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950',
                 soldOut
-                  ? 'cursor-not-allowed border-neutral-200 bg-neutral-50 opacity-60'
+                  ? 'cursor-not-allowed border-neutral-200 bg-neutral-50 text-neutral-400'
                   : selected
-                    ? 'cursor-pointer border-neutral-950 bg-neutral-50'
-                    : 'cursor-pointer border-neutral-300 hover:border-neutral-500',
+                    ? 'cursor-pointer border-neutral-950 bg-neutral-50 shadow-[inset_3px_0_0_#0a0a0a]'
+                    : 'cursor-pointer border-neutral-300 bg-white hover:border-neutral-600',
               )}
             >
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-neutral-950">
-                  {variant.name}
+              <span className="flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className={cn(
+                    'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border',
+                    selected && !soldOut ? 'border-neutral-950' : 'border-neutral-300',
+                  )}
+                >
+                  {selected && !soldOut && (
+                    <span className="h-2 w-2 rounded-full bg-neutral-950" />
+                  )}
                 </span>
-                <span className="mt-0.5 block text-sm font-semibold tabular-nums text-neutral-950">
-                  {price(variant).primary}
+                <span className="min-w-0">
+                  <span
+                    className={cn(
+                      'block truncate text-sm font-medium',
+                      soldOut ? 'text-neutral-500' : 'text-neutral-950',
+                    )}
+                  >
+                    {variant.name}
+                  </span>
+                  <span className="mt-1 block">
+                    {soldOut ? (
+                      <Badge variant="muted">{t.product.outOfStock}</Badge>
+                    ) : (
+                      <Badge variant={selected ? 'solid' : 'outline'}>
+                        {t.product.inStockShort(variant.availableStock)}
+                      </Badge>
+                    )}
+                  </span>
                 </span>
               </span>
 
-              {soldOut ? (
-                <Badge variant="muted">{t.product.outOfStock}</Badge>
-              ) : (
-                <Badge variant={selected ? 'solid' : 'outline'}>
-                  {t.product.inStockShort(variant.availableStock)}
-                </Badge>
-              )}
+              <span
+                className={cn(
+                  'shrink-0 text-sm font-semibold tabular-nums',
+                  soldOut ? 'text-neutral-500' : 'text-neutral-950',
+                )}
+              >
+                {price(variant).primary}
+              </span>
             </button>
           );
         })}

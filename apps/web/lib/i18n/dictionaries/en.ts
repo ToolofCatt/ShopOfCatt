@@ -51,6 +51,8 @@ export const en: Dictionary = {
     breadcrumbHome: 'Home',
     descriptionTitle: 'Product description',
     viewImage: (n: number) => `View image ${n}`,
+    previousImage: 'Previous image',
+    nextImage: 'Next image',
     noDescription: 'No description for this product yet.',
     outOfStock: 'Out of stock',
     inStockShort: (n: number) => `${n} left`,

@@ -2,7 +2,13 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ChevronRight } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  PackageCheck,
+  PackageX,
+  ShoppingBag,
+} from 'lucide-react';
 import type { ProductDto } from '@webcatt/shared';
 import { BuyBox } from '@/components/buy-box';
 import { useI18n } from '@/lib/i18n/client';
@@ -40,8 +46,23 @@ export function renderDescription(description: string): ReactNode[] {
       );
     }
 
+    // Seed và nội dung admin thường viết "Tiêu đề:" rồi mới tới các gạch đầu
+    // dòng. Ghép cả block thành một câu làm dấu "-" nằm giữa đoạn rất khó đọc.
+    if (lines.length > 1 && lines.slice(1).every((line) => line.startsWith('- '))) {
+      return (
+        <div key={blockIndex} className="space-y-2">
+          <p className="font-medium text-neutral-900">{lines[0]}</p>
+          <ul className="list-disc space-y-1.5 pl-5 leading-7 text-neutral-600">
+            {lines.slice(1).map((line, lineIndex) => (
+              <li key={lineIndex}>{line.slice(2)}</li>
+            ))}
+          </ul>
+        </div>
+      );
+    }
+
     return (
-      <p key={blockIndex} className="leading-relaxed text-neutral-600">
+      <p key={blockIndex} className="leading-7 text-neutral-600">
         {lines.join(' ')}
       </p>
     );
@@ -124,7 +145,7 @@ export function ProductDetail({ product }: { product: ProductDto }) {
         {product.category && (
           <>
             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" strokeWidth={1.75} />
-            <span>{product.category}</span>
+            <span className="shrink-0 whitespace-nowrap">{product.category}</span>
           </>
         )}
         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-neutral-400" strokeWidth={1.75} />
@@ -137,30 +158,52 @@ export function ProductDetail({ product }: { product: ProductDto }) {
         NGAY, không phải cuộn qua hết mô tả dài mới tới. Từ @3xl trở lên, các ô
         được đặt lại vào lưới hai cột nên bố cục máy tính giữ nguyên như cũ.
       */}
-      <div className="mt-6 grid gap-x-8 gap-y-6 @3xl:grid-cols-[1fr_380px] @3xl:grid-rows-[auto_1fr] @3xl:items-start">
+      <div className="mt-7 grid gap-x-10 gap-y-8 @3xl:grid-cols-[minmax(0,1fr)_400px] @3xl:grid-rows-[auto_1fr] @3xl:items-start">
         <div className="@3xl:col-start-1 @3xl:row-start-1">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{product.name}</h1>
+          <h1 className="max-w-3xl text-3xl font-semibold text-neutral-950 sm:text-4xl">
+            {product.name}
+          </h1>
           {product.shortDescription && (
-            <p className="mt-2 text-neutral-500">{product.shortDescription}</p>
+            <p className="mt-3 max-w-2xl leading-7 text-neutral-600">
+              {product.shortDescription}
+            </p>
           )}
 
+          <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+            {product.sold > 0 && (
+              <span className="inline-flex items-center gap-2 font-medium text-neutral-700">
+                <ShoppingBag className="h-4 w-4 text-neutral-500" strokeWidth={1.75} />
+                {t.product.sold(product.sold)}
+              </span>
+            )}
+            <span
+              className={cn(
+                'inline-flex items-center gap-2 font-medium',
+                outOfStock ? 'text-neutral-500' : 'text-emerald-700',
+              )}
+            >
+              {outOfStock ? (
+                <PackageX className="h-4 w-4" strokeWidth={1.75} />
+              ) : (
+                <PackageCheck className="h-4 w-4" strokeWidth={1.75} />
+              )}
+              {outOfStock
+                ? t.product.outOfStock
+                : t.product.inStockShort(product.availableStock)}
+            </span>
+          </div>
+
           {gallery.length > 0 && (
-            <div className={`mt-6 ${outOfStock ? 'opacity-50 grayscale' : ''}`}>
+            <div className="mt-7">
               {/*
-                KHUNG CAO CỐ ĐỊNH, ảnh `object-contain` bên trong.
+                KHUNG TỈ LỆ CỐ ĐỊNH, ảnh `object-contain` bên trong.
 
-                Hai lần trước đều sai theo hai kiểu khác nhau: khung cứng 16:9 +
-                `object-cover` thì cắt mất mép ảnh; đổi sang chỉ đặt `max-h` thì
-                khung co theo từng ảnh, nên chuyển ảnh ngang sang ảnh vuông là
-                cả phần mô tả bên dưới nhảy lên nhảy xuống. Cố định chiều cao
-                khung rồi cho ảnh vừa vào trong là được cả hai: không cắt, và
-                không có gì dịch chuyển.
-
-                Chiều cao theo `@container` vì component này còn chạy trong
-                khung xem trước rộng ~380px của trang quản trị.
+                4:3 giữ bố cục ổn định ở cả trang thật lẫn preview admin. Không
+                làm xám ảnh khi hết hàng: trạng thái mua nằm ở bên phải, còn ảnh
+                vẫn phải đủ rõ để khách nhận diện đúng sản phẩm.
               */}
               <div
-                className="relative h-64 overflow-hidden rounded-lg bg-neutral-100 @xl:h-[360px] @3xl:h-[420px]"
+                className="relative aspect-[4/3] overflow-hidden rounded-lg border border-neutral-200 bg-neutral-50"
                 onMouseEnter={() => setPaused(true)}
                 onMouseLeave={() => setPaused(false)}
                 onFocus={() => setPaused(true)}
@@ -177,7 +220,7 @@ export function ProductDetail({ product }: { product: ProductDto }) {
                   {gallery.map((source, index) => (
                     <div
                       key={index}
-                      className="flex h-full w-full shrink-0 items-center justify-center p-2"
+                      className="flex h-full w-full shrink-0 items-center justify-center p-6 @xl:p-10"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
@@ -186,15 +229,41 @@ export function ProductDetail({ product }: { product: ProductDto }) {
                         // Ảnh đầu tải ngay vì nó nằm trong màn hình đầu tiên;
                         // các ảnh sau nằm ngoài khung nên để trình duyệt hoãn.
                         loading={index === 0 ? 'eager' : 'lazy'}
-                        className="max-h-full max-w-full rounded object-contain"
+                        className="max-h-full max-w-full rounded-md object-contain"
                       />
                     </div>
                   ))}
                 </div>
+
+                {gallery.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label={t.product.previousImage}
+                      title={t.product.previousImage}
+                      onClick={() => setSelected((current - 1 + gallery.length) % gallery.length)}
+                      className="absolute left-3 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-700 shadow-sm transition-colors hover:bg-neutral-950 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950"
+                    >
+                      <ChevronLeft className="h-5 w-5" strokeWidth={1.75} />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t.product.nextImage}
+                      title={t.product.nextImage}
+                      onClick={() => setSelected((current + 1) % gallery.length)}
+                      className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full border border-neutral-200 bg-white text-neutral-700 shadow-sm transition-colors hover:bg-neutral-950 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950"
+                    >
+                      <ChevronRight className="h-5 w-5" strokeWidth={1.75} />
+                    </button>
+                    <span className="absolute bottom-3 right-3 rounded-md bg-neutral-950/85 px-2 py-1 text-xs font-medium tabular-nums text-white">
+                      {current + 1}/{gallery.length}
+                    </span>
+                  </>
+                )}
               </div>
 
               {gallery.length > 1 && (
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
                   {gallery.map((source, index) => (
                     <button
                       key={index}
@@ -203,10 +272,10 @@ export function ProductDetail({ product }: { product: ProductDto }) {
                       aria-pressed={index === current}
                       onClick={() => setSelected(index)}
                       className={cn(
-                        'h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-lg border-2 bg-neutral-100 transition-colors',
+                        'h-16 w-16 shrink-0 cursor-pointer overflow-hidden rounded-lg border bg-neutral-50 p-1 transition-colors',
                         index === current
                           ? 'border-neutral-950'
-                          : 'border-transparent hover:border-neutral-300',
+                          : 'border-neutral-200 hover:border-neutral-500',
                       )}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -214,7 +283,7 @@ export function ProductDetail({ product }: { product: ProductDto }) {
                         src={source}
                         alt=""
                         loading="lazy"
-                        className="h-full w-full object-contain"
+                        className="h-full w-full rounded object-contain"
                       />
                     </button>
                   ))}
@@ -237,8 +306,8 @@ export function ProductDetail({ product }: { product: ProductDto }) {
           <BuyBox product={product} />
         </div>
 
-        <section className="space-y-4 @3xl:col-start-1 @3xl:row-start-2">
-          <h2 className="text-lg font-semibold tracking-tight">{t.product.descriptionTitle}</h2>
+        <section className="space-y-5 border-t border-neutral-200 pt-8 @3xl:col-start-1 @3xl:row-start-2">
+          <h2 className="text-xl font-semibold text-neutral-950">{t.product.descriptionTitle}</h2>
           {product.description ? (
             renderDescription(product.description)
           ) : (

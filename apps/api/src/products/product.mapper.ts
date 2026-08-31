@@ -89,6 +89,11 @@ export interface ProductDtoOptions {
    * Bật cờ này thì `locale` bị bỏ qua.
    */
   includeTranslations?: boolean;
+  /**
+   * Endpoint công khai chỉ được trả các loại đang bán, nhưng vẫn cần nạp mọi
+   * loại để tổng "đã bán" không tụt xuống khi chủ shop tắt một loại cũ.
+   */
+  publicView?: boolean;
 }
 
 function isTranslatableLocale(value: string): value is TranslatableLocale {
@@ -177,12 +182,17 @@ export function toProductDto(
   stock: StockCountMap,
   options: ProductDtoOptions = {},
 ): ProductDto {
-  const variants = product.variants.map((variant) =>
+  const allVariants = product.variants.map((variant) =>
     toProductVariantDto(variant, stock.get(variant.id) ?? EMPTY_COUNTS, options),
   );
 
+  // Loại đã tắt chỉ tham gia lịch sử bán, tuyệt đối không đi ra API công khai.
+  const variants = options.publicView
+    ? allVariants.filter((variant) => variant.active)
+    : allVariants;
+
   // Giá hiển thị chỉ tính trên các loại đang bán.
-  const activePrices = variants.filter((v) => v.active).map((v) => v.price);
+  const activePrices = allVariants.filter((v) => v.active).map((v) => v.price);
   const minPrice = activePrices.length > 0 ? Math.min(...activePrices) : 0;
   const maxPrice = activePrices.length > 0 ? Math.max(...activePrices) : 0;
 
@@ -224,7 +234,8 @@ export function toProductDto(
     active: product.active,
     stockDrawMode: product.stockDrawMode,
     availableStock: variants.reduce((sum, v) => sum + v.availableStock, 0),
-    sold: variants.reduce((sum, v) => sum + v.sold, 0),
+    // Lịch sử bán là trọn đời của sản phẩm; tắt một loại không được làm số giảm.
+    sold: allVariants.reduce((sum, v) => sum + v.sold, 0),
     variants,
     createdAt: product.createdAt.toISOString(),
   };

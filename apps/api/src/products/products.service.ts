@@ -21,13 +21,12 @@ export class ProductsService {
   ) {}
 
   /**
-   * Loại đang bán + bản dịch đúng ngôn ngữ, dùng chung cho hai truy vấn dưới
-   * (với `vi` sẽ không có dòng dịch nào → giữ bản gốc).
+   * Nạp mọi loại để giữ tổng bán trọn đời; mapper sẽ loại loại đã tắt khỏi DTO
+   * công khai. Nếu lọc ngay tại Prisma thì tắt một loại cũ làm số đã bán giảm.
    */
   private publicRelations(locale: Locale) {
     return {
       variants: {
-        where: { active: true },
         orderBy: VARIANT_ORDER_BY,
         include: { translations: { where: { locale } } },
       },
@@ -73,7 +72,7 @@ export class ProductsService {
      * bên trong từng nhóm.
      */
     return products
-      .map((product) => toProductDto(product, counts, { locale }))
+      .map((product) => toProductDto(product, counts, { locale, publicView: true }))
       .sort((a, b) => Number(b.availableStock > 0) - Number(a.availableStock > 0));
   }
 
@@ -90,6 +89,6 @@ export class ProductsService {
       this.prisma,
       collectVariantIds([product]),
     );
-    return toProductDto(product, counts, { locale });
+    return toProductDto(product, counts, { locale, publicView: true });
   }
 }

@@ -197,7 +197,7 @@ export interface ProductDto {
   active: boolean;
   /** Cách rút kho khi giữ chỗ — áp dụng cho mọi loại của sản phẩm. */
   stockDrawMode: StockDrawMode;
-  /** Tổng tồn kho / đã bán của mọi loại. */
+  /** Tổng tồn kho của loại đang bán; tổng đã bán trọn đời của mọi loại. */
   availableStock: number;
   sold: number;
   variants: ProductVariantDto[];

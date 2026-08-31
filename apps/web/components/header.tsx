@@ -34,7 +34,11 @@ export function Header() {
             aria-hidden="true"
             className="h-8 w-8 shrink-0 rounded-lg object-contain"
           />
-          <Wordmark size="sm" className="hidden sm:inline-flex" />
+          {/* Bọc bằng phần tử riêng: `Wordmark` tự có `inline-flex`, nên đặt
+              `hidden` trực tiếp lên nó bị xung đột thứ tự CSS và vẫn hiện ở mobile. */}
+          <span className="hidden sm:block">
+            <Wordmark size="sm" />
+          </span>
         </Link>
 
         <nav className="flex items-center gap-1 sm:gap-2">

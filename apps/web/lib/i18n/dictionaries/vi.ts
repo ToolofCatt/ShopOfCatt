@@ -61,6 +61,8 @@ export const vi = {
     breadcrumbHome: 'Trang chủ',
     descriptionTitle: 'Mô tả sản phẩm',
     viewImage: (n: number) => `Xem ảnh ${n}`,
+    previousImage: 'Ảnh trước',
+    nextImage: 'Ảnh tiếp theo',
     noDescription: 'Chưa có mô tả cho sản phẩm này.',
     outOfStock: 'Hết hàng',
     inStockShort: (n: number) => `Còn ${n}`,
