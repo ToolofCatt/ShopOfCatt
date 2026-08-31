@@ -20,6 +20,7 @@ import {
   renderHub,
   renderLanguageMenu,
   renderProductDetail,
+  renderProductDescription,
   renderSearchResults,
   renderStorefront,
   renderSupport,
@@ -43,6 +44,7 @@ import {
   matchMenuAction,
   renderAccount,
   renderDepositConfirm,
+  renderDepositCancelled,
   renderDepositCredited,
   renderDepositInstructions,
   renderDepositMenu,
@@ -54,6 +56,7 @@ import { botDict, botLang, type BotLang } from './messages';
 import {
   TelegramApiError,
   tgCall,
+  tgCallIdempotent,
   tgDisplayName,
   tgSendPhotoUpload,
   type TgCallbackQuery,
@@ -209,7 +212,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       // câu rõ ràng ngay, thay vì để getUpdates 401 lặp lại trong log.
       let username: string;
       try {
-        const me = await tgCall<TgUser>(cfg.token, 'getMe');
+        const me = await tgCallIdempotent<TgUser>(cfg.token, 'getMe');
         username = me.username ? `@${me.username}` : String(me.id);
       } catch (err) {
         this.lastBadToken = cfg.token;
@@ -555,7 +558,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     // spinner trên nút tới ~30 giây, trông như bot chết.
     const answer = async (payload: Record<string, unknown> = {}) => {
       try {
-        await tgCall(
+        await tgCallIdempotent(
           token,
           'answerCallbackQuery',
           { callback_query_id: cb.id, ...payload },
@@ -585,7 +588,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     /** Sửa tin hiện tại thành `view`; kèm ảnh (QR) thì gửi ảnh thành tin MỚI. */
     const edit = async (view: { text: string; keyboard: TgInlineKeyboard }) => {
       try {
-        await tgCall(
+        await tgCallIdempotent(
           token,
           'editMessageText',
           {
@@ -608,9 +611,16 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         ) {
           return;
         }
-        // Tin quá cũ (Telegram khoá sửa sau ~48h) hay chat bị chặn — kệ, vòng
-        // poll phải sống tiếp.
-        this.logger.warn(`editMessageText trượt (chat ${chatId}): ${errText(err)}`);
+        /*
+         * Nghiệp vụ có thể đã chốt trong CSDL trước bước edit (huỷ mã nạp,
+         * tạo đơn...). Để nguyên tin cũ là nói sai trạng thái và nút cũ vẫn
+         * bấm được. Gửi một tin mới làm đường lui; sendMessage không retry vì
+         * phản hồi rớt giữa đường mà gửi lại sẽ nhân đôi tin.
+         */
+        this.logger.warn(
+          `editMessageText trượt (chat ${chatId}): ${errText(err)} — gửi tin mới thay thế`,
+        );
+        await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
       }
     };
 
@@ -756,6 +766,17 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         await edit(
           renderProductDetail(product, lang, data.rates, data.support, parsed.backPage),
         );
+        return;
+      }
+      case 'productDescription': {
+        const products = await this.products.list(lang);
+        const product = products.find((p) => p.id === parsed.productId);
+        if (!product) {
+          await answer({ text: dict.productGone, show_alert: true });
+          return;
+        }
+        await answer();
+        await edit(renderProductDescription(product, lang, parsed.backPage));
         return;
       }
       case 'support': {
@@ -1053,10 +1074,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         const user = await this.requireUser(chatId);
         await this.balance.cancelDeposit(user.id, parsed.code);
         await answer();
-        await edit({
-          text: escapeText(dict.depositCancelled(parsed.code)),
-          keyboard: [[{ text: dict.btnBackToShop, callback_data: 'c:1' }]],
-        });
+        await edit(renderDepositCancelled(parsed.code, lang));
         return;
       }
       case 'payBalance': {

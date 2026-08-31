@@ -8,6 +8,7 @@ import {
   mainMenuKeyboard,
   matchMenuAction,
   renderDepositCredited,
+  renderDepositCancelled,
   renderDepositInstructions,
   renderDepositMenu,
   renderDepositMethodChooser,
@@ -156,6 +157,13 @@ describe('màn nạp tiền', () => {
     const view = renderDepositCredited(10, 13.5, 'vi', RATES);
     expect(view.text).toContain('260.000 ₫');
     expect(view.text).toContain('351.000 ₫');
+  });
+
+  it('huỷ mã nạp dùng đúng nhãn và quay về luồng nạp/menu', () => {
+    const view = renderDepositCancelled('NAP-ABC123', 'vi');
+    expect(view.text).toContain('Đã huỷ mã nạp NAP-ABC123');
+    expect(view.keyboard.flat().map((button) => button.callback_data)).toEqual(['d', 'h']);
+    expect(view.keyboard[0][0].text).toContain('Nạp tiền khác');
   });
 });
 

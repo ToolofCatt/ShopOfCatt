@@ -45,9 +45,16 @@ function gioBayGio(): string {
 }
 
 /** Bong bóng phía bot (trái, nền xám xanh của Telegram dark). */
-function BotBubble({ html, time }: { html: string; time: string }) {
+function BotBubble({ html, time, photo }: { html: string; time: string; photo?: string | null }) {
   return (
     <div className="max-w-[85%] self-start">
+      {photo && (
+        <img
+          src={photo}
+          alt="Telegram preview"
+          className="mb-1 aspect-square w-full max-w-[260px] rounded-xl object-cover"
+        />
+      )}
       <div className="relative rounded-xl rounded-bl-sm bg-[#182533] px-3 py-2 text-[13.5px] leading-relaxed text-neutral-100 [overflow-wrap:anywhere] [&_b]:font-semibold [&_i]:italic">
         <span dangerouslySetInnerHTML={tgHtml(html)} />
         <span className="float-right ml-2 mt-2 text-[10px] leading-none text-[#6d7f8f]">
@@ -80,9 +87,9 @@ export function TelegramSimulator({
   const scroller = useRef<HTMLDivElement | null>(null);
 
   const fetchPreview = useCallback(
-    async (previewLang: PreviewLang, page: number): Promise<TelegramPreviewDto> => {
+    async (previewLang: PreviewLang, page: number, text?: string): Promise<TelegramPreviewDto> => {
       return apiFetch<TelegramPreviewDto>(
-        `/admin/telegram/preview?lang=${previewLang}&page=${page}`,
+        `/admin/telegram/preview?lang=${previewLang}&page=${page}${text ? `&text=${encodeURIComponent(text)}` : ''}`,
         { token },
       );
     },
@@ -103,7 +110,7 @@ export function TelegramSimulator({
       try {
         // Độ trễ nhỏ cho giống người thật đang xem bot "đang soạn…"
         const [data] = await Promise.all([
-          fetchPreview(previewLang, 1),
+          fetchPreview(previewLang, 1, text),
           new Promise((resolve) => setTimeout(resolve, 450)),
         ]);
         const replies: SimMessage[] = [];
@@ -153,6 +160,12 @@ export function TelegramSimulator({
     const message = messages.find((m) => m.id === messageId);
     if (!message || message.from !== 'bot' || message.kind !== 'screens') return;
 
+    const language = /^lg:(vi|en|zh)$/.exec(callbackData);
+    if (language) {
+      setLang(language[1] as PreviewLang);
+      return;
+    }
+
     if (message.data.screens[callbackData]) {
       setError(null);
       setMessages((prev) =>
@@ -160,8 +173,8 @@ export function TelegramSimulator({
       );
       return;
     }
-    // Nút của luồng MUA/ví (b:/q:/dn:/o/a/d…) — giả lập không tạo đơn thật,
-    // nói thẳng thay vì một cái nút chết không giải thích.
+    // Callback mới chưa được backend preview biết tới — báo rõ để phát hiện
+    // simulator lệch bot thật thay vì để nút im lặng.
     setError(t.admin.telegramSimBuyNote);
   };
 
@@ -235,7 +248,7 @@ export function TelegramSimulator({
               message.data.screens[message.data.entry];
             return (
               <div key={message.id} className="max-w-[85%] space-y-1 self-start">
-                <BotBubble html={noiDung.text} time={message.time} />
+                <BotBubble html={noiDung.text} time={message.time} photo={noiDung.photo} />
                 {noiDung.keyboard.length > 0 && (
                   <div className="space-y-1">
                     {noiDung.keyboard.map((row, rowIndex) => (

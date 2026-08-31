@@ -83,6 +83,11 @@ describe('brandEmojiHtml — logo hãng theo từ khoá tên sản phẩm', () =
     expect(brandEmojiHtml('Vé số kiến thiết')).toBe('');
   });
 
+  it('chủ shop đã đặt emoji đầu tên thì không tự chèn thêm logo hãng', () => {
+    expect(brandEmojiHtml('🔑 ChatGPT Plus 30 ngày')).toBe('');
+    expect(brandEmojiHtml('⭐ Netflix 1 tháng')).toBe('');
+  });
+
   it('logo đi qua animateEmoji không bị bọc lồng thẻ', () => {
     const html = `${brandEmojiHtml('Netflix 1 tháng')}<b>Netflix</b>`;
     const sau = animateEmoji(html);

@@ -352,10 +352,12 @@ export interface TelegramPreviewButton {
   callbackData: string;
 }
 
-/** Một tin nhắn bot đã dựng sẵn: text là HTML kiểu Telegram (chỉ b/i, entity đã escape). */
+/** Một tin bot đã dựng sẵn: text là HTML Telegram đã escape từ dữ liệu CSDL. */
 export interface TelegramMessagePreview {
   text: string;
   keyboard: TelegramPreviewButton[][];
+  /** Ảnh đi kèm tin (hiện là QR SePay); null/rỗng = tin chữ. */
+  photo?: string | null;
 }
 
 /**

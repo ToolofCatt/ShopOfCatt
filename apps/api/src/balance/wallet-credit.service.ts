@@ -28,8 +28,9 @@ export class WalletCreditService {
     ref: { sepayRef: string } | { cryptoTxId: string },
   ): Promise<boolean> {
     try {
-      return await this.prisma.$transaction(async (tx) => {
-        const gate = await tx.deposit.updateMany({
+      return await this.prisma.$transaction(
+        async (tx) => {
+          const gate = await tx.deposit.updateMany({
           where: {
             id: depositId,
             status: { in: ['PENDING', 'EXPIRED'] },
@@ -39,9 +40,9 @@ export class WalletCreditService {
           },
           data: { status: 'SUCCESS', paidAt: new Date(), ...ref },
         });
-        if (gate.count === 0) return false;
+          if (gate.count === 0) return false;
 
-        const deposit = await tx.deposit.findUniqueOrThrow({
+          const deposit = await tx.deposit.findUniqueOrThrow({
           where: { id: depositId },
           select: { userId: true, amountUsdt: true, code: true },
         });
@@ -50,17 +51,17 @@ export class WalletCreditService {
          * Khoá dòng User trước khi đọc-cộng: không khoá thì hai lần cộng/trừ
          * song song cùng đọc một số dư cũ và balanceAfter trong sổ cái nói dối.
          */
-        await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${deposit.userId} FOR UPDATE`;
-        const user = await tx.user.findUniqueOrThrow({
+          await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${deposit.userId} FOR UPDATE`;
+          const user = await tx.user.findUniqueOrThrow({
           where: { id: deposit.userId },
           select: { balance: true },
         });
-        const balanceAfter = user.balance.add(deposit.amountUsdt);
-        await tx.user.update({
+          const balanceAfter = user.balance.add(deposit.amountUsdt);
+          await tx.user.update({
           where: { id: deposit.userId },
           data: { balance: balanceAfter },
         });
-        await tx.balanceEntry.create({
+          await tx.balanceEntry.create({
           data: {
             userId: deposit.userId,
             amount: deposit.amountUsdt,
@@ -69,8 +70,12 @@ export class WalletCreditService {
             refCode: deposit.code,
           },
         });
-        return true;
-      });
+          return true;
+        },
+        // Hai webhook/tick cùng nhắm một mã phải CHỜ trọng tài hàng Deposit,
+        // không được vỡ vì maxWait 2 giây mặc định trước khi CAS trả false.
+        { maxWait: 10_000, timeout: 10_000 },
+      );
     } catch (err) {
       if (
         err instanceof Prisma.PrismaClientKnownRequestError &&
@@ -138,9 +143,11 @@ export class WalletCreditService {
    * Số USDT các khoản ĐANG CHỜ trên hai kênh crypto (cả mã nạp lẫn đơn hàng)
    * — để mã nạp mới chọn được số tiền không đụng ai. Xem unique-amount.ts.
    */
-  async takenUsdtAmounts(): Promise<number[]> {
+  async takenUsdtAmounts(
+    client: Pick<Prisma.TransactionClient, 'deposit' | 'payment'> = this.prisma,
+  ): Promise<number[]> {
     const [naps, dons] = await Promise.all([
-      this.prisma.deposit.findMany({
+      client.deposit.findMany({
         where: {
           mode: { in: ['CRYPTO', 'BINANCE_ID'] },
           status: { in: ['PENDING', 'EXPIRED'] },
@@ -151,7 +158,7 @@ export class WalletCreditService {
         },
         select: { amountUsdt: true },
       }),
-      this.prisma.payment.findMany({
+      client.payment.findMany({
         where: {
           mode: { in: ['CRYPTO', 'BINANCE_ID'] },
           status: 'PENDING',

@@ -30,6 +30,14 @@ const DEPOSIT_EXPIRE_MINUTES = 10;
  *  Binance ghi có + vòng đối soát 60 giây — 10 phút là dồn khách vô cớ. */
 const DEPOSIT_EXPIRE_MINUTES_CRYPTO = 30;
 
+/** Một khách giữ quá nhiều mã chờ vừa tự làm rối lịch sử, vừa có thể chiếm hết
+ * vùng số USDT duy nhất của mọi khách khác. */
+export const MAX_PENDING_DEPOSITS_PER_USER = 3;
+
+/** Khóa cấp số trên TOÀN CSDL. Query số đang dùng và INSERT phải nằm cùng khóa;
+ * khóa bằng biến trong RAM không bảo vệ được khi chạy hai container API. */
+const DEPOSIT_ALLOCATION_LOCK = 0x434154544e41504en;
+
 /** Các phương thức được phép NẠP VÍ — mock (giả lập) và binance_pay (cần phiên
  *  checkout gắn với đơn) cố ý không có mặt. */
 export const DEPOSIT_METHODS = [
@@ -154,15 +162,19 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
       if (amountUsdt <= 0) {
         throw new BadRequestException(K.depositAmountInvalid);
       }
-      const deposit = await this.prisma.deposit.create({
-        data: {
-          code: await this.freshCode(),
-          userId: user.id,
-          mode: 'SEPAY',
-          amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
-          vndAmount: new Prisma.Decimal(vndAmount),
-          expiresAt: new Date(Date.now() + DEPOSIT_EXPIRE_MINUTES * 60_000),
-        },
+      const deposit = await this.prisma.$transaction(async (tx) => {
+        await this.lockDepositAllocation(tx);
+        await this.assertDepositCapacity(tx, user.id);
+        return tx.deposit.create({
+          data: {
+            code: await this.freshCode(tx),
+            userId: user.id,
+            mode: 'SEPAY',
+            amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
+            vndAmount: new Prisma.Decimal(vndAmount),
+            expiresAt: new Date(Date.now() + DEPOSIT_EXPIRE_MINUTES * 60_000),
+          },
+        });
       });
       return {
         deposit,
@@ -194,39 +206,59 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
     if (base <= 0) {
       throw new BadRequestException(K.depositAmountInvalid);
     }
-    const amountUsdt = pickUniqueUsdt(
-      base,
-      await this.walletCredit.takenUsdtAmounts(),
-    );
-    if (amountUsdt === null) {
-      // 200 khoản chờ chen chúc quanh cùng một số tiền — gần như không thể,
-      // nhưng nếu xảy ra thì từ chối rõ ràng thay vì tạo mã không khớp nổi.
-      this.logger.error('Hết chỗ chọn số USDT duy nhất cho mã nạp crypto');
-      throw new ServiceUnavailableException(K.paymentMethodUnavailable);
-    }
-
-    const deposit = await this.prisma.deposit.create({
-      data: {
-        code: await this.freshCode(),
-        userId: user.id,
-        mode: network !== null ? 'CRYPTO' : 'BINANCE_ID',
-        amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
-        vndAmount: new Prisma.Decimal(vndAmount),
-        cryptoNetwork: network,
-        cryptoAddress: address,
-        expiresAt: new Date(
-          Date.now() + DEPOSIT_EXPIRE_MINUTES_CRYPTO * 60_000,
-        ),
-      },
+    const deposit = await this.prisma.$transaction(async (tx) => {
+      await this.lockDepositAllocation(tx);
+      await this.assertDepositCapacity(tx, user.id);
+      const amountUsdt = pickUniqueUsdt(
+        base,
+        await this.walletCredit.takenUsdtAmounts(tx),
+      );
+      if (amountUsdt === null) {
+        // 200 khoản chờ chen chúc quanh cùng một số tiền — từ chối thay vì tạo
+        // mã mà matcher sẽ không bao giờ dám nhận.
+        this.logger.error('Hết chỗ chọn số USDT duy nhất cho mã nạp crypto');
+        throw new ServiceUnavailableException(K.paymentMethodUnavailable);
+      }
+      return tx.deposit.create({
+        data: {
+          code: await this.freshCode(tx),
+          userId: user.id,
+          mode: network !== null ? 'CRYPTO' : 'BINANCE_ID',
+          amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
+          vndAmount: new Prisma.Decimal(vndAmount),
+          cryptoNetwork: network,
+          cryptoAddress: address,
+          expiresAt: new Date(
+            Date.now() + DEPOSIT_EXPIRE_MINUTES_CRYPTO * 60_000,
+          ),
+        },
+      });
     });
     return { deposit, bank: null };
   }
 
+  private async lockDepositAllocation(tx: Prisma.TransactionClient): Promise<void> {
+    // Hàm PostgreSQL trả kiểu void; ép text vì Prisma không giải mã cột void.
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(${DEPOSIT_ALLOCATION_LOCK})::text AS "locked"`;
+  }
+
+  private async assertDepositCapacity(
+    tx: Prisma.TransactionClient,
+    userId: string,
+  ): Promise<void> {
+    const pending = await tx.deposit.count({
+      where: { userId, status: 'PENDING', expiresAt: { gt: new Date() } },
+    });
+    if (pending >= MAX_PENDING_DEPOSITS_PER_USER) {
+      throw new BadRequestException(K.depositPendingLimit);
+    }
+  }
+
   /** Mã NAP- chưa ai dùng — trùng thì thử lại, cùng cách với mã đơn hàng. */
-  private async freshCode(): Promise<string> {
+  private async freshCode(client: Pick<Prisma.TransactionClient, 'deposit'>): Promise<string> {
     let code = generateDepositCode();
     for (let attempt = 0; attempt < 10; attempt++) {
-      const existed = await this.prisma.deposit.findUnique({
+      const existed = await client.deposit.findUnique({
         where: { code },
         select: { id: true },
       });

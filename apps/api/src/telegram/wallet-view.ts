@@ -265,12 +265,25 @@ export function renderDepositInstructions(
     keyboard: [
       [
         {
-          text: dict.btnCancelOrder,
+          text: dict.btnCancelDeposit,
           callback_data: encodeCallback({ kind: 'depositCancel', code: deposit.code }),
         },
       ],
     ],
     photo,
+  };
+}
+
+export function renderDepositCancelled(code: string, lang: BotLang): BotView {
+  const dict = botDict(lang);
+  return {
+    text: escapeHtml(dict.depositCancelled(code)),
+    keyboard: [
+      [
+        { text: dict.btnBackToDeposit, callback_data: encodeCallback({ kind: 'depositMenu' }) },
+        { text: dict.hubBackBtn, callback_data: encodeCallback({ kind: 'hub' }) },
+      ],
+    ],
   };
 }
 

@@ -327,23 +327,29 @@ describe('FulfillmentService trên PostgreSQL thật', () => {
       choRutXong = res;
     });
 
-    const donCuaKhach = prisma.$transaction(async (tx) => {
-      const ids = await service.lockAvailableStock(tx, variantId, 4);
-      donDaGiu();
-      await rutXong;
-      return ids;
-    });
+    const donCuaKhach = prisma.$transaction(
+      async (tx) => {
+        const ids = await service.lockAvailableStock(tx, variantId, 4);
+        donDaGiu();
+        await rutXong;
+        return ids;
+      },
+      { maxWait: 15_000, timeout: 15_000 },
+    );
 
     await dangGiu;
-    const rutTay = await prisma.$transaction(async (tx) => {
-      // Chủ shop chọn thứ tự ngay lúc rút, không theo cấu hình sản phẩm.
-      const ids = await service.lockAvailableStock(tx, variantId, 6, 'RANDOM');
-      await tx.stockItem.updateMany({
-        where: { id: { in: ids } },
-        data: { status: 'WITHDRAWN', withdrawnAt: new Date() },
-      });
-      return ids;
-    });
+    const rutTay = await prisma.$transaction(
+      async (tx) => {
+        // Chủ shop chọn thứ tự ngay lúc rút, không theo cấu hình sản phẩm.
+        const ids = await service.lockAvailableStock(tx, variantId, 6, 'RANDOM');
+        await tx.stockItem.updateMany({
+          where: { id: { in: ids } },
+          data: { status: 'WITHDRAWN', withdrawnAt: new Date() },
+        });
+        return ids;
+      },
+      { maxWait: 15_000, timeout: 15_000 },
+    );
     choRutXong();
     const cuaDon = await donCuaKhach;
 

@@ -110,6 +110,53 @@ export async function tgCall<T>(
 }
 
 /**
+ * Thử lại một lệnh Bot API CÓ TÍNH LẶP LẠI AN TOÀN như getMe,
+ * answerCallbackQuery hoặc editMessageText. Không dùng cho sendMessage/sendPhoto:
+ * request đầu có thể đã tới Telegram nhưng phản hồi rớt giữa đường, gửi lại sẽ
+ * tạo hai tin giống nhau.
+ */
+export async function tgCallIdempotent<T>(
+  token: string,
+  method: string,
+  payload?: Record<string, unknown>,
+  timeoutMs = 15_000,
+  stopSignal?: AbortSignal,
+  attempts = 3,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await tgCall<T>(token, method, payload, timeoutMs, stopSignal);
+    } catch (err) {
+      lastError = err;
+      // Telegram đã trả lời rõ (400/401/429...) thì retry cùng payload không
+      // chữa được gì. Chỉ retry lỗi mạng/timeout chưa biết request đã tới đâu.
+      if (err instanceof TelegramApiError || stopSignal?.aborted || attempt === attempts) {
+        throw err;
+      }
+      await delay(250 * attempt, stopSignal);
+    }
+  }
+  throw lastError;
+}
+
+function delay(ms: number, stopSignal?: AbortSignal): Promise<void> {
+  if (stopSignal?.aborted) return Promise.reject(stopSignal.reason);
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(stopSignal?.reason);
+    };
+    const timer = setTimeout(() => {
+      stopSignal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    timer.unref?.();
+    stopSignal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
  * Gửi ảnh bằng cách UPLOAD BYTES thay vì đưa URL: Telegram tự tải URL ngoài
  * hay trượt ("400 failed to get HTTP URL content" với qr.sepay.vn) — mình tải
  * hộ rồi đẩy multipart là chắc ăn.

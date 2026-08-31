@@ -125,6 +125,7 @@ export type BotCallback =
   | { kind: 'catalog'; page: number }
   | { kind: 'category'; catIndex: number; page: number }
   | { kind: 'product'; productId: string; backPage: number }
+  | { kind: 'productDescription'; productId: string; backPage: number }
   | { kind: 'buy'; variantId: string; productId: string; backPage: number }
   | { kind: 'qty'; variantId: string; qty: number }
   | { kind: 'method'; orderCode: string; method: PaymentMethod }
@@ -173,6 +174,8 @@ export function encodeCallback(cb: BotCallback): string {
       return `ct:${cb.catIndex}:${cb.page}`;
     case 'product':
       return `p:${cb.productId}:${cb.backPage}`;
+    case 'productDescription':
+      return `pd:${cb.productId}:${cb.backPage}`;
     case 'buy':
       return `b:${cb.variantId}:${cb.productId}:${cb.backPage}`;
     case 'qty':
@@ -234,6 +237,9 @@ export function parseCallback(data: string | undefined): BotCallback | null {
   }
   if ((m = new RegExp(`^p:${ID_RE}:([1-9][0-9]{0,5})$`).exec(data))) {
     return { kind: 'product', productId: m[1], backPage: Number(m[2]) };
+  }
+  if ((m = new RegExp(`^pd:${ID_RE}:([1-9][0-9]{0,5})$`).exec(data))) {
+    return { kind: 'productDescription', productId: m[1], backPage: Number(m[2]) };
   }
   if ((m = new RegExp(`^b:${ID_RE}:${ID_RE}:([1-9][0-9]{0,5})$`).exec(data))) {
     return { kind: 'buy', variantId: m[1], productId: m[2], backPage: Number(m[3]) };
@@ -602,7 +608,30 @@ export function renderAnnouncement(
 
 // ---------------------------------------------------------------- chi tiết
 
-/** Trang chi tiết — bố cục ⭐ tối giản theo mẫu Panda Shop. */
+const DETAIL_DESCRIPTION_PREVIEW_POINTS = 420;
+const DETAIL_DESCRIPTION_PREVIEW_BUDGET = 1_200;
+
+function productDescriptionText(product: ProductDto): string {
+  const parts = [product.shortDescription, product.description]
+    .map((part) => part?.trim() ?? '')
+    .filter((part) => part !== '');
+  return parts.filter((part, index) => index === 0 || part !== parts[0]).join('\n\n');
+}
+
+function descriptionPreview(raw: string): { text: string; truncated: boolean } {
+  const points = Array.from(raw.trim());
+  const tooManyPoints = points.length > DETAIL_DESCRIPTION_PREVIEW_POINTS;
+  const visible = tooManyPoints
+    ? `${points.slice(0, DETAIL_DESCRIPTION_PREVIEW_POINTS - 1).join('')}…`
+    : points.join('');
+  const tooManyEscapedChars = escapeHtml(visible).length > DETAIL_DESCRIPTION_PREVIEW_BUDGET;
+  return {
+    text: fitEscaped(visible, DETAIL_DESCRIPTION_PREVIEW_BUDGET),
+    truncated: tooManyPoints || tooManyEscapedChars,
+  };
+}
+
+/** Trang chi tiết — phần mô tả dài được tách riêng để hành động mua không trôi. */
 export function renderProductDetail(
   product: ProductDto,
   lang: BotLang,
@@ -621,10 +650,15 @@ export function renderProductDetail(
     escapeHtml(dict.detailSoldLine(product.sold)),
   ];
 
+  const hasStock = product.variants.some((variant) => variant.availableStock > 0);
   const moTa: string[] = [];
-  if (product.shortDescription || product.description) {
+  let hasMoreDescription = false;
+  const fullDescription = productDescriptionText(product);
+  if (fullDescription !== '') {
     moTa.push('', escapeHtml(dict.detailDescTitle));
-    if (product.shortDescription) moTa.push(escapeHtml(product.shortDescription));
+    const preview = descriptionPreview(fullDescription);
+    if (preview.text !== '') moTa.push(preview.text);
+    hasMoreDescription = preview.truncated;
   }
 
   const variantLines: string[] = [];
@@ -642,16 +676,10 @@ export function renderProductDetail(
     }
   }
 
-  const tail: string[] = ['', escapeHtml(dict.detailChoose)];
-
-  // Mô tả dài nhét vừa phần còn lại của trần 4096 — dài quá thì cắt, âm thì bỏ.
-  const fixed = [...head, ...moTa, ...variantLines, ...tail].join('\n');
-  const middle: string[] = [];
-  if (product.description) {
-    const budget = TG_TEXT_LIMIT - SAFETY_MARGIN - fixed.length - 2;
-    const fitted = fitEscaped(product.description, budget);
-    if (fitted !== '') middle.push(fitted);
-  }
+  const tail: string[] = [
+    '',
+    escapeHtml(hasStock ? dict.detailChoose : dict.detailUnavailable),
+  ];
 
   const keyboard: TgInlineKeyboard = [];
   // Mỗi loại còn hàng một nút Mua — loại hết hàng không chào nút hỏng.
@@ -669,6 +697,18 @@ export function renderProductDetail(
       },
     ]);
   }
+  if (hasMoreDescription) {
+    keyboard.push([
+      {
+        text: dict.detailMore,
+        callback_data: encodeCallback({
+          kind: 'productDescription',
+          productId: product.id,
+          backPage,
+        }),
+      },
+    ]);
+  }
   keyboard.push([
     {
       text: dict.backToCategories,
@@ -677,8 +717,45 @@ export function renderProductDetail(
   ]);
 
   return {
-    text: [...head, ...moTa, ...middle, ...variantLines, ...tail].join('\n'),
+    text: [...head, ...moTa, ...variantLines, ...tail].join('\n'),
     keyboard,
+  };
+}
+
+/** Màn mô tả đầy đủ — vẫn chặn trần 4096 và quay lại đúng sản phẩm/trang cũ. */
+export function renderProductDescription(
+  product: ProductDto,
+  lang: BotLang,
+  backPage: number,
+): { text: string; keyboard: TgInlineKeyboard } {
+  const dict = botDict(lang);
+  const head = [
+    `${brandEmojiHtml(product.name)}<b>${escapeHtml(product.name)}</b>`,
+    `<b>${escapeHtml(dict.detailFullTitle)}</b>`,
+    '',
+  ];
+  const budget = TG_TEXT_LIMIT - SAFETY_MARGIN - head.join('\n').length;
+  const body = fitEscaped(productDescriptionText(product), budget);
+  return {
+    text: [...head, body || escapeHtml(dict.detailNoDescription)].join('\n'),
+    keyboard: [
+      [
+        {
+          text: dict.detailBackToProduct,
+          callback_data: encodeCallback({
+            kind: 'product',
+            productId: product.id,
+            backPage,
+          }),
+        },
+      ],
+      [
+        {
+          text: dict.backToCategories,
+          callback_data: encodeCallback({ kind: 'catalog', page: backPage }),
+        },
+      ],
+    ],
   };
 }
 

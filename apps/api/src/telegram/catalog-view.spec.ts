@@ -18,6 +18,7 @@ import {
   renderHub,
   renderLanguageMenu,
   renderProductDetail,
+  renderProductDescription,
   renderStorefront,
   truncateLabel,
 } from './catalog-view';
@@ -164,8 +165,10 @@ describe('encodeCallback / parseCallback', () => {
   it('roundtrip hai loại callback', () => {
     const c = { kind: 'catalog', page: 2 } as const;
     const p = { kind: 'product', productId: 'ckqq1234567890abcdefghijk', backPage: 3 } as const;
+    const pd = { kind: 'productDescription', productId: 'ckqq1234567890abcdefghijk', backPage: 3 } as const;
     expect(parseCallback(encodeCallback(c))).toEqual(c);
     expect(parseCallback(encodeCallback(p))).toEqual(p);
+    expect(parseCallback(encodeCallback(pd))).toEqual(pd);
   });
 
   it('callback_data của nút sản phẩm không vượt 64 byte với cuid thật', () => {
@@ -350,16 +353,35 @@ describe('renderProductDetail', () => {
     expect(keyboard[keyboard.length - 1][0].callback_data).toBe('c:3');
   });
 
-  it('tên/mô tả được escape; mô tả 10k ký tự vẫn dưới trần 4096 và kết bằng …', () => {
+  it('tên/mô tả được escape; mô tả dài được rút gọn và có nút xem đầy đủ', () => {
     const p = product({
       name: '<b>Test & "x" 🔑',
       description: 'Nội dung & <chi tiết> rất dài. '.repeat(400),
     });
-    const { text } = renderProductDetail(p, 'vi', RATES, [], 1);
+    const { text, keyboard } = renderProductDetail(p, 'vi', RATES, [], 1);
     expect(text).toContain('&lt;b&gt;Test &amp; &quot;x&quot; 🔑');
     expect(text.length).toBeLessThan(4096);
     expect(text).toContain('…');
     expect(text).toContain('&lt;chi tiết&gt;');
+    expect(keyboard.flat().some((b) => b.callback_data.startsWith('pd:'))).toBe(true);
+
+    const full = renderProductDescription(p, 'vi', 1);
+    expect(full.text.length).toBeLessThan(4096);
+    expect(full.text).toContain('Mô tả chi tiết');
+    expect(full.keyboard[0][0].callback_data).toContain('p:');
+  });
+
+  it('mô tả có nhiều ký tự escape vẫn không vượt trần Telegram', () => {
+    const p = product({
+      shortDescription: '&'.repeat(1_000),
+      description: '<'.repeat(1_000),
+    });
+    const detail = renderProductDetail(p, 'vi', RATES, [], 1);
+    expect(detail.text.length).toBeLessThan(4096);
+    expect(detail.keyboard.flat().some((button) => button.callback_data.startsWith('pd:'))).toBe(
+      true,
+    );
+    expect(renderProductDescription(p, 'vi', 1).text.length).toBeLessThan(4096);
   });
 
   it('đầu trang: 💵 Giá / 📦 Tồn kho / 🔥 Đã bán — icon đa dạng theo yêu cầu chủ shop', () => {
@@ -368,5 +390,16 @@ describe('renderProductDetail', () => {
     expect(text).toContain('📦 Tồn kho: 10');
     expect(text).toContain('🔥 Đã bán: 3');
     expect(text).toContain('🛒 Chọn loại muốn mua bên dưới:');
+  });
+
+  it('tất cả loại hết hàng → không mời chọn mua và không có nút b:', () => {
+    const p = product({
+      availableStock: 0,
+      variants: [variant({ availableStock: 0 })],
+    });
+    const { text, keyboard } = renderProductDetail(p, 'vi', RATES, [], 1);
+    expect(text).toContain('Sản phẩm hiện đang hết hàng');
+    expect(text).not.toContain('Chọn loại muốn mua');
+    expect(keyboard.flat().some((button) => button.callback_data.startsWith('b:'))).toBe(false);
   });
 });

@@ -88,8 +88,11 @@ export class FulfillmentService {
    */
   async releaseExpiredOrders(tx?: Prisma.TransactionClient): Promise<void> {
     if (!tx) {
-      await this.prisma.$transaction(async (inner) =>
-        this.releaseExpiredOrders(inner),
+      await this.prisma.$transaction(
+        async (inner) => this.releaseExpiredOrders(inner),
+        // Lượt quét có thể phải xếp sau giao hàng đang giữ khóa Order. Chờ có
+        // giới hạn thay vì vỡ ở maxWait mặc định trước khi Postgres xử lý khóa.
+        { maxWait: 15_000, timeout: 15_000 },
       );
       return;
     }
@@ -285,7 +288,9 @@ export class FulfillmentService {
         }
         return fullyDelivered;
       },
-      { timeout: 15000 },
+      // Nhiều webhook/tick có thể cùng gọi giao một đơn. Chúng phải xếp hàng ở
+      // khóa Order và đọc lại trạng thái, không được rơi trước khi vào transaction.
+      { maxWait: 15_000, timeout: 15_000 },
     );
   }
 

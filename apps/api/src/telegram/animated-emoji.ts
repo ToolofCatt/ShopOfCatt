@@ -221,6 +221,11 @@ const BRAND_EMOJI: readonly [RegExp, string, string][] = [
  * "Telegram" cũng bị dính logo.
  */
 export function brandEmojiHtml(name: string): string {
+  // Chủ shop đã chọn icon ở đầu tên thì tôn trọng lựa chọn đó. Nếu vẫn tự chèn
+  // logo hãng, tên "🔑 ChatGPT..." sẽ thành hai icon đứng cạnh nhau.
+  if (/^(?:\p{Extended_Pictographic}|\p{Regional_Indicator})/u.test(name.trim())) {
+    return '';
+  }
   for (const [re, id, fallback] of BRAND_EMOJI) {
     if (re.test(name)) return `<tg-emoji emoji-id="${id}">${fallback}</tg-emoji> `;
   }

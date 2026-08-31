@@ -186,6 +186,7 @@ export const K = {
   adminTelegramTokenInvalid: 'admin.telegram_token_invalid',
   adminTelegramGreetingTooLong: 'admin.telegram_greeting_too_long',
   depositAmountInvalid: 'deposit.amount_invalid',
+  depositPendingLimit: 'deposit.pending_limit',
   balanceInsufficient: 'balance.insufficient',
   balanceOrderNotPending: 'balance.order_not_pending',
   adminVndRateInvalid: 'admin.vnd_rate_invalid',
@@ -879,6 +880,11 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Số tiền nạp không hợp lệ (tối thiểu 10.000 ₫, tối đa 100.000.000 ₫)',
     en: 'Invalid top-up amount (min 10,000 ₫, max 100,000,000 ₫)',
     zh: '充值金额无效（最低 10,000 ₫，最高 100,000,000 ₫）',
+  },
+  [K.depositPendingLimit]: {
+    vi: 'Bạn đang có 3 mã nạp chờ thanh toán — hãy hoàn tất hoặc huỷ một mã cũ trước',
+    en: 'You already have 3 pending top-ups — complete or cancel an older one first',
+    zh: '您已有 3 个待付款充值单——请先完成或取消一个旧充值单',
   },
   [K.balanceInsufficient]: {
     vi: 'Số dư không đủ để thanh toán đơn này — hãy nạp thêm hoặc chọn cách trả khác',

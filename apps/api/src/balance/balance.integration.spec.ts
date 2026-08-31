@@ -229,6 +229,7 @@ describe('BalanceService (tích hợp — tiền thật, chạy trên PG thật)
 
     await expect(service.createDeposit(user, 5_000)).rejects.toThrow();
     await expect(service.createDeposit(user, 123.45 as unknown as number)).rejects.toThrow();
+    await service.cancelDeposit(user.id, kq.deposit.code);
   });
 
   itDb('cộng ví đúng MỘT lần dù webhook trùng/đua nhau; sổ cái khớp', async () => {
@@ -335,6 +336,11 @@ describe('BalanceService (tích hợp — tiền thật, chạy trên PG thật)
     expect(c.deposit.mode).toBe('BINANCE_ID');
     expect(c.deposit.cryptoAddress).toBe('123456789');
 
+    // Mã thứ tư của cùng khách bị chặn — không cho một chat chiếm hết vùng số.
+    await expect(
+      service.createDeposit(user, 100_000, 'crypto_bep20'),
+    ).rejects.toThrow(BadRequestException);
+
     // Webhook SePay KHÔNG được nhìn thấy mã crypto — khớp VND cho mã crypto
     // là cộng theo con số chưa từng hứa với khách.
     const choSepay = await service.listAwaitingDeposits();
@@ -350,6 +356,33 @@ describe('BalanceService (tích hợp — tiền thật, chạy trên PG thật)
     for (const kq of [a, b, c]) {
       await service.cancelDeposit(user.id, kq.deposit.code);
     }
+  });
+
+  itDb('hai khách tạo crypto đồng thời vẫn nhận hai số USDT khác nhau', async () => {
+    const [user, other] = await Promise.all([
+      prisma.user.findUniqueOrThrow({ where: { id: userId } }),
+      prisma.user.create({
+        data: {
+          code: 100002,
+          email: null,
+          passwordHash: 'x',
+          telegramChatId: '222',
+          telegramName: 'Test 2',
+        },
+      }),
+    ]);
+    const [a, b] = await Promise.all([
+      service.createDeposit(user, 500_000, 'crypto_bep20'),
+      service.createDeposit(other, 500_000, 'crypto_bep20'),
+    ]);
+    expect(Number(a.deposit.amountUsdt)).not.toBe(Number(b.deposit.amountUsdt));
+    expect(
+      Math.abs(Number(a.deposit.amountUsdt) - Number(b.deposit.amountUsdt)),
+    ).toBeGreaterThanOrEqual(0.0002 - 1e-9);
+    await Promise.all([
+      service.cancelDeposit(user.id, a.deposit.code),
+      service.cancelDeposit(other.id, b.deposit.code),
+    ]);
   });
 
   itDb('cộng ví mã crypto đúng MỘT lần dù hai vòng đối soát đua nhau', async () => {
