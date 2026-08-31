@@ -185,6 +185,10 @@ export const K = {
   adminTelegramTokenRequired: 'admin.telegram_token_required',
   adminTelegramTokenInvalid: 'admin.telegram_token_invalid',
   adminTelegramGreetingTooLong: 'admin.telegram_greeting_too_long',
+  adminTelegramOwnerChatInvalid: 'admin.telegram_owner_chat_invalid',
+  adminTelegramOwnerChatRequired: 'admin.telegram_owner_chat_required',
+  adminTelegramOwnerNumberInvalid: 'admin.telegram_owner_number_invalid',
+  adminTelegramNotRunning: 'admin.telegram_not_running',
   depositAmountInvalid: 'deposit.amount_invalid',
   depositPendingLimit: 'deposit.pending_limit',
   balanceInsufficient: 'balance.insufficient',
@@ -539,10 +543,8 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     zh: '缺少图片数据',
   },
   [K.adminImageTooMany]: {
-    vi: ({ max }: MessageParams) =>
-      `Mỗi sản phẩm chỉ được tối đa ${max} ảnh (tính cả ảnh bìa)`,
-    en: ({ max }: MessageParams) =>
-      `A product can have at most ${max} images, cover included`,
+    vi: ({ max }: MessageParams) => `Mỗi sản phẩm chỉ được tối đa ${max} ảnh (tính cả ảnh bìa)`,
+    en: ({ max }: MessageParams) => `A product can have at most ${max} images, cover included`,
     zh: ({ max }: MessageParams) => `每个商品最多 ${max} 张图片（含封面）`,
   },
   [K.adminImageNotFound]: {
@@ -876,6 +878,26 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     en: 'The bot greeting is too long (500 characters max)',
     zh: '机器人问候语过长（最多 500 个字符）',
   },
+  [K.adminTelegramOwnerChatInvalid]: {
+    vi: 'Chat ID nhận cảnh báo không hợp lệ — chỉ nhập số, nhóm thường bắt đầu bằng dấu trừ',
+    en: 'The alert chat ID is invalid — enter digits only; group IDs usually start with a minus sign',
+    zh: '接收提醒的聊天 ID 无效——只能填写数字，群组 ID 通常以负号开头',
+  },
+  [K.adminTelegramOwnerChatRequired]: {
+    vi: 'Hãy nhập Chat ID nhận cảnh báo trước',
+    en: 'Enter the alert destination chat ID first',
+    zh: '请先填写接收提醒的聊天 ID',
+  },
+  [K.adminTelegramOwnerNumberInvalid]: {
+    vi: 'Ngưỡng cảnh báo Telegram nằm ngoài khoảng cho phép',
+    en: 'The Telegram alert threshold is outside the allowed range',
+    zh: 'Telegram 提醒阈值超出允许范围',
+  },
+  [K.adminTelegramNotRunning]: {
+    vi: 'Bot Telegram chưa chạy — hãy bật bot và kiểm tra token',
+    en: 'The Telegram bot is not running — enable it and check the token',
+    zh: 'Telegram 机器人尚未运行——请启用机器人并检查令牌',
+  },
   [K.depositAmountInvalid]: {
     vi: 'Số tiền nạp không hợp lệ (tối thiểu 10.000 ₫, tối đa 100.000.000 ₫)',
     en: 'Invalid top-up amount (min 10,000 ₫, max 100,000,000 ₫)',
@@ -1140,7 +1162,10 @@ export function withParams(key: string, params: MessageParams): string {
 }
 
 /** Tách chuỗi dạng "key#{json}" thành khoá và tham số. */
-export function parseMessage(value: string): { key: string; params: MessageParams } {
+export function parseMessage(value: string): {
+  key: string;
+  params: MessageParams;
+} {
   const index = value.indexOf('#');
   if (index === -1) return { key: value, params: {} };
   const key = value.slice(0, index);
@@ -1158,11 +1183,7 @@ export function isMessageKey(value: unknown): value is string {
 }
 
 /** Dịch một khoá; nếu không phải khoá đã biết thì trả về nguyên văn. */
-export function translate(
-  key: string,
-  locale: Locale,
-  params: MessageParams = {},
-): string {
+export function translate(key: string, locale: Locale, params: MessageParams = {}): string {
   const entry = MESSAGES[key];
   if (!entry) return key;
   const template = entry[locale] ?? entry[DEFAULT_LOCALE];

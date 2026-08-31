@@ -21,15 +21,15 @@
 > được tạo `User` lúc này — `telegram-users.service.ts`, có test tích hợp) →
 > chọn phương thức đang bật → hướng dẫn trả tiền theo Payment ĐÃ CHỐT (SePay
 > gửi kèm ảnh VietQR; crypto nhắc chuyển ĐÚNG số tiền duy nhất; Binance ID nhắc
-> ghi mã đơn) → nút "✅ Tôi đã chuyển" chạy `checkPayment`, giao xong là KEY VỀ
+> ghi mã đơn) → bot tự đối soát, giao xong là KEY VỀ
 > CHAT trong thẻ spoiler. "🧾 Đơn của tôi" xem lại đơn/key cũ. Chống phá kho:
 > tối đa 2 đơn PENDING mỗi chat. Lỗi nghiệp vụ (hết hàng…) dịch từ khoá K theo
 > ngôn ngữ khách. Cổng giả lập chỉ hiện khi PAYMENT_MOCK + công tắc CSDL cùng
 > bật (fail-closed như web).
 > **Giai đoạn 4 (tự đẩy key) đã xong**: vòng quét 15 giây đọc outbox
 > `Order.telegramNotifiedAt` — webhook SePay/bộ đối soát crypto chốt đơn xong
-> là bot TỰ nhắn key vào chat, khách không phải bấm gì (nút "Tôi đã chuyển"
-> giữ lại làm đường kiểm tra nhanh). Gửi rồi mới đánh dấu — thà trùng còn hơn
+> là bot TỰ nhắn key vào chat, khách không phải bấm gì. Gửi rồi mới đánh dấu —
+> thà trùng còn hơn
 > mất key; khách chặn bot thì đánh dấu luôn để khỏi thử lại vô hạn, key vẫn
 > nằm ở "🧾 Đơn của tôi". Ngôn ngữ đẩy lấy từ `User.telegramLang` nhớ từ lần
 > mua (vòng đẩy chạy ngoài mọi tương tác, không có language_code để đoán).
@@ -64,7 +64,12 @@
 > Worker gửi theo lô, đúng ngôn ngữ và giá hiển thị của khách, kèm logo dịch vụ
 > động + nút mua thẳng sản phẩm. Dòng trùng, loại đã tắt, sản phẩm đã tắt và
 > khách bị khoá không được phát tin. Công tắc và preview nằm ở `/admin/telegram`.
-> Tiếp theo: GĐ5 (báo chủ shop: đơn mới/kẹt/kho cạn vào chat riêng).
+> **GĐ5 đã xong**: chat vận hành riêng nhận đơn mới, đơn PENDING vượt ngưỡng và
+> kho thấp/hết hàng. Chat đích, từng công tắc, số phút và ngưỡng kho chỉnh ngay
+> ở `/admin/telegram`, có nút gửi thử và preview. Callback tạo đơn/mã nạp có
+> khóa idempotency trong PostgreSQL nên Telegram phát lại update không giữ
+> thêm key hay tạo mã thứ hai. Trạng thái admin hiển thị lần kết nối thành công,
+> lỗi gần nhất và số lỗi liên tiếp; long-poll dùng backoff 5–30 giây.
 
 Mục tiêu: khách duyệt sản phẩm, đặt đơn, thanh toán và **nhận key ngay trong
 Telegram** — một kênh bán song song với web, dùng chung kho, chung luồng tiền.
@@ -81,7 +86,7 @@ Lõi tiền/kho **đã** tách khỏi HTTP — đây là phát hiện quan trọ
 |---|---|---|
 | Đặt đơn + giữ kho | `OrdersService.create(user, dto)` | Nhận `User` object, không nhận request |
 | Chọn phương thức | `selectPayment(userId, code, dto)` | Trả đủ dữ liệu dựng hướng dẫn trả tiền |
-| Kiểm tra đã trả chưa | `checkPayment(userId, code)` | Bot gọi khi khách bấm "Tôi đã chuyển" |
+| Kiểm tra đã trả chưa | `checkPayment(userId, code)` | Bộ đối soát nền và đường xem lại trạng thái dùng chung |
 | Khách nộp TxID | `submitTx(userId, code, dto)` | Đối soát qua `matchDeposits`, giữ nguyên |
 | Giao hàng | `FulfillmentService` | Idempotent, khoá đúng thứ tự — **không đụng vào** |
 | Đơn kẹt tự lành | `DeliverySweeperService` | Chạy nền, không phân biệt kênh |
@@ -168,8 +173,8 @@ mới sang giai đoạn sau.
 - **GĐ 2 — Duyệt hàng.** Danh sách sản phẩm (nút bấm phân trang), chi tiết +
   chọn loại, giá neo theo ngôn ngữ. Chỉ đọc — chưa đụng tiền.
 - **GĐ 3 — Đặt và trả.** Tạo đơn qua `OrdersService.create`, hướng dẫn trả tiền
-  theo từng phương thức, nút "Tôi đã chuyển" → `checkPayment`, nhận TxID →
-  `submitTx`, huỷ đơn, chống phá kho (mục 5). **Giai đoạn rủi ro nhất — bắt
+  theo từng phương thức, tự đối soát qua `checkPayment`, nhận TxID → `submitTx`,
+  huỷ đơn, chống phá kho (mục 5). **Giai đoạn rủi ro nhất — bắt
   buộc chạy thử thật cả ba phương thức.**
 - **GĐ 4 — Giao key.** Vòng quét gửi key (mục 4), thẻ spoiler, gửi lại khi
   khách yêu cầu, lịch sử đơn của chat.

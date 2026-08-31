@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { BellRing, RefreshCw, Send } from 'lucide-react';
 import {
   TELEGRAM_GREETING_MAX_LENGTH,
   type AdminStoreSettingDto,
@@ -30,10 +30,18 @@ export default function AdminTelegramPage() {
   const [tokenInput, setTokenInput] = useState('');
   const [sendAnnouncement, setSendAnnouncement] = useState(true);
   const [stockAlertsEnabled, setStockAlertsEnabled] = useState(true);
+  const [ownerChatId, setOwnerChatId] = useState('');
+  const [ownerOrderAlerts, setOwnerOrderAlerts] = useState(true);
+  const [ownerStuckAlerts, setOwnerStuckAlerts] = useState(true);
+  const [ownerStuckMinutes, setOwnerStuckMinutes] = useState(5);
+  const [ownerLowStockAlerts, setOwnerLowStockAlerts] = useState(true);
+  const [ownerLowStockThreshold, setOwnerLowStockThreshold] = useState(3);
   const [greeting, setGreeting] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [testingOwner, setTestingOwner] = useState(false);
+  const [ownerTestSent, setOwnerTestSent] = useState(false);
 
   /** Tăng sau mỗi lần lưu → trình giả lập chạy lại cuộc trò chuyện từ đầu. */
   const [simKey, setSimKey] = useState(0);
@@ -43,6 +51,12 @@ export default function AdminTelegramPage() {
     setEnabled(next.telegramBotEnabled);
     setSendAnnouncement(next.telegramSendAnnouncement);
     setStockAlertsEnabled(next.telegramStockAlertsEnabled);
+    setOwnerChatId(next.telegramOwnerChatId);
+    setOwnerOrderAlerts(next.telegramOwnerOrderAlertsEnabled);
+    setOwnerStuckAlerts(next.telegramOwnerStuckAlertsEnabled);
+    setOwnerStuckMinutes(next.telegramOwnerStuckMinutes);
+    setOwnerLowStockAlerts(next.telegramOwnerLowStockAlertsEnabled);
+    setOwnerLowStockThreshold(next.telegramOwnerLowStockThreshold);
     setGreeting(next.telegramGreeting);
     setTokenInput('');
   };
@@ -94,6 +108,12 @@ export default function AdminTelegramPage() {
           telegramBotEnabled: enabled,
           telegramSendAnnouncement: sendAnnouncement,
           telegramStockAlertsEnabled: stockAlertsEnabled,
+          telegramOwnerChatId: ownerChatId.trim(),
+          telegramOwnerOrderAlertsEnabled: ownerOrderAlerts,
+          telegramOwnerStuckAlertsEnabled: ownerStuckAlerts,
+          telegramOwnerStuckMinutes: ownerStuckMinutes,
+          telegramOwnerLowStockAlertsEnabled: ownerLowStockAlerts,
+          telegramOwnerLowStockThreshold: ownerLowStockThreshold,
           telegramGreeting: greeting.trim(),
           // Rỗng = giữ token cũ; máy chủ phân biệt bằng việc KHÔNG gửi trường.
           ...(tokenInput.trim() === '' ? {} : { telegramBotToken: tokenInput.trim() }),
@@ -109,6 +129,25 @@ export default function AdminTelegramPage() {
       setFormError(apiErrorMessage(err, t.common.connectionError));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const sendOwnerTest = async () => {
+    if (!token || testingOwner || ownerChatId.trim() === '') return;
+    setTestingOwner(true);
+    setOwnerTestSent(false);
+    setFormError(null);
+    try {
+      await apiFetch<{ ok: true }>('/admin/telegram/owner-test', {
+        method: 'POST',
+        token,
+      });
+      setOwnerTestSent(true);
+      void refreshStatus();
+    } catch (err) {
+      setFormError(apiErrorMessage(err, t.common.connectionError));
+    } finally {
+      setTestingOwner(false);
     }
   };
 
@@ -158,17 +197,26 @@ export default function AdminTelegramPage() {
                       : 'bg-neutral-300',
                 )}
               />
-              <span className="font-medium text-neutral-950">
-                {t.admin.telegramStatusTitle}:
-              </span>
+              <span className="font-medium text-neutral-950">{t.admin.telegramStatusTitle}:</span>
               <span className="text-neutral-700">{statusText}</span>
             </div>
             <Button variant="outline" size="sm" onClick={() => void refreshStatus()}>
               <RefreshCw strokeWidth={1.75} className="h-3.5 w-3.5" />
               {t.admin.telegramStatusRefresh}
             </Button>
-            {status?.lastError && (
-              <p className="w-full text-xs text-red-600">{status.lastError}</p>
+            {status?.lastError && <p className="w-full text-xs text-red-600">{status.lastError}</p>}
+            {status?.lastSuccessAt && (
+              <p className="w-full text-xs text-neutral-500">
+                {t.admin.telegramLastSuccess(new Date(status.lastSuccessAt).toLocaleString())}
+                {status.consecutiveFailures > 0
+                  ? ` · ${t.admin.telegramFailureCount(status.consecutiveFailures)}`
+                  : ''}
+              </p>
+            )}
+            {status?.lastFailureAt && (
+              <p className="w-full text-xs text-neutral-500">
+                {t.admin.telegramLastFailure(new Date(status.lastFailureAt).toLocaleString())}
+              </p>
             )}
           </div>
 
@@ -217,9 +265,7 @@ export default function AdminTelegramPage() {
             {/* Hướng dẫn tạo bot — cho chủ shop chưa từng đụng @BotFather. */}
             {!settings.telegramBotTokenSet && (
               <div className="rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-3 py-2.5">
-                <p className="text-xs font-medium text-neutral-950">
-                  {t.admin.telegramGuideTitle}
-                </p>
+                <p className="text-xs font-medium text-neutral-950">{t.admin.telegramGuideTitle}</p>
                 <ol className="mt-1 list-decimal space-y-0.5 pl-4 text-xs text-neutral-600">
                   <li>{t.admin.telegramGuideStep1}</li>
                   <li>{t.admin.telegramGuideStep2}</li>
@@ -250,6 +296,134 @@ export default function AdminTelegramPage() {
             label={t.admin.telegramStockAlertsLabel}
             hint={t.admin.telegramStockAlertsHint}
           />
+
+          <div className="space-y-4 border-t border-neutral-200 pt-5">
+            <div className="flex items-start gap-3">
+              <BellRing className="mt-0.5 h-5 w-5 shrink-0 text-neutral-700" strokeWidth={1.75} />
+              <div>
+                <h2 className="text-base font-semibold text-neutral-950">
+                  {t.admin.telegramOwnerAlertsTitle}
+                </h2>
+                <p className="mt-0.5 text-sm text-neutral-500">{t.admin.telegramOwnerAlertsHint}</p>
+              </div>
+            </div>
+
+            <Field
+              label={t.admin.telegramOwnerChatLabel}
+              htmlFor="telegram-owner-chat"
+              hint={t.admin.telegramOwnerChatHint}
+            >
+              <Input
+                id="telegram-owner-chat"
+                inputMode="numeric"
+                autoComplete="off"
+                spellCheck={false}
+                value={ownerChatId}
+                placeholder="123456789 hoặc -100…"
+                className="font-mono text-[13px]"
+                onChange={(event) => {
+                  setOwnerChatId(event.target.value);
+                  setSaved(false);
+                  setOwnerTestSent(false);
+                  setFormError(null);
+                }}
+              />
+            </Field>
+
+            <ToggleRow
+              id="telegram-owner-order-alerts"
+              checked={ownerOrderAlerts}
+              onChange={(checked) => {
+                setOwnerOrderAlerts(checked);
+                setSaved(false);
+              }}
+              label={t.admin.telegramOwnerOrderAlertsLabel}
+              hint={t.admin.telegramOwnerOrderAlertsHint}
+            />
+
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem] sm:items-end">
+              <ToggleRow
+                id="telegram-owner-stuck-alerts"
+                checked={ownerStuckAlerts}
+                onChange={(checked) => {
+                  setOwnerStuckAlerts(checked);
+                  setSaved(false);
+                }}
+                label={t.admin.telegramOwnerStuckAlertsLabel}
+                hint={t.admin.telegramOwnerStuckAlertsHint}
+              />
+              <Field
+                label={t.admin.telegramOwnerStuckMinutesLabel}
+                htmlFor="telegram-owner-stuck-minutes"
+              >
+                <Input
+                  id="telegram-owner-stuck-minutes"
+                  type="number"
+                  min={5}
+                  max={1440}
+                  disabled={!ownerStuckAlerts}
+                  value={ownerStuckMinutes}
+                  onChange={(event) => {
+                    setOwnerStuckMinutes(Number(event.target.value));
+                    setSaved(false);
+                  }}
+                />
+              </Field>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_8rem] sm:items-end">
+              <ToggleRow
+                id="telegram-owner-stock-alerts"
+                checked={ownerLowStockAlerts}
+                onChange={(checked) => {
+                  setOwnerLowStockAlerts(checked);
+                  setSaved(false);
+                }}
+                label={t.admin.telegramOwnerLowStockAlertsLabel}
+                hint={t.admin.telegramOwnerLowStockAlertsHint}
+              />
+              <Field
+                label={t.admin.telegramOwnerLowStockThresholdLabel}
+                htmlFor="telegram-owner-stock-threshold"
+              >
+                <Input
+                  id="telegram-owner-stock-threshold"
+                  type="number"
+                  min={0}
+                  max={10000}
+                  disabled={!ownerLowStockAlerts}
+                  value={ownerLowStockThreshold}
+                  onChange={(event) => {
+                    setOwnerLowStockThreshold(Number(event.target.value));
+                    setSaved(false);
+                  }}
+                />
+              </Field>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                loading={testingOwner}
+                disabled={
+                  ownerChatId.trim() === '' || ownerChatId.trim() !== settings.telegramOwnerChatId
+                }
+                onClick={() => void sendOwnerTest()}
+              >
+                <Send className="h-4 w-4" strokeWidth={1.75} />
+                {t.admin.telegramOwnerSendTest}
+              </Button>
+              {ownerTestSent && (
+                <span className="text-sm text-emerald-700">{t.admin.telegramOwnerTestSent}</span>
+              )}
+              {ownerChatId.trim() !== settings.telegramOwnerChatId && (
+                <span className="text-xs text-neutral-500">
+                  {t.admin.telegramOwnerSaveBeforeTest}
+                </span>
+              )}
+            </div>
+          </div>
 
           <Field
             label={t.admin.telegramGreetingLabel}

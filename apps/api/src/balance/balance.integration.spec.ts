@@ -385,6 +385,35 @@ describe('BalanceService (tích hợp — tiền thật, chạy trên PG thật)
     ]);
   });
 
+  itDb('Telegram phát lại cùng callback chỉ tạo một mã, rồi cộng giả đúng một lần', async () => {
+    const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const callback = 'callback-deposit-001';
+    const [a, b] = await Promise.all([
+      service.createDeposit(user, 260_000, 'crypto_bep20', callback),
+      service.createDeposit(user, 260_000, 'crypto_bep20', callback),
+    ]);
+    expect(a.deposit.id).toBe(b.deposit.id);
+    expect(
+      await prisma.deposit.count({ where: { telegramCallbackId: callback } }),
+    ).toBe(1);
+
+    const before = await service.getBalance(user.id);
+    expect(
+      await walletCredit.credit(a.deposit.id, {
+        cryptoTxId: 'tx-gia-lap-idempotency',
+      }),
+    ).toBe(true);
+    expect(
+      await walletCredit.credit(a.deposit.id, {
+        cryptoTxId: 'tx-gia-lap-idempotency-lap-lai',
+      }),
+    ).toBe(false);
+    expect((await service.getBalance(user.id)) - before).toBeCloseTo(
+      Number(a.deposit.amountUsdt),
+      6,
+    );
+  });
+
   itDb('cộng ví mã crypto đúng MỘT lần dù hai vòng đối soát đua nhau', async () => {
     const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const truoc = await service.getBalance(user.id);

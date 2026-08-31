@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { PackagePlus, RotateCcw, SendHorizontal } from 'lucide-react';
+import { BellRing, PackagePlus, RotateCcw, SendHorizontal } from 'lucide-react';
 import type { TelegramPreviewDto } from '@webcatt/shared';
 import { apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -41,7 +41,10 @@ type SimMessage =
     };
 
 function gioBayGio(): string {
-  return new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' });
+  return new Date().toLocaleTimeString('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 /** Bong bóng phía bot (trái, nền xám xanh của Telegram dark). */
@@ -206,11 +209,39 @@ export function TelegramSimulator({
     }
   };
 
+  const showOwnerAlert = async () => {
+    if (!token) return;
+    setError(null);
+    setTyping(true);
+    try {
+      const data = await fetchPreview(lang, 1);
+      if (!data.screens['owner-alert']) {
+        setError(t.admin.telegramSimBuyNote);
+        return;
+      }
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextId.current++,
+          from: 'bot',
+          kind: 'screens',
+          data,
+          view: 'owner-alert',
+          time: gioBayGio(),
+        },
+      ]);
+    } catch {
+      setError(t.common.connectionError);
+    } finally {
+      setTyping(false);
+    }
+  };
+
   const tenBot = botName ?? t.admin.telegramSimBotName;
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <Tabs<PreviewLang>
           items={[
             { value: 'vi', label: 'VI' },
@@ -220,7 +251,7 @@ export function TelegramSimulator({
           value={lang}
           onChange={setLang}
         />
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
           <button
             type="button"
             onClick={() => void showStockAlert()}
@@ -228,6 +259,14 @@ export function TelegramSimulator({
           >
             <PackagePlus strokeWidth={1.75} className="h-3.5 w-3.5" />
             {t.admin.telegramStockAlertsPreview}
+          </button>
+          <button
+            type="button"
+            onClick={() => void showOwnerAlert()}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-950"
+          >
+            <BellRing strokeWidth={1.75} className="h-3.5 w-3.5" />
+            {t.admin.telegramOwnerAlertsPreview}
           </button>
           <button
             type="button"
@@ -258,10 +297,7 @@ export function TelegramSimulator({
         </div>
 
         {/* Dòng tin nhắn */}
-        <div
-          ref={scroller}
-          className="flex h-[430px] flex-col gap-2 overflow-y-auto px-3 py-3"
-        >
+        <div ref={scroller} className="flex h-[430px] flex-col gap-2 overflow-y-auto px-3 py-3">
           <div className="self-center rounded-full bg-black/30 px-3 py-0.5 text-[11px] text-[#8a9aa9]">
             {t.admin.telegramSimToday}
           </div>
@@ -283,8 +319,7 @@ export function TelegramSimulator({
               return <BotBubble key={message.id} html={message.html} time={message.time} />;
             }
             const noiDung =
-              message.data.screens[message.view] ??
-              message.data.screens[message.data.entry];
+              message.data.screens[message.view] ?? message.data.screens[message.data.entry];
             return (
               <div key={message.id} className="max-w-[85%] space-y-1 self-start">
                 <BotBubble html={noiDung.text} time={message.time} photo={noiDung.photo} />

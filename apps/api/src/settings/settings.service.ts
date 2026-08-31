@@ -98,9 +98,7 @@ export class SettingsService {
     const setting = await this.getSetting();
     const methods: PaymentMethodDto[] = [];
 
-    const binancePayKey = (
-      this.config.get<string>('BINANCE_PAY_API_KEY') ?? ''
-    ).trim();
+    const binancePayKey = (this.config.get<string>('BINANCE_PAY_API_KEY') ?? '').trim();
     if (setting.binancePayEnabled && binancePayKey !== '') {
       methods.push({ method: 'binance_pay' });
     }
@@ -138,8 +136,7 @@ export class SettingsService {
       methods.push({ method: 'crypto_trc20', address: trc20 });
     }
     const mockAllowed =
-      setting.mockEnabled &&
-      (this.config.get<string>('PAYMENT_MOCK') ?? '').trim() === 'true';
+      setting.mockEnabled && (this.config.get<string>('PAYMENT_MOCK') ?? '').trim() === 'true';
     if (mockAllowed && methods.length === 0) {
       methods.push({ method: 'mock' });
     }
@@ -155,13 +152,8 @@ export class SettingsService {
    * nếu không cửa hàng trông vẫn bình thường mà không đơn nào đặt được.
    */
   async getReadiness(): Promise<StoreReadinessDto> {
-    const [setting, methods] = await Promise.all([
-      this.getSetting(),
-      this.getEnabledMethods(),
-    ]);
-    const binancePayKey = (
-      this.config.get<string>('BINANCE_PAY_API_KEY') ?? ''
-    ).trim();
+    const [setting, methods] = await Promise.all([this.getSetting(), this.getEnabledMethods()]);
+    const binancePayKey = (this.config.get<string>('BINANCE_PAY_API_KEY') ?? '').trim();
 
     return {
       activePaymentMethods: methods.map((entry) => entry.method),
@@ -174,8 +166,7 @@ export class SettingsService {
         setting.binanceIdEnabled &&
         (this.config.get<string>('BINANCE_API_KEY') ?? '').trim() === '',
       mockActive: methods.some((entry) => entry.method === 'mock'),
-      telegramIncomplete:
-        setting.telegramBotEnabled && setting.telegramBotToken.trim() === '',
+      telegramIncomplete: setting.telegramBotEnabled && setting.telegramBotToken.trim() === '',
       stockAvailable: await this.countAvailableStock(),
       supportChannelsMissing: parseSupportChannels(setting.supportChannels).length === 0,
     };
@@ -194,9 +185,7 @@ export class SettingsService {
   /** Địa chỉ ví nhận theo mạng — chuỗi rỗng khi chưa cấu hình. */
   async getCryptoAddress(network: CryptoNetwork): Promise<string> {
     const setting = await this.getSetting();
-    return (
-      network === 'BEP20' ? setting.bep20Address : setting.trc20Address
-    ).trim();
+    return (network === 'BEP20' ? setting.bep20Address : setting.trc20Address).trim();
   }
 
   /** Binance ID nhận tiền (rỗng = chưa cấu hình). */
@@ -219,6 +208,12 @@ export class SettingsService {
     sendAnnouncement: boolean;
     stockAlertsEnabled: boolean;
     greeting: string;
+    ownerChatId: string;
+    ownerOrderAlertsEnabled: boolean;
+    ownerStuckAlertsEnabled: boolean;
+    ownerStuckMinutes: number;
+    ownerLowStockAlertsEnabled: boolean;
+    ownerLowStockThreshold: number;
   }> {
     const setting = await this.getSetting();
     return {
@@ -227,6 +222,12 @@ export class SettingsService {
       sendAnnouncement: setting.telegramSendAnnouncement,
       stockAlertsEnabled: setting.telegramStockAlertsEnabled,
       greeting: setting.telegramGreeting.trim(),
+      ownerChatId: setting.telegramOwnerChatId.trim(),
+      ownerOrderAlertsEnabled: setting.telegramOwnerOrderAlertsEnabled,
+      ownerStuckAlertsEnabled: setting.telegramOwnerStuckAlertsEnabled,
+      ownerStuckMinutes: setting.telegramOwnerStuckMinutes,
+      ownerLowStockAlertsEnabled: setting.telegramOwnerLowStockAlertsEnabled,
+      ownerLowStockThreshold: setting.telegramOwnerLowStockThreshold,
     };
   }
 
@@ -235,16 +236,12 @@ export class SettingsService {
    * để không phải echo lại cấu hình thanh toán (hai tab admin ghi đè nhau).
    * Cùng quy tắc fail-closed và cùng nhật ký với update() đầy đủ.
    */
-  async updateTelegram(
-    actor: User,
-    dto: UpdateTelegramSettingsDto,
-  ): Promise<AdminStoreSettingDto> {
+  async updateTelegram(actor: User, dto: UpdateTelegramSettingsDto): Promise<AdminStoreSettingDto> {
     const before = await this.getSetting();
 
     const token = dto.telegramBotToken?.trim();
     const enabledNext = dto.telegramBotEnabled ?? before.telegramBotEnabled;
-    const tokenSauKhiLuu =
-      token === undefined ? before.telegramBotToken.trim() : token;
+    const tokenSauKhiLuu = token === undefined ? before.telegramBotToken.trim() : token;
     if (enabledNext && tokenSauKhiLuu === '') {
       throw new BadRequestException(K.adminTelegramTokenRequired);
     }
@@ -256,16 +253,40 @@ export class SettingsService {
         // Không gửi = giữ token cũ — trang quản trị không bao giờ nhận được
         // token nên nó KHÔNG THỂ gửi ngược lên.
         telegramBotToken: token === undefined ? before.telegramBotToken : token,
-        telegramSendAnnouncement:
-          dto.telegramSendAnnouncement ?? before.telegramSendAnnouncement,
+        telegramSendAnnouncement: dto.telegramSendAnnouncement ?? before.telegramSendAnnouncement,
         telegramStockAlertsEnabled:
           dto.telegramStockAlertsEnabled ?? before.telegramStockAlertsEnabled,
+        telegramOwnerChatId:
+          dto.telegramOwnerChatId === undefined
+            ? before.telegramOwnerChatId
+            : dto.telegramOwnerChatId.trim(),
+        telegramOwnerOrderAlertsEnabled:
+          dto.telegramOwnerOrderAlertsEnabled ?? before.telegramOwnerOrderAlertsEnabled,
+        telegramOwnerStuckAlertsEnabled:
+          dto.telegramOwnerStuckAlertsEnabled ?? before.telegramOwnerStuckAlertsEnabled,
+        telegramOwnerStuckMinutes:
+          dto.telegramOwnerStuckMinutes ?? before.telegramOwnerStuckMinutes,
+        telegramOwnerLowStockAlertsEnabled:
+          dto.telegramOwnerLowStockAlertsEnabled ?? before.telegramOwnerLowStockAlertsEnabled,
+        telegramOwnerLowStockThreshold:
+          dto.telegramOwnerLowStockThreshold ?? before.telegramOwnerLowStockThreshold,
         telegramGreeting:
           dto.telegramGreeting === undefined
             ? before.telegramGreeting
             : dto.telegramGreeting.trim(),
       },
     });
+
+    if (
+      updated.telegramOwnerLowStockThreshold !== before.telegramOwnerLowStockThreshold ||
+      (!before.telegramOwnerLowStockAlertsEnabled && updated.telegramOwnerLowStockAlertsEnabled)
+    ) {
+      // Ngưỡng mới phải được đánh giá lại từ đầu; giữ marker cũ có thể che mất
+      // một variant đang thấp hơn đúng ngưỡng chủ shop vừa chọn.
+      await this.prisma.productVariant.updateMany({
+        data: { telegramOwnerLowStockNotifiedAt: null },
+      });
+    }
 
     const changes = diffChanges(toSnapshot(before), toSnapshot(updated));
     await this.audit.log(
@@ -388,14 +409,10 @@ export class SettingsService {
      * Khoá API xét theo giá trị SẼ CÓ sau khi lưu: không gửi trường này nghĩa là
      * giữ khoá cũ, nên không được coi là thiếu.
      */
-    const khoaSauKhiLuu =
-      sepayApiKey === undefined ? before0.sepayApiKey.trim() : sepayApiKey;
+    const khoaSauKhiLuu = sepayApiKey === undefined ? before0.sepayApiKey.trim() : sepayApiKey;
     if (
       dto.sepayEnabled &&
-      (sepayAccountNumber === '' ||
-        sepayBank === '' ||
-        dto.vndPerUsdt <= 0 ||
-        khoaSauKhiLuu === '')
+      (sepayAccountNumber === '' || sepayBank === '' || dto.vndPerUsdt <= 0 || khoaSauKhiLuu === '')
     ) {
       throw new BadRequestException(K.adminSepayIncomplete);
     }
@@ -407,9 +424,7 @@ export class SettingsService {
     const telegramBotToken = dto.telegramBotToken?.trim();
     const telegramEnabledNext = dto.telegramBotEnabled ?? before0.telegramBotEnabled;
     const tokenSauKhiLuu =
-      telegramBotToken === undefined
-        ? before0.telegramBotToken.trim()
-        : telegramBotToken;
+      telegramBotToken === undefined ? before0.telegramBotToken.trim() : telegramBotToken;
     if (telegramEnabledNext && tokenSauKhiLuu === '') {
       throw new BadRequestException(K.adminTelegramTokenRequired);
     }
@@ -476,12 +491,9 @@ export class SettingsService {
       telegramBotEnabled: telegramEnabledNext,
       // Không gửi = giữ token cũ — trang quản trị không bao giờ nhận được token
       // nên nó KHÔNG THỂ gửi ngược lên.
-      telegramBotToken:
-        telegramBotToken === undefined ? before.telegramBotToken : telegramBotToken,
+      telegramBotToken: telegramBotToken === undefined ? before.telegramBotToken : telegramBotToken,
       sepayWebhookSecret:
-        sepayWebhookSecret === undefined
-          ? before.sepayWebhookSecret
-          : sepayWebhookSecret,
+        sepayWebhookSecret === undefined ? before.sepayWebhookSecret : sepayWebhookSecret,
       aiProvider: aiProviderNext,
       aiBaseUrl: aiBaseUrl === undefined ? before.aiBaseUrl : aiBaseUrl,
       aiModel: aiModelNext,
@@ -544,6 +556,12 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     telegramBotTokenHint: setting.telegramBotToken.trim().slice(-4),
     telegramSendAnnouncement: setting.telegramSendAnnouncement,
     telegramStockAlertsEnabled: setting.telegramStockAlertsEnabled,
+    telegramOwnerChatId: setting.telegramOwnerChatId,
+    telegramOwnerOrderAlertsEnabled: setting.telegramOwnerOrderAlertsEnabled,
+    telegramOwnerStuckAlertsEnabled: setting.telegramOwnerStuckAlertsEnabled,
+    telegramOwnerStuckMinutes: setting.telegramOwnerStuckMinutes,
+    telegramOwnerLowStockAlertsEnabled: setting.telegramOwnerLowStockAlertsEnabled,
+    telegramOwnerLowStockThreshold: setting.telegramOwnerLowStockThreshold,
     telegramGreeting: setting.telegramGreeting,
     aiProvider: normalizeProvider(setting.aiProvider),
     aiBaseUrl: setting.aiBaseUrl,
@@ -581,6 +599,12 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
     telegramBotTokenSet: setting.telegramBotToken.trim() !== '',
     telegramSendAnnouncement: setting.telegramSendAnnouncement,
     telegramStockAlertsEnabled: setting.telegramStockAlertsEnabled,
+    telegramOwnerChatId: setting.telegramOwnerChatId,
+    telegramOwnerOrderAlertsEnabled: setting.telegramOwnerOrderAlertsEnabled,
+    telegramOwnerStuckAlertsEnabled: setting.telegramOwnerStuckAlertsEnabled,
+    telegramOwnerStuckMinutes: setting.telegramOwnerStuckMinutes,
+    telegramOwnerLowStockAlertsEnabled: setting.telegramOwnerLowStockAlertsEnabled,
+    telegramOwnerLowStockThreshold: setting.telegramOwnerLowStockThreshold,
     telegramGreeting: setting.telegramGreeting,
     aiProvider: setting.aiProvider,
     aiBaseUrl: setting.aiBaseUrl,
@@ -599,9 +623,7 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
  * xuống nhánh nào không ai lường trước.
  */
 function normalizeProvider(value: string): AiProvider {
-  return (AI_PROVIDERS as readonly string[]).includes(value)
-    ? (value as AiProvider)
-    : 'anthropic';
+  return (AI_PROVIDERS as readonly string[]).includes(value) ? (value as AiProvider) : 'anthropic';
 }
 
 /**

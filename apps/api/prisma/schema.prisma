@@ -143,6 +143,9 @@ model Deposit {
   paidAt    DateTime?
   /// Outbox cho bot báo "đã cộng tiền" — cùng cơ chế với Order.telegramNotifiedAt.
   telegramNotifiedAt DateTime?
+  /// Khoá idempotency từ callback_query.id. Telegram có thể phát lại update
+  /// sau khi API restart; cùng một cú bấm không được tạo hai mã nạp.
+  telegramCallbackId String?       @unique
 
   @@index([status, expiresAt])
   @@index([userId, createdAt])
@@ -308,6 +311,10 @@ model ProductVariant {
   sortOrder Int     @default(0)
   active    Boolean @default(true)
 
+  /// Đã báo chủ shop cho đợt kho thấp hiện tại. Khi kho được nạp vượt ngưỡng,
+  /// worker xoá mốc này để lần tụt tiếp theo được báo lại.
+  telegramOwnerLowStockNotifiedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -429,12 +436,21 @@ model Order {
   /// khách web — bot bỏ qua). Là outbox: KHÔNG gọi Telegram trong transaction
   /// giao hàng, một vòng quét riêng đọc cột này rồi gửi và đánh dấu.
   telegramNotifiedAt DateTime?
+  /// Khoá idempotency từ callback_query.id: Telegram phát lại một cú bấm mua
+  /// vẫn phải trả về chính đơn cũ, không giữ thêm kho.
+  telegramCallbackId              String?     @unique
+  /// Hai outbox độc lập cho chủ shop. Gửi Telegram luôn ở worker, ngoài
+  /// transaction đang giữ kho/đổi trạng thái đơn.
+  telegramOwnerNewOrderNotifiedAt DateTime?
+  telegramOwnerStuckNotifiedAt    DateTime?
   items      OrderItem[]
   payment    Payment?
 
   @@index([userId, createdAt])
   @@index([status, expiresAt])
   @@index([couponId])
+  @@index([telegramOwnerNewOrderNotifiedAt, createdAt])
+  @@index([status, telegramOwnerStuckNotifiedAt, createdAt])
 }
 
 /// Mã giảm giá. `usedCount` được GIỮ CHỖ ngay khi đặt hàng và trả lại khi đơn
@@ -640,6 +656,14 @@ model StoreSetting {
   /// Tự báo hàng mới cho những khách đã từng mở bot. Hàng đợi nằm trong CSDL
   /// nên restart API không làm mất thông báo đang gửi dở.
   telegramStockAlertsEnabled Boolean @default(true)
+  /// Chat cá nhân/nhóm nhận cảnh báo vận hành. Rỗng = tắt toàn bộ cảnh báo chủ
+  /// shop, dù các công tắc bên dưới đang bật.
+  telegramOwnerChatId                String  @default("")
+  telegramOwnerOrderAlertsEnabled    Boolean @default(true)
+  telegramOwnerStuckAlertsEnabled    Boolean @default(true)
+  telegramOwnerStuckMinutes          Int     @default(5)
+  telegramOwnerLowStockAlertsEnabled Boolean @default(true)
+  telegramOwnerLowStockThreshold     Int     @default(3)
   /// Lời chào tuỳ chỉnh của bot. Rỗng = câu mặc định theo ngôn ngữ khách;
   /// có nội dung thì dùng NGUYÊN VĂN cho mọi ngôn ngữ (chủ shop tự cân nhắc).
   telegramGreeting String @default("")

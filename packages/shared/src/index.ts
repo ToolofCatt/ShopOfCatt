@@ -335,6 +335,13 @@ export interface AdminStoreSettingDto {
   telegramSendAnnouncement: boolean;
   /** Tự gửi tin hàng mới tới những khách đã từng mở bot. */
   telegramStockAlertsEnabled: boolean;
+  /** Chat cá nhân/nhóm nhận cảnh báo vận hành; rỗng = chưa cấu hình. */
+  telegramOwnerChatId: string;
+  telegramOwnerOrderAlertsEnabled: boolean;
+  telegramOwnerStuckAlertsEnabled: boolean;
+  telegramOwnerStuckMinutes: number;
+  telegramOwnerLowStockAlertsEnabled: boolean;
+  telegramOwnerLowStockThreshold: number;
   /** Lời chào tuỳ chỉnh của bot; rỗng = câu mặc định theo ngôn ngữ khách. */
   telegramGreeting: string;
   /** Các kênh liên hệ hiển thị ở khối "Quên mật khẩu". */
@@ -345,6 +352,10 @@ export interface AdminStoreSettingDto {
 
 /** Độ dài tối đa của lời chào bot tuỳ chỉnh. */
 export const TELEGRAM_GREETING_MAX_LENGTH = 500;
+export const TELEGRAM_OWNER_STUCK_MINUTES_MIN = 5;
+export const TELEGRAM_OWNER_STUCK_MINUTES_MAX = 1_440;
+export const TELEGRAM_OWNER_LOW_STOCK_MIN = 0;
+export const TELEGRAM_OWNER_LOW_STOCK_MAX = 10_000;
 
 // ---------- Bot Telegram: xem trước & trạng thái ----------
 
@@ -386,6 +397,12 @@ export interface TelegramStatusDto {
   botUsername: string | null;
   /** Lỗi gần nhất đáng cho chủ shop biết (token bị từ chối/thu hồi); null = không có. */
   lastError: string | null;
+  /** Lần Bot API trả thành công gần nhất (ISO). */
+  lastSuccessAt: string | null;
+  /** Lần lỗi kết nối tạm thời gần nhất (ISO). */
+  lastFailureAt: string | null;
+  /** Số lỗi kết nối liên tiếp; thành công sẽ đưa về 0. */
+  consecutiveFailures: number;
 }
 
 /**

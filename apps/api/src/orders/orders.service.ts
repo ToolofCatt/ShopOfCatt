@@ -36,10 +36,7 @@ import {
 } from '../binance-exchange/deposit-matcher';
 import { generateMerchantTradeNo, generateOrderCode } from '../common/codes';
 import { CouponsService } from '../coupons/coupons.service';
-import {
-  BinanceService,
-  type BinanceCreateOrderResult,
-} from '../payments/binance.service';
+import { BinanceService, type BinanceCreateOrderResult } from '../payments/binance.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -56,8 +53,15 @@ interface ReservedItem {
   stockIds: string[];
 }
 
+export interface CreateOrderOptions {
+  /** callback_query.id của Telegram — null/không truyền với đơn từ web. */
+  telegramCallbackId?: string;
+}
+
 /** Khoản nạp được tính từ trước khi tạo đơn tối đa 10 phút (đồng bộ với matcher). */
 const CRYPTO_SLACK_MS = 10 * 60_000;
+/** Seed tách namespace khóa callback Telegram khỏi các advisory lock khác. */
+const TELEGRAM_ORDER_LOCK_SEED = 0x43415454474f5244n;
 /** Xóa các trường phiên Binance Pay khi chuyển sang phương thức khác. */
 const CLEAR_PAY_SESSION = {
   prepayId: null,
@@ -120,9 +124,7 @@ export class OrdersService {
   }
 
   private get apiPublicUrl(): string {
-    return (
-      this.config.get<string>('API_PUBLIC_URL') ?? 'http://localhost:3001'
-    );
+    return this.config.get<string>('API_PUBLIC_URL') ?? 'http://localhost:3001';
   }
 
   /**
@@ -131,18 +133,42 @@ export class OrdersService {
    * (gọi mạng ngoài transaction để không giữ lock). Nếu tạo phiên Binance Pay
    * thất bại, đơn vẫn PENDING để khách chọn phương thức khác trên trang thanh toán.
    */
-  async create(user: User, dto: CreateOrderDto): Promise<CreateOrderResponse> {
-    const methods = await this.settings.getEnabledMethods();
+  async create(
+    user: User,
+    dto: CreateOrderDto,
+    options: CreateOrderOptions = {},
+  ): Promise<CreateOrderResponse> {
+    const telegramCallbackId = options.telegramCallbackId?.trim() || null;
+    const [methods, telegram] = await Promise.all([
+      this.settings.getEnabledMethods(),
+      this.settings.getTelegramConfig(),
+    ]);
     if (methods.length === 0) {
       // Chủ shop chưa bật phương thức nào — báo rõ thay vì âm thầm dùng cổng giả lập.
       throw new ServiceUnavailableException(K.paymentNoMethodConfigured);
     }
     const method = methods[0].method;
+    if (telegramCallbackId) {
+      const replay = await this.loadTelegramReplay(
+        user.id,
+        telegramCallbackId,
+        method === 'mock',
+      );
+      if (replay) return replay;
+    }
+    const ownerAlertQueued =
+      telegram.enabled &&
+      telegram.token !== '' &&
+      telegram.ownerChatId !== '' &&
+      telegram.ownerOrderAlertsEnabled;
 
     // Gộp các dòng trùng variantId để tránh khóa trùng dòng kho trong cùng transaction.
     const merged = new Map<string, number>();
     for (const item of dto.items) {
-      merged.set(item.variantId, (merged.get(item.variantId) ?? 0) + item.quantity);
+      merged.set(
+        item.variantId,
+        (merged.get(item.variantId) ?? 0) + item.quantity,
+      );
     }
 
     // Kiểm tra mã giảm giá TRƯỚC transaction để báo lỗi sớm và không giữ lock
@@ -154,124 +180,199 @@ export class OrdersService {
       checkedCoupon = await this.coupons.validate(user.id, rawCoupon, subtotal);
     }
 
-    const created = await this.prisma.$transaction(
-      async (tx) => {
-        await this.fulfillment.releaseExpiredOrders(tx);
-
-        const reservedItems: ReservedItem[] = [];
-        for (const [variantId, quantity] of merged) {
-          const variant = await tx.productVariant.findFirst({
-            where: { id: variantId, active: true, product: { active: true } },
-            include: { product: true },
-          });
-          if (!variant) {
-            throw new NotFoundException(K.variantNotFound);
-          }
-          const stockIds = await this.fulfillment.lockAvailableStock(
-            tx,
-            variant.id,
-            quantity,
-          );
-          if (stockIds.length < quantity) {
-            const remaining = await tx.stockItem.count({
-              where: { variantId: variant.id, status: 'AVAILABLE' },
+    let created: {
+      orderId: string;
+      code: string;
+      total: number;
+      replayed: boolean;
+    };
+    try {
+      created = await this.prisma.$transaction(
+        async (tx) => {
+          if (telegramCallbackId) {
+            // Khóa từ ĐẦU transaction, trước khi rút kho. Unique ở cuối chỉ
+            // chống tạo trùng nhưng bên thua có thể thấy "hết hàng" giả do
+            // SKIP LOCKED; advisory lock khiến nó chờ và đọc lại đơn bên thắng.
+            await tx.$queryRaw`
+              SELECT pg_advisory_xact_lock(
+                hashtextextended(${telegramCallbackId}, ${TELEGRAM_ORDER_LOCK_SEED})
+              )::text AS "locked"
+            `;
+            const replay = await tx.order.findUnique({
+              where: { telegramCallbackId },
+              select: { id: true, userId: true, code: true, totalAmount: true },
             });
-            throw new BadRequestException({
-              key: K.orderInsufficientStock,
-              params: { name: fullItemName(variant), remaining },
-            });
+            if (replay) {
+              if (replay.userId !== user.id) {
+                throw new BadRequestException(K.orderNotFound);
+              }
+              return {
+                orderId: replay.id,
+                code: replay.code,
+                total: Number(replay.totalAmount),
+                replayed: true,
+              };
+            }
           }
-          reservedItems.push({ variant, quantity, stockIds });
-        }
 
-        let subtotalAmount = new Prisma.Decimal(0);
-        for (const item of reservedItems) {
-          subtotalAmount = subtotalAmount.add(
-            item.variant.price.mul(item.quantity),
-          );
-        }
+          await this.fulfillment.releaseExpiredOrders(tx);
 
-        // Áp mã giảm giá: giữ chỗ một lượt (nguyên tử) rồi tính lại số tiền
-        // giảm trên đúng tiền hàng vừa chốt trong transaction này.
-        let discountAmount = new Prisma.Decimal(0);
-        let couponId: string | null = null;
-        let couponCode: string | null = null;
-        if (checkedCoupon) {
-          const { coupon } = checkedCoupon;
-          const subtotal = Number(subtotalAmount);
-          if (subtotal < Number(coupon.minAmount)) {
-            throw new BadRequestException({
-              key: K.couponMinAmount,
-              params: { min: Number(coupon.minAmount).toFixed(2) },
+          const reservedItems: ReservedItem[] = [];
+          for (const [variantId, quantity] of merged) {
+            const variant = await tx.productVariant.findFirst({
+              where: { id: variantId, active: true, product: { active: true } },
+              include: { product: true },
             });
+            if (!variant) {
+              throw new NotFoundException(K.variantNotFound);
+            }
+            const stockIds = await this.fulfillment.lockAvailableStock(
+              tx,
+              variant.id,
+              quantity,
+            );
+            if (stockIds.length < quantity) {
+              const remaining = await tx.stockItem.count({
+                where: { variantId: variant.id, status: 'AVAILABLE' },
+              });
+              throw new BadRequestException({
+                key: K.orderInsufficientStock,
+                params: { name: fullItemName(variant), remaining },
+              });
+            }
+            reservedItems.push({ variant, quantity, stockIds });
           }
-          await this.coupons.reserve(tx, coupon);
-          discountAmount = new Prisma.Decimal(
-            calcDiscount(
-              subtotal,
-              coupon.type as DiscountType,
-              Number(coupon.value),
-            ),
-          );
-          couponId = coupon.id;
-          couponCode = coupon.code;
-        }
-        const totalAmount = subtotalAmount.sub(discountAmount);
 
-        const code = await this.generateUniqueOrderCode(tx);
-        const expiresAt = new Date(Date.now() + this.expireMinutes * 60_000);
+          let subtotalAmount = new Prisma.Decimal(0);
+          for (const item of reservedItems) {
+            subtotalAmount = subtotalAmount.add(
+              item.variant.price.mul(item.quantity),
+            );
+          }
 
-        const order = await tx.order.create({
-          data: {
-            code,
-            userId: user.id,
-            status: 'PENDING',
-            subtotalAmount,
-            discountAmount,
-            totalAmount,
-            couponId,
-            couponCode,
-            currency: 'USDT',
-            expiresAt,
-          },
-        });
+          // Áp mã giảm giá: giữ chỗ một lượt (nguyên tử) rồi tính lại số tiền
+          // giảm trên đúng tiền hàng vừa chốt trong transaction này.
+          let discountAmount = new Prisma.Decimal(0);
+          let couponId: string | null = null;
+          let couponCode: string | null = null;
+          if (checkedCoupon) {
+            const { coupon } = checkedCoupon;
+            const subtotal = Number(subtotalAmount);
+            if (subtotal < Number(coupon.minAmount)) {
+              throw new BadRequestException({
+                key: K.couponMinAmount,
+                params: { min: Number(coupon.minAmount).toFixed(2) },
+              });
+            }
+            await this.coupons.reserve(tx, coupon);
+            discountAmount = new Prisma.Decimal(
+              calcDiscount(
+                subtotal,
+                coupon.type as DiscountType,
+                Number(coupon.value),
+              ),
+            );
+            couponId = coupon.id;
+            couponCode = coupon.code;
+          }
+          const totalAmount = subtotalAmount.sub(discountAmount);
 
-        for (const item of reservedItems) {
-          const orderItem = await tx.orderItem.create({
+          const code = await this.generateUniqueOrderCode(tx);
+          const expiresAt = new Date(Date.now() + this.expireMinutes * 60_000);
+
+          const order = await tx.order.create({
             data: {
-              orderId: order.id,
-              productId: item.variant.productId,
-              variantId: item.variant.id,
-              productName: item.variant.product.name,
-              variantName: item.variant.name,
-              unitPrice: item.variant.price,
-              quantity: item.quantity,
+              code,
+              userId: user.id,
+              status: 'PENDING',
+              subtotalAmount,
+              discountAmount,
+              totalAmount,
+              couponId,
+              couponCode,
+              currency: 'USDT',
+              expiresAt,
+              telegramCallbackId,
+              // Tắt/chưa cấu hình thì đánh dấu ngay để lần bật sau không dội lại
+              // toàn bộ đơn lịch sử như thể vừa mới phát sinh.
+              telegramOwnerNewOrderNotifiedAt: ownerAlertQueued
+                ? null
+                : new Date(),
             },
           });
-          await tx.stockItem.updateMany({
-            where: { id: { in: item.stockIds } },
-            data: { status: 'RESERVED', orderItemId: orderItem.id },
+
+          for (const item of reservedItems) {
+            const orderItem = await tx.orderItem.create({
+              data: {
+                orderId: order.id,
+                productId: item.variant.productId,
+                variantId: item.variant.id,
+                productName: item.variant.product.name,
+                variantName: item.variant.name,
+                unitPrice: item.variant.price,
+                quantity: item.quantity,
+              },
+            });
+            await tx.stockItem.updateMany({
+              where: { id: { in: item.stockIds } },
+              data: { status: 'RESERVED', orderItemId: orderItem.id },
+            });
+          }
+
+          // merchantTradeNo luôn được sinh; mode được cấu hình lại sau khi commit.
+          const merchantTradeNo = generateMerchantTradeNo(code);
+          await tx.payment.create({
+            data: {
+              orderId: order.id,
+              provider: 'BINANCE_PAY',
+              mode: 'MOCK',
+              merchantTradeNo,
+              amount: totalAmount,
+              currency: 'USDT',
+              status: 'PENDING',
+            },
           });
-        }
 
-        // merchantTradeNo luôn được sinh; mode được cấu hình lại sau khi commit.
-        const merchantTradeNo = generateMerchantTradeNo(code);
-        await tx.payment.create({
-          data: {
+          return {
             orderId: order.id,
-            provider: 'BINANCE_PAY',
-            mode: 'MOCK',
-            merchantTradeNo,
-            amount: totalAmount,
-            currency: 'USDT',
-            status: 'PENDING',
-          },
-        });
+            code,
+            total: Number(totalAmount),
+            replayed: false,
+          };
+        },
+        // Callback trùng cố ý xếp hàng ở advisory lock; maxWait mặc định 2s
+        // có thể làm bên chờ vỡ trước khi được đọc lại đơn bên thắng.
+        { maxWait: 15_000, timeout: 15_000 },
+      );
+    } catch (error) {
+      /*
+       * Hai tiến trình hiếm khi cùng nhận một update: unique callback là trọng
+       * tài. Bên thua đọc lại đơn bên thắng, không chạy lại giữ kho.
+       */
+      if (
+        telegramCallbackId &&
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        const replay = await this.waitForTelegramReplay(
+          user.id,
+          telegramCallbackId,
+          method === 'mock',
+        );
+        if (replay) return replay;
+      }
+      throw error;
+    }
 
-        return { orderId: order.id, code, total: Number(totalAmount) };
-      },
-      { timeout: 15000 },
-    );
+    if (created.replayed && telegramCallbackId) {
+      const replay = await this.waitForTelegramReplay(
+        user.id,
+        telegramCallbackId,
+        method === 'mock',
+      );
+      if (replay) return replay;
+      throw new InternalServerErrorException(K.paymentSessionMissing);
+    }
 
     if (created.total <= 0) {
       // Mã giảm 100%: không có gì để thanh toán → giao hàng ngay.
@@ -286,6 +387,50 @@ export class OrdersService {
       throw new InternalServerErrorException(K.paymentSessionMissing);
     }
     return { order: detail, payment: detail.payment };
+  }
+
+  private async loadTelegramReplay(
+    userId: string,
+    callbackId: string,
+    allowMock = true,
+  ): Promise<CreateOrderResponse | null> {
+    const existed = await this.prisma.order.findUnique({
+      where: { telegramCallbackId: callbackId },
+      select: { userId: true, code: true },
+    });
+    if (!existed) return null;
+    if (existed.userId !== userId) {
+      throw new BadRequestException(K.orderNotFound);
+    }
+    const detail = await this.loadOwnDetail(userId, existed.code);
+    if (!detail.payment) {
+      throw new InternalServerErrorException(K.paymentSessionMissing);
+    }
+    // Payment được tạo MOCK làm placeholder ngay trong transaction giữ kho;
+    // phương thức thật được cấu hình sau commit. Callback đua nhau phải chờ
+    // bước đó xong, không được đem placeholder ra hướng dẫn khách.
+    if (!allowMock && detail.payment.mode === 'MOCK') return null;
+    return { order: detail, payment: detail.payment };
+  }
+
+  private async waitForTelegramReplay(
+    userId: string,
+    callbackId: string,
+    allowMock: boolean,
+  ): Promise<CreateOrderResponse | null> {
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const replay = await this.loadTelegramReplay(
+        userId,
+        callbackId,
+        allowMock,
+      );
+      if (replay) return replay;
+      await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 250);
+        timer.unref?.();
+      });
+    }
+    return null;
   }
 
   /**
@@ -615,7 +760,9 @@ export class OrdersService {
           mode: 'BINANCE_ID',
           cryptoNetwork: null,
           cryptoAddress: binanceId,
-          cryptoAmount: new Prisma.Decimal(Number(order.totalAmount).toFixed(6)),
+          cryptoAmount: new Prisma.Decimal(
+            Number(order.totalAmount).toFixed(6),
+          ),
           cryptoTxId: null,
           ...CLEAR_PAY_SESSION,
         },
@@ -646,7 +793,9 @@ export class OrdersService {
           cryptoAddress: cauHinh.accountNumber,
           sepayBank: cauHinh.bank,
           vndAmount: new Prisma.Decimal(vnd),
-          cryptoAmount: new Prisma.Decimal(Number(order.totalAmount).toFixed(6)),
+          cryptoAmount: new Prisma.Decimal(
+            Number(order.totalAmount).toFixed(6),
+          ),
           cryptoTxId: null,
           sepayRef: null,
           ...CLEAR_PAY_SESSION,
@@ -838,9 +987,7 @@ export class OrdersService {
       });
       if (!existing) return code;
     }
-    throw new InternalServerErrorException(
-      K.orderCodeFailed,
-    );
+    throw new InternalServerErrorException(K.orderCodeFailed);
   }
 }
 

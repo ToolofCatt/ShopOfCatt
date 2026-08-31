@@ -3,6 +3,7 @@ import {
   isTelegramTokenRejected,
   TelegramApiError,
   tgCallIdempotent,
+  telegramRetryDelayMs,
 } from './telegram-api';
 
 function telegramResponse(body: Record<string, unknown>, status = 200): Response {
@@ -44,7 +45,11 @@ describe('tgCallIdempotent', () => {
       .fn<typeof fetch>()
       .mockResolvedValue(
         telegramResponse(
-          { ok: false, error_code: 400, description: 'message is not modified' },
+          {
+            ok: false,
+            error_code: 400,
+            description: 'message is not modified',
+          },
           400,
         ),
       );
@@ -61,7 +66,17 @@ describe('isTelegramTokenRejected', () => {
   it('chỉ nhận 401/404, không gắn nhầm lỗi mạng thành token hỏng', () => {
     expect(isTelegramTokenRejected(new TelegramApiError('getMe', 401, 'Unauthorized'))).toBe(true);
     expect(isTelegramTokenRejected(new TelegramApiError('getMe', 404, 'Not Found'))).toBe(true);
-    expect(isTelegramTokenRejected(new TelegramApiError('getMe', 500, 'Internal error'))).toBe(false);
+    expect(isTelegramTokenRejected(new TelegramApiError('getMe', 500, 'Internal error'))).toBe(
+      false,
+    );
     expect(isTelegramTokenRejected(new TypeError('fetch failed'))).toBe(false);
+  });
+});
+
+describe('telegramRetryDelayMs', () => {
+  it('tăng dần nhưng chặn trần 30 giây', () => {
+    expect([1, 2, 3, 4, 10].map(telegramRetryDelayMs)).toEqual([
+      5_000, 10_000, 20_000, 30_000, 30_000,
+    ]);
   });
 });

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Put, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Post, Put, Query, UseGuards } from '@nestjs/common';
 import type { User } from '@prisma/client';
 import type {
   AdminStoreSettingDto,
@@ -19,11 +19,13 @@ import { AdminGuard } from '../auth/admin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AnnouncementService } from '../announcement/announcement.service';
+import { AuditService } from '../audit/audit.service';
 import { DEPOSIT_MAX_VND, DEPOSIT_MIN_VND } from '../balance/balance.service';
 import { LOCALES, type Locale } from '../i18n/locale';
 import { ProductsService } from '../products/products.service';
 import { sepayQrUrl } from '../payments/sepay-qr';
 import { SettingsService } from '../settings/settings.service';
+import { RateLimit } from '../security/rate-limit.guard';
 import { UpdateTelegramSettingsDto } from '../settings/dto/update-telegram-settings.dto';
 import {
   encodeCallback,
@@ -52,6 +54,7 @@ import {
 import { botDict } from './messages';
 import { TelegramService } from './telegram.service';
 import { renderStockAlert } from './stock-alert-view';
+import { renderOwnerNewOrderAlert } from './owner-alert-view';
 import type { TgInlineKeyboard } from './telegram-api';
 import {
   DEPOSIT_VND_OPTIONS,
@@ -85,7 +88,10 @@ class TelegramPreviewQueryDto {
 /** Đổi bàn phím kiểu Bot API (snake_case) sang DTO camelCase cho web. */
 function toPreviewKeyboard(keyboard: TgInlineKeyboard) {
   return keyboard.map((row) =>
-    row.map((button) => ({ text: button.text, callbackData: button.callback_data })),
+    row.map((button) => ({
+      text: button.text,
+      callbackData: button.callback_data,
+    })),
   );
 }
 
@@ -164,7 +170,11 @@ function previewPayment(
         cryptoAmount: Number((order.totalAmount + 0.0001).toFixed(6)),
       };
     case 'binance_pay':
-      return { ...common, mode: 'BINANCE', checkoutUrl: 'https://pay.binance.com/' };
+      return {
+        ...common,
+        mode: 'BINANCE',
+        checkoutUrl: 'https://pay.binance.com/',
+      };
     case 'mock':
       return { ...common, mode: 'MOCK' };
   }
@@ -198,6 +208,7 @@ export class TelegramAdminController {
     private readonly settings: SettingsService,
     private readonly products: ProductsService,
     private readonly announcements: AnnouncementService,
+    private readonly audit: AuditService,
   ) {}
 
   @Get('status')
@@ -217,6 +228,19 @@ export class TelegramAdminController {
     @Body() dto: UpdateTelegramSettingsDto,
   ): Promise<AdminStoreSettingDto> {
     return this.settings.updateTelegram(user, dto);
+  }
+
+  @Post('owner-test')
+  @RateLimit({ limit: 5, windowMs: 60_000, name: 'admin:telegram-owner-test' })
+  async sendOwnerTest(@CurrentUser() user: User): Promise<{ ok: true }> {
+    await this.telegram.sendOwnerTest();
+    await this.audit.log(
+      user,
+      'settings.update',
+      { type: 'telegram', id: 'owner-alert-test' },
+      { action: 'send_test' },
+    );
+    return { ok: true };
   }
 
   @Get('preview')
@@ -248,7 +272,14 @@ export class TelegramAdminController {
     dua('h', renderHub('Khách', 0, lang, rates, cfg.greeting));
     dua('s', renderSupport(support.supportChannels, support.supportNote, lang));
     dua('lg', renderLanguageMenu(lang));
-    dua('a', renderAccount({ name: 'Khách', code: 100000, balance: 0, spentUsdt: 0, doneCount: 0 }, lang, rates));
+    dua(
+      'a',
+      renderAccount(
+        { name: 'Khách', code: 100000, balance: 0, spentUsdt: 0, doneCount: 0 },
+        lang,
+        rates,
+      ),
+    );
     dua('o', renderOrderList([], lang, rates));
 
     const stockProduct = products.find((product) => product.variants.length > 0);
@@ -274,6 +305,24 @@ export class TelegramAdminController {
         ),
       );
     }
+    dua('owner-alert', {
+      text: renderOwnerNewOrderAlert({
+        code: 'DH-XEMTRUOC',
+        customer: 'Khách Telegram #94000963',
+        items: [
+          {
+            name:
+              stockProduct && stockVariant
+                ? `${stockProduct.name} · ${stockVariant.name}`
+                : 'ChatGPT Plus 30 ngày · Mặc định',
+            quantity: 1,
+          },
+        ],
+        total: '100.000 ₫',
+        createdAt: new Date(),
+      }),
+      keyboard: [],
+    });
 
     const depositMethods = enabledMethods
       .map((entry) => entry.method)
@@ -289,7 +338,8 @@ export class TelegramAdminController {
         if (!entry || rates.vndPerUsdt <= 0) continue;
         const mode: DepositPayMode =
           method === 'sepay' ? 'SEPAY' : method === 'binance_id' ? 'BINANCE_ID' : 'CRYPTO';
-        const network = method === 'crypto_bep20' ? 'BEP20' : method === 'crypto_trc20' ? 'TRC20' : null;
+        const network =
+          method === 'crypto_bep20' ? 'BEP20' : method === 'crypto_trc20' ? 'TRC20' : null;
         dua(
           encodeCallback({ kind: 'depositMethod', vnd, method }),
           renderDepositInstructions(
@@ -346,9 +396,7 @@ export class TelegramAdminController {
           if (!product) continue;
           dua(
             button.callbackData,
-            renderProductDetail(
-              product, lang, rates, support.supportChannels, Number(match[2]),
-            ),
+            renderProductDetail(product, lang, rates, support.supportChannels, Number(match[2])),
           );
         }
       }
@@ -405,7 +453,11 @@ export class TelegramAdminController {
             renderOrderDelivered(delivered, lang),
           );
           for (const method of enabledMethods) {
-            const callback = encodeCallback({ kind: 'method', orderCode: code, method: method.method });
+            const callback = encodeCallback({
+              kind: 'method',
+              orderCode: code,
+              method: method.method,
+            });
             const paid = previewOrder(
               product,
               variant,
@@ -448,7 +500,13 @@ export class TelegramAdminController {
     let entry = 'h';
     if (input !== '' && !input.startsWith('/start')) {
       const action = input.startsWith('/orders') ? 'orders' : matchMenuAction(input);
-      const byAction = { shop: 'c:1', deposit: 'd', orders: 'o', account: 'a', support: 's' } as const;
+      const byAction = {
+        shop: 'c:1',
+        deposit: 'd',
+        orders: 'o',
+        account: 'a',
+        support: 's',
+      } as const;
       if (action && action !== 'search') {
         entry = byAction[action];
       } else if (action === 'search') {

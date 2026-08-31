@@ -77,6 +77,12 @@ export function isTelegramTokenRejected(err: unknown): err is TelegramApiError {
   return err instanceof TelegramApiError && (err.code === 401 || err.code === 404);
 }
 
+/** Backoff cho long-poll: lỗi liên tiếp tăng 5s → 10s → 20s → 30s. */
+export function telegramRetryDelayMs(consecutiveFailures: number): number {
+  const failures = Math.max(1, Math.floor(consecutiveFailures));
+  return Math.min(30_000, 5_000 * 2 ** Math.min(failures - 1, 3));
+}
+
 /**
  * Gọi một method Bot API. Ném `TelegramApiError` khi Telegram trả `ok: false`,
  * ném lỗi fetch thường khi rớt mạng — hai loại phân biệt được ở nơi gọi: lỗi

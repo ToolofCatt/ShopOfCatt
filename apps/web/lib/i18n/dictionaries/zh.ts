@@ -2,8 +2,7 @@ import type { Dictionary } from './vi';
 
 export const zh: Dictionary = {
   meta: {
-    description:
-      '数字商品商店 —— 正版密钥、礼品卡、激活码。全天候自动发货，支持使用 USDT 付款。',
+    description: '数字商品商店 —— 正版密钥、礼品卡、激活码。全天候自动发货，支持使用 USDT 付款。',
   },
 
   common: {
@@ -109,8 +108,7 @@ export const zh: Dictionary = {
     methodTitle: '付款方式',
     reminderTab: (code: string) => `⚠ 待付款 · ${code}`,
     reminderTitle: '您有一笔订单待付款',
-    reminderBody: (code: string) =>
-      `订单 ${code} 尚未付款。点击此处可重新打开付款页面。`,
+    reminderBody: (code: string) => `订单 ${code} 尚未付款。点击此处可重新打开付款页面。`,
     methods: {
       mock: '测试模式',
       binance_pay: 'Binance Pay',
@@ -313,12 +311,12 @@ export const zh: Dictionary = {
   },
 
   legal: {
-    termsTitle: "服务条款",
-    refundTitle: "退款与保修政策",
-    privacyTitle: "隐私政策",
-    updatedAt: "最后更新：",
-    emptyTitle: "暂无内容",
-    emptyHint: "店铺尚未编写此页面，如需帮助请联系我们。",
+    termsTitle: '服务条款',
+    refundTitle: '退款与保修政策',
+    privacyTitle: '隐私政策',
+    updatedAt: '最后更新：',
+    emptyTitle: '暂无内容',
+    emptyHint: '店铺尚未编写此页面，如需帮助请联系我们。',
   },
 
   notFound: {
@@ -763,16 +761,16 @@ export const zh: Dictionary = {
     cancelOrderConfirm: (code: string) => `取消订单 ${code}？已锁定的库存将被释放。`,
 
     /* ===== v5 —— 付款设置 + Binance 状态 ===== */
-    navLegal: "政策",
-    legalTitle: "政策页面",
-    legalSubtitle: "条款、退款与隐私 —— 客户可从页脚进入。",
-    legalLoadError: "无法加载政策页面",
-    legalFieldTitle: "标题",
-    legalFieldBody: "内容",
-    legalBodyHint: "像写 Word 一样编辑。留空则显示占位提示。",
-    legalBodyPlaceholder: "请输入政策内容…",
-    legalSaved: "政策页面已保存。",
-    legalViewPublic: "查看公开页面",
+    navLegal: '政策',
+    legalTitle: '政策页面',
+    legalSubtitle: '条款、退款与隐私 —— 客户可从页脚进入。',
+    legalLoadError: '无法加载政策页面',
+    legalFieldTitle: '标题',
+    legalFieldBody: '内容',
+    legalBodyHint: '像写 Word 一样编辑。留空则显示占位提示。',
+    legalBodyPlaceholder: '请输入政策内容…',
+    legalSaved: '政策页面已保存。',
+    legalViewPublic: '查看公开页面',
     legalUpdatedAt: (d) => `最后更新：${d}`,
     exportCsv: '导出 CSV',
 
@@ -791,7 +789,8 @@ export const zh: Dictionary = {
       telegramIncompleteTitle: 'Telegram 机器人已启用但缺少令牌',
       telegramIncompleteHint: '没有令牌机器人无法运行。请在设置中粘贴 @BotFather 的令牌。',
       sepayIncompleteTitle: 'SePay 已启用但配置不完整',
-      sepayIncompleteHint: '客户付款后订单仍会挂起。请填写账号、银行、VND 汇率和 webhook API 密钥。',
+      sepayIncompleteHint:
+        '客户付款后订单仍会挂起。请填写账号、银行、VND 汇率和 webhook API 密钥。',
       noSupportTitle: '尚未设置联系方式',
       noSupportHint:
         '店铺不发送自动邮件，这是客户找回密码的唯一途径。留空则客户一旦忘记密码，账户和已购买的所有密钥都将无法找回。',
@@ -851,7 +850,7 @@ export const zh: Dictionary = {
     settingVndRateLabel: '汇率（1 USDT 折合 VND）',
     settingVndRateHint: '商品以 USDT 计价，需要汇率才能算出 VND 金额。',
     settingTelegramTitle: 'Telegram 机器人',
-    settingTelegramSectionHint: '通过机器人销售的渠道——正在建设中，目前机器人只会向顾客打招呼。',
+    settingTelegramSectionHint: '完整销售渠道：商品浏览、付款、密钥交付和运营提醒。',
     settingTelegramEnable: '启用 Telegram 机器人',
     settingTelegramEnableHint: '机器人直接在本服务器上运行，无需开放额外端口。',
     settingTelegramTokenLabel: '机器人令牌（来自 @BotFather）',
@@ -874,6 +873,25 @@ export const zh: Dictionary = {
     telegramStockAlertsHint:
       '为在售规格补充密钥后，机器人会向曾使用过机器人的客户发送价格、数量和购买按钮。',
     telegramStockAlertsPreview: '预览到货通知',
+    telegramLastSuccess: (time: string) => `最近连接成功：${time}`,
+    telegramLastFailure: (time: string) => `最近连接失败：${time}`,
+    telegramFailureCount: (count: number) => `连续失败 ${count} 次`,
+    telegramOwnerAlertsTitle: '店主通知',
+    telegramOwnerAlertsPreview: '预览店主提醒',
+    telegramOwnerAlertsHint: '在单独聊天中接收运营提醒；顾客不会看到这些消息。',
+    telegramOwnerChatLabel: '接收提醒的聊天 ID',
+    telegramOwnerChatHint: '在私聊或群组中向机器人发送 /chatid，然后粘贴返回的数字。',
+    telegramOwnerOrderAlertsLabel: '新订单立即提醒',
+    telegramOwnerOrderAlertsHint: '包含商品、数量、总额、顾客和订单编号。',
+    telegramOwnerStuckAlertsLabel: '订单等待过久提醒',
+    telegramOwnerStuckAlertsHint: '订单超过旁边设置的时间后仅提醒一次。',
+    telegramOwnerStuckMinutesLabel: '等待（分钟）',
+    telegramOwnerLowStockAlertsLabel: '低库存或缺货提醒',
+    telegramOwnerLowStockAlertsHint: '每个规格仅提醒一次，补货后自动恢复提醒。',
+    telegramOwnerLowStockThresholdLabel: '剩余阈值',
+    telegramOwnerSendTest: '发送测试消息',
+    telegramOwnerTestSent: '已发送至提醒聊天',
+    telegramOwnerSaveBeforeTest: '请先保存聊天 ID，再发送测试。',
     telegramGreetingLabel: '自定义问候语',
     telegramGreetingHint: '留空 = 按顾客语言使用默认问候语。填写后对所有语言原样使用。',
     telegramPreviewTitle: '与机器人试聊',
@@ -956,8 +974,7 @@ export const zh: Dictionary = {
     couponActiveLabel: '启用中',
     couponUsedOf: (used: number, max: number | null) =>
       max === null ? `${used}` : `${used} / ${max}`,
-    couponDeleteConfirm: (code: string) =>
-      `删除优惠码 ${code}？已使用该码的订单信息将保留。`,
+    couponDeleteConfirm: (code: string) => `删除优惠码 ${code}？已使用该码的订单信息将保留。`,
     couponSaved: '优惠码已保存。',
 
     resetPassword: '重置密码',

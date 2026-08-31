@@ -1,9 +1,4 @@
-import type {
-  AiProvider,
-  AuditAction,
-  PaymentMethod,
-  StockDrawMode,
-} from '@webcatt/shared';
+import type { AiProvider, AuditAction, PaymentMethod, StockDrawMode } from '@webcatt/shared';
 
 /**
  * Từ điển tiếng Việt — nguồn chuẩn (source of truth).
@@ -224,8 +219,7 @@ export const vi = {
     createdAt: 'Ngày tạo',
     paidAt: 'Thanh toán lúc',
     totalAmount: 'Tổng tiền',
-    partialNotice:
-      'Một phần đơn hàng đang chờ bổ sung kho — chúng tôi sẽ giao ngay khi có hàng.',
+    partialNotice: 'Một phần đơn hàng đang chờ bổ sung kho — chúng tôi sẽ giao ngay khi có hàng.',
     deliveredTitle: (n: number) => `Sản phẩm đã giao (${n} dòng)`,
     copyAll: 'Sao chép tất cả',
     downloadTxt: 'Tải .txt',
@@ -292,8 +286,7 @@ export const vi = {
     captchaRefresh: 'Đổi câu hỏi khác',
     errCaptchaRequired: 'Vui lòng trả lời câu hỏi xác minh.',
     forgotTitle: 'Quên mật khẩu?',
-    forgotHint:
-      'Liên hệ quản trị viên để được đặt lại mật khẩu — nhớ kèm email tài khoản của bạn.',
+    forgotHint: 'Liên hệ quản trị viên để được đặt lại mật khẩu — nhớ kèm email tài khoản của bạn.',
   },
 
   /* ===== v3 — tài khoản (đổi mật khẩu) ===== */
@@ -335,12 +328,12 @@ export const vi = {
   },
 
   legal: {
-    termsTitle: "Điều khoản sử dụng",
-    refundTitle: "Chính sách hoàn tiền & bảo hành",
-    privacyTitle: "Chính sách bảo mật",
-    updatedAt: "Cập nhật lần cuối:",
-    emptyTitle: "Chưa có nội dung",
-    emptyHint: "Cửa hàng chưa soạn nội dung cho trang này. Vui lòng liên hệ để được hỗ trợ.",
+    termsTitle: 'Điều khoản sử dụng',
+    refundTitle: 'Chính sách hoàn tiền & bảo hành',
+    privacyTitle: 'Chính sách bảo mật',
+    updatedAt: 'Cập nhật lần cuối:',
+    emptyTitle: 'Chưa có nội dung',
+    emptyHint: 'Cửa hàng chưa soạn nội dung cho trang này. Vui lòng liên hệ để được hỗ trợ.',
   },
 
   notFound: {
@@ -395,8 +388,7 @@ export const vi = {
     statPending: 'Chờ thanh toán',
     statToday: 'Đơn hôm nay',
     lowStockTitle: 'Sắp hết hàng',
-    lowStockHint: (threshold: number) =>
-      `Sản phẩm đang hiển thị còn dưới ${threshold} dòng kho.`,
+    lowStockHint: (threshold: number) => `Sản phẩm đang hiển thị còn dưới ${threshold} dòng kho.`,
     lowStockEmpty: 'Kho ổn định ✓',
     storePanelTitle: 'Cửa hàng',
     storeActiveProducts: 'Sản phẩm đang hiển thị',
@@ -420,8 +412,7 @@ export const vi = {
     hidden: 'Ẩn',
     hideProduct: 'Ẩn sản phẩm',
     showProduct: 'Hiện sản phẩm',
-    deleteProductConfirm: (name: string) =>
-      `Xóa sản phẩm "${name}"? Hành động không thể hoàn tác.`,
+    deleteProductConfirm: (name: string) => `Xóa sản phẩm "${name}"? Hành động không thể hoàn tác.`,
 
     newProductTitle: 'Thêm sản phẩm',
     editProductError: 'Không tải được sản phẩm',
@@ -461,8 +452,7 @@ export const vi = {
     formShortDescription: 'Mô tả ngắn',
     formShortDescriptionPlaceholder: 'Một câu giới thiệu hiển thị trên thẻ sản phẩm.',
     formDescription: 'Mô tả',
-    formDescriptionHint:
-      "Xuống dòng 2 lần để tách đoạn, bắt đầu bằng '- ' cho gạch đầu dòng.",
+    formDescriptionHint: "Xuống dòng 2 lần để tách đoạn, bắt đầu bằng '- ' cho gạch đầu dòng.",
     formDescriptionPlaceholder:
       'Mô tả chi tiết sản phẩm...\n\n- Cách kích hoạt\n- Chính sách bảo hành',
     formSortOrder: 'Thứ tự hiển thị',
@@ -525,8 +515,7 @@ export const vi = {
     stockWithdrawResult: (rut: number, con: number) =>
       `Đã rút ${rut} dòng — còn ${con} dòng bán được.`,
     stockWithdrawCopy: 'Sao chép tất cả',
-    stockWithdrawKeepSafe:
-      'Lưu lại ngay: sau khi rời trang, muốn xem lại phải vào tab "Đã rút".',
+    stockWithdrawKeepSafe: 'Lưu lại ngay: sau khi rời trang, muốn xem lại phải vào tab "Đã rút".',
     stockRestoreLine: 'Trả lại kho',
     stockColContent: 'Nội dung',
     stockColDate: 'Ngày thêm',
@@ -592,8 +581,7 @@ export const vi = {
     variantEdit: 'Sửa loại',
     variantDelete: 'Xóa loại',
     variantDeleteConfirm: (name: string) => `Xóa loại "${name}"? Hành động không thể hoàn tác.`,
-    variantStockLine: (available: number, sold: number) =>
-      `Kho: ${available} • Đã bán: ${sold}`,
+    variantStockLine: (available: number, sold: number) => `Kho: ${available} • Đã bán: ${sold}`,
     variantOrder: (n: number) => `Thứ tự ${n}`,
     variantCount: (n: number) => `${n} loại`,
     errVariantNameRequired: 'Vui lòng nhập tên loại.',
@@ -796,20 +784,19 @@ export const vi = {
     markPaidAction: 'Đánh dấu đã thanh toán',
     markPaidPrompt:
       'Xác nhận đã NHẬN ĐƯỢC TIỀN cho đơn này rồi giao hàng ngay.\n\nGhi lại nguồn tiền để sau này còn đối chiếu (ví dụ: "Chuyển khoản VCB 14:05", "USDT TRC20 sai mạng, đã kiểm tra thủ công"):',
-    cancelOrderConfirm: (code: string) =>
-      `Hủy đơn ${code}? Kho đang giữ sẽ được hoàn lại.`,
+    cancelOrderConfirm: (code: string) => `Hủy đơn ${code}? Kho đang giữ sẽ được hoàn lại.`,
 
     /* ===== v5 — cấu hình thanh toán + trạng thái Binance ===== */
-    navLegal: "Chính sách",
-    legalTitle: "Trang chính sách",
-    legalSubtitle: "Điều khoản, hoàn tiền và bảo mật — khách đọc được từ chân trang.",
-    legalLoadError: "Không tải được trang chính sách",
-    legalFieldTitle: "Tiêu đề",
-    legalFieldBody: "Nội dung",
-    legalBodyHint: "Soạn như Word. Để trống sẽ hiện thông báo chưa có nội dung.",
-    legalBodyPlaceholder: "Nhập nội dung chính sách…",
-    legalSaved: "Đã lưu trang chính sách.",
-    legalViewPublic: "Xem trang công khai",
+    navLegal: 'Chính sách',
+    legalTitle: 'Trang chính sách',
+    legalSubtitle: 'Điều khoản, hoàn tiền và bảo mật — khách đọc được từ chân trang.',
+    legalLoadError: 'Không tải được trang chính sách',
+    legalFieldTitle: 'Tiêu đề',
+    legalFieldBody: 'Nội dung',
+    legalBodyHint: 'Soạn như Word. Để trống sẽ hiện thông báo chưa có nội dung.',
+    legalBodyPlaceholder: 'Nhập nội dung chính sách…',
+    legalSaved: 'Đã lưu trang chính sách.',
+    legalViewPublic: 'Xem trang công khai',
     legalUpdatedAt: (d: string) => `Cập nhật lần cuối: ${d}`,
     exportCsv: 'Xuất CSV',
 
@@ -863,8 +850,7 @@ export const vi = {
     settingBinanceIdValueHint:
       'Chỉ gồm chữ số. Mở app Binance → Pay → phần nhận tiền để xem ID của bạn.',
     errBinanceIdRequired: 'Điền Binance ID trước khi bật',
-    errSepayIncomplete:
-      'Bật SePay thì phải có số tài khoản, ngân hàng, tỉ giá VND và khoá API.',
+    errSepayIncomplete: 'Bật SePay thì phải có số tài khoản, ngân hàng, tỉ giá VND và khoá API.',
     errAiModelRequired: 'Chuẩn OpenAI thì phải điền tên model.',
     settingCrypto: 'USDT on-chain (BEP20 / TRC20)',
     settingCryptoHint:
@@ -872,8 +858,7 @@ export const vi = {
     settingCryptoDisabledHint:
       'Máy chủ chưa cấu hình khóa API Binance nên chưa bật được thanh toán on-chain.',
     settingSepay: 'Chuyển khoản ngân hàng (SePay)',
-    settingSepayHint:
-      'Khách chuyển khoản VND, SePay báo về bằng webhook và hệ thống tự giao hàng.',
+    settingSepayHint: 'Khách chuyển khoản VND, SePay báo về bằng webhook và hệ thống tự giao hàng.',
     settingSepayAccountLabel: 'Số tài khoản nhận',
     settingSepayBankLabel: 'Ngân hàng',
     settingSepayBankHint: 'Tên ngắn như Vietcombank, MBBank, Techcombank…',
@@ -883,8 +868,7 @@ export const vi = {
     rateHourHint: '0–23. Mỗi ngày lấy đúng một lần vào giờ này.',
     rateSourceHint: 'Nguồn: open.er-api.com/v6/latest/USD',
     rateTitle: 'Tỉ giá',
-    rateHint:
-      'Dùng để dựng số tiền chuyển khoản VND và để hiện giá theo ngôn ngữ khách chọn.',
+    rateHint: 'Dùng để dựng số tiền chuyển khoản VND và để hiện giá theo ngôn ngữ khách chọn.',
     rateAutoLabel: 'Tự cập nhật hàng ngày',
     rateAutoHint:
       'Mỗi ngày lấy tỉ giá USD từ nguồn công khai rồi cộng biên. Nguồn lỗi thì giữ tỉ giá đang dùng.',
@@ -902,7 +886,7 @@ export const vi = {
     settingVndRateHint: 'Giá bán ghi bằng USDT, nên cần tỉ giá để ra số tiền VND.',
     settingTelegramTitle: 'Bot Telegram',
     settingTelegramSectionHint:
-      'Kênh bán hàng qua bot — đang xây dựng, hiện bot mới chào khách và hẹn quay lại.',
+      'Kênh bán hàng hoàn chỉnh: duyệt sản phẩm, thanh toán, giao key và cảnh báo vận hành.',
     settingTelegramEnable: 'Bật bot Telegram',
     settingTelegramEnableHint: 'Bot chạy ngay trên máy chủ này, không cần mở cổng nào thêm.',
     settingTelegramTokenLabel: 'Token bot (từ @BotFather)',
@@ -927,6 +911,27 @@ export const vi = {
     telegramStockAlertsHint:
       'Khi nhập thêm key cho loại đang bán, bot gửi giá, số lượng và nút mua tới những khách đã từng mở bot.',
     telegramStockAlertsPreview: 'Xem mẫu hàng mới',
+    telegramLastSuccess: (time: string) => `Kết nối thành công gần nhất: ${time}`,
+    telegramLastFailure: (time: string) => `Lỗi kết nối gần nhất: ${time}`,
+    telegramFailureCount: (count: number) => `${count} lỗi liên tiếp`,
+    telegramOwnerAlertsTitle: 'Thông báo cho chủ shop',
+    telegramOwnerAlertsPreview: 'Xem mẫu chủ shop',
+    telegramOwnerAlertsHint:
+      'Nhận cảnh báo vận hành trong một chat riêng; không gửi các tin này cho khách.',
+    telegramOwnerChatLabel: 'Chat ID nhận cảnh báo',
+    telegramOwnerChatHint:
+      'Nhắn /chatid cho bot trong chat riêng hoặc nhóm rồi dán con số bot trả về.',
+    telegramOwnerOrderAlertsLabel: 'Báo ngay khi có đơn mới',
+    telegramOwnerOrderAlertsHint: 'Gồm sản phẩm, số lượng, tổng tiền, khách và mã đơn.',
+    telegramOwnerStuckAlertsLabel: 'Báo đơn chờ quá lâu',
+    telegramOwnerStuckAlertsHint: 'Mỗi đơn chỉ báo một lần khi vượt thời gian bên cạnh.',
+    telegramOwnerStuckMinutesLabel: 'Sau (phút)',
+    telegramOwnerLowStockAlertsLabel: 'Báo kho thấp hoặc hết hàng',
+    telegramOwnerLowStockAlertsHint: 'Mỗi loại chỉ báo một lần, tự mở lại sau khi được nhập thêm.',
+    telegramOwnerLowStockThresholdLabel: 'Ngưỡng còn',
+    telegramOwnerSendTest: 'Gửi tin thử',
+    telegramOwnerTestSent: 'Đã gửi tới chat nhận cảnh báo',
+    telegramOwnerSaveBeforeTest: 'Lưu Chat ID trước khi gửi thử.',
     telegramGreetingLabel: 'Lời chào tuỳ chỉnh',
     telegramGreetingHint:
       'Để trống = câu chào mặc định theo ngôn ngữ khách. Có nội dung thì dùng nguyên văn cho mọi ngôn ngữ.',
@@ -949,8 +954,7 @@ export const vi = {
     settingSepayKeyReplaceLabel: 'Thay khoá webhook mới',
     settingSepayKeyHint: 'Lấy ở SePay → Webhooks. Để trống = giữ khoá đang dùng.',
     settingSepaySecretLabel: 'Khoá bí mật HMAC (tuỳ chọn)',
-    settingSepaySecretHint:
-      'Có thì kiểm THÊM chữ ký từng webhook. Để trống = chỉ kiểm khoá API.',
+    settingSepaySecretHint: 'Có thì kiểm THÊM chữ ký từng webhook. Để trống = chỉ kiểm khoá API.',
     settingSepayWebhookUrl: 'Địa chỉ webhook — dán vào SePay',
     settingBep20Label: 'Địa chỉ ví BEP20 (BNB Smart Chain)',
     settingBep20Placeholder: '0x…',
@@ -1013,8 +1017,7 @@ export const vi = {
     couponActiveLabel: 'Đang áp dụng',
     couponUsedOf: (used: number, max: number | null) =>
       max === null ? `${used}` : `${used} / ${max}`,
-    couponDeleteConfirm: (code: string) =>
-      `Xóa mã ${code}? Đơn đã dùng vẫn giữ nguyên thông tin.`,
+    couponDeleteConfirm: (code: string) => `Xóa mã ${code}? Đơn đã dùng vẫn giữ nguyên thông tin.`,
     couponSaved: 'Đã lưu mã giảm giá.',
 
     resetPassword: 'Đặt lại mật khẩu',
@@ -1025,8 +1028,7 @@ export const vi = {
 
     /* ===== v7 — khoá Claude API cho dịch tự động ===== */
     settingTranslationTitle: 'Dịch tự động',
-    settingTranslationHint:
-      'Dịch tên và mô tả sản phẩm sang tiếng Anh + tiếng Trung bằng AI.',
+    settingTranslationHint: 'Dịch tên và mô tả sản phẩm sang tiếng Anh + tiếng Trung bằng AI.',
     settingAiProviders: {
       anthropic: 'Claude (Anthropic)',
       openai: 'Chuẩn OpenAI',
@@ -1037,8 +1039,7 @@ export const vi = {
     settingAiModelHint: 'Để trống = claude-opus-5.',
     settingApiKeyLabel: 'Khoá Claude API',
     settingApiKeyReplaceLabel: 'Thay bằng khoá mới',
-    settingApiKeyHint:
-      'Khoá của nhà cung cấp đã chọn. Để trống = giữ khoá đang dùng.',
+    settingApiKeyHint: 'Khoá của nhà cung cấp đã chọn. Để trống = giữ khoá đang dùng.',
     settingApiKeySaved: (hint: string) => `Đã lưu khoá ····${hint}`,
     settingApiKeyClear: 'Xoá khoá',
     settingApiKeyWillClear: 'Khoá sẽ bị xoá khi bạn bấm Lưu — dịch tự động sẽ tắt.',

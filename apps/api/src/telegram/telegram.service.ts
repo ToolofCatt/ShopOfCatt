@@ -1,12 +1,15 @@
 import {
+  BadRequestException,
   Injectable,
   Logger,
+  ServiceUnavailableException,
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
+import { formatMoney, formatUsdt } from '@webcatt/shared';
 import { AnnouncementService } from '../announcement/announcement.service';
 import { BalanceService } from '../balance/balance.service';
-import { isMessageKey, parseMessage, translate } from '../i18n/messages';
+import { isMessageKey, K, parseMessage, translate } from '../i18n/messages';
 import { OrdersService } from '../orders/orders.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -55,12 +58,19 @@ import {
 import { botDict, botLang, type BotLang } from './messages';
 import { renderStockAlert } from './stock-alert-view';
 import {
+  renderOwnerLowStockAlert,
+  renderOwnerNewOrderAlert,
+  renderOwnerStuckOrderAlert,
+  renderOwnerTestAlert,
+} from './owner-alert-view';
+import {
   TelegramApiError,
   isTelegramTokenRejected,
   tgCall,
   tgCallIdempotent,
   tgDisplayName,
   tgSendPhotoUpload,
+  telegramRetryDelayMs,
   type TgCallbackQuery,
   type TgInlineKeyboard,
   type TgMessage,
@@ -74,9 +84,6 @@ const SUPERVISE_MS = 15_000;
 
 /** Telegram giữ getUpdates tối đa chừng này giây rồi mới trả rỗng. */
 const POLL_TIMEOUT_S = 25;
-
-/** Nghỉ sau một lỗi mạng — đừng quay vòng nóng khi Telegram sập. */
-const RETRY_DELAY_MS = 5_000;
 
 /**
  * Mỗi chat chỉ được bot trả lời tối đa 1 lần trong khoảng này. RateLimitGuard
@@ -115,6 +122,9 @@ const NOTIFY_BATCH = 10;
 
 /** Marketing gửi chậm có chủ đích: dưới hạn mức toàn cục của Bot API. */
 const STOCK_ALERT_BATCH = 10;
+
+/** Cảnh báo chủ shop cũng chia lô để một lần tồn nhiều đơn không dội Telegram. */
+const OWNER_ALERT_BATCH = 10;
 
 /**
  * Bot Telegram bán hàng — khung Giai đoạn 1 (xem docs/BOT-TELEGRAM.md).
@@ -156,6 +166,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private botUsername: string | null = null;
   /** Lỗi gần nhất đáng cho chủ shop biết (token bị từ chối/thu hồi). */
   private lastError: string | null = null;
+  private lastSuccessAt: Date | null = null;
+  private lastFailureAt: Date | null = null;
+  private consecutiveFailures = 0;
 
   private readonly chatCooldown = new Map<number, number>();
   private readonly callbackCooldown = new Map<number, number>();
@@ -229,14 +242,16 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         } else {
           // Mạng tới api.telegram.org đôi lúc chớp ngay sau khi container lên.
           // Không đóng đinh token là hỏng: supervisor sẽ thử lại sau 15 giây.
-          this.lastError = `Tạm thời không kết nối được Telegram: ${errText(err)}`;
-          this.logger.warn(`getMe tạm thời trượt (${errText(err)}) — sẽ thử lại`);
+          this.recordTelegramFailure(err);
+          this.logger.warn(
+            `getMe tạm thời trượt (${errText(err)}) — sẽ thử lại`,
+          );
         }
         return;
       }
 
       this.lastBadToken = null;
-      this.lastError = null;
+      this.recordTelegramSuccess();
       this.botUsername = username;
       this.activeToken = cfg.token;
       this.stopController = new AbortController();
@@ -260,12 +275,73 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Trạng thái sống của bot cho trang /admin/telegram. */
-  getStatus(): { running: boolean; botUsername: string | null; lastError: string | null } {
+  getStatus(): {
+    running: boolean;
+    botUsername: string | null;
+    lastError: string | null;
+    lastSuccessAt: string | null;
+    lastFailureAt: string | null;
+    consecutiveFailures: number;
+  } {
     return {
       running: this.activeToken !== null,
       botUsername: this.botUsername,
       lastError: this.lastError,
+      lastSuccessAt: this.lastSuccessAt?.toISOString() ?? null,
+      lastFailureAt: this.lastFailureAt?.toISOString() ?? null,
+      consecutiveFailures: this.consecutiveFailures,
     };
+  }
+
+  private recordTelegramSuccess(): void {
+    this.lastSuccessAt = new Date();
+    this.consecutiveFailures = 0;
+    if (this.lastBadToken === null) this.lastError = null;
+  }
+
+  private recordTelegramFailure(err: unknown): void {
+    if (
+      err instanceof TelegramApiError &&
+      err.code !== null &&
+      err.code !== 429 &&
+      err.code < 500
+    ) {
+      // 400/403 là lỗi payload/chat cụ thể, không phải đường mạng của bot.
+      return;
+    }
+    this.lastFailureAt = new Date();
+    this.consecutiveFailures += 1;
+    this.lastError = `Tạm thời không kết nối được Telegram: ${errText(err)}`;
+  }
+
+  /** Gửi một tin thật để chủ shop xác nhận đúng chat đích trước khi vận hành. */
+  async sendOwnerTest(): Promise<void> {
+    const cfg = await this.settings.getTelegramConfig();
+    const chatId = parseTelegramChatId(cfg.ownerChatId);
+    if (chatId === null) {
+      throw new BadRequestException(K.adminTelegramOwnerChatRequired);
+    }
+    const token = this.activeToken;
+    if (!token || token !== cfg.token) {
+      throw new ServiceUnavailableException(K.adminTelegramNotRunning);
+    }
+    try {
+      await this.sendHtml(
+        token,
+        chatId,
+        renderOwnerTestAlert(),
+        null,
+        this.stopController.signal,
+      );
+    } catch (err) {
+      if (
+        err instanceof TelegramApiError &&
+        (err.code === 400 || err.code === 403)
+      ) {
+        throw new BadRequestException(K.adminTelegramOwnerChatInvalid);
+      }
+      throw new ServiceUnavailableException(K.adminTelegramNotRunning);
+    }
   }
 
   /** Vòng getUpdates — sống tới khi generation đổi hoặc token bị thu hồi. */
@@ -285,6 +361,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           (POLL_TIMEOUT_S + 10) * 1_000,
           stop,
         );
+        this.recordTelegramSuccess();
         for (const update of updates) {
           offset = update.update_id + 1;
           if (this.generation !== gen) return;
@@ -309,11 +386,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         if (err instanceof TelegramApiError && err.code === 409) {
           // Một tiến trình KHÁC cũng đang getUpdates cùng token — tình huống
           // hai container api. Cứ nghỉ rồi thử lại, nhưng phải nói rõ trong log.
-          this.logger.warn('getUpdates 409: có tiến trình khác đang poll cùng bot');
+          this.logger.warn(
+            'getUpdates 409: có tiến trình khác đang poll cùng bot',
+          );
         } else {
-          this.logger.warn(`Lỗi vòng poll (thử lại sau ${RETRY_DELAY_MS / 1000}s): ${errText(err)}`);
+          this.recordTelegramFailure(err);
+          const delayMs = telegramRetryDelayMs(this.consecutiveFailures);
+          this.logger.warn(
+            `Lỗi vòng poll (lần ${this.consecutiveFailures}, thử lại sau ${delayMs / 1000}s): ${errText(err)}`,
+          );
+          await sleep(delayMs);
+          continue;
         }
-        await sleep(RETRY_DELAY_MS);
+        await sleep(telegramRetryDelayMs(1));
       }
     }
   }
@@ -368,7 +453,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         throw new Error(`SePay không trả ảnh mà trả: ${loi}`);
       }
       // Caption cũng là HTML có parse_mode — emoji động áp được như text thường.
-      await tgSendPhotoUpload(token, chatId, bytes, animateEmoji(caption), stop);
+      await tgSendPhotoUpload(
+        token,
+        chatId,
+        bytes,
+        animateEmoji(caption),
+        stop,
+      );
     } catch (err) {
       this.logger.warn(`Gửi ảnh QR trượt (chat ${chatId}): ${errText(err)}`);
     }
@@ -387,20 +478,26 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         ? { inline_keyboard: keyboard }
         : keyboard
       : null;
-    await tgCall(
-      token,
-      'sendMessage',
-      {
-        chat_id: chatId,
-        text: animateEmoji(text),
-        parse_mode: 'HTML',
-        // Link t.me trong kênh hỗ trợ sẽ kéo preview to đùng che tin nếu không tắt.
-        link_preview_options: { is_disabled: true },
-        ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
-      },
-      15_000,
-      stop,
-    );
+    try {
+      await tgCall(
+        token,
+        'sendMessage',
+        {
+          chat_id: chatId,
+          text: animateEmoji(text),
+          parse_mode: 'HTML',
+          // Link t.me trong kênh hỗ trợ sẽ kéo preview to đùng che tin nếu không tắt.
+          link_preview_options: { is_disabled: true },
+          ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+        },
+        15_000,
+        stop,
+      );
+      this.recordTelegramSuccess();
+    } catch (err) {
+      this.recordTelegramFailure(err);
+      throw err;
+    }
   }
 
   /**
@@ -412,7 +509,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
    * Ngôn ngữ của MỘT chat: khách đã tự chọn ở màn 🌐 thì lựa chọn đó thắng,
    * chưa chọn thì đoán theo language_code của app như cũ.
    */
-  private async resolveLang(chatId: number, languageCode?: string): Promise<BotLang> {
+  private async resolveLang(
+    chatId: number,
+    languageCode?: string,
+  ): Promise<BotLang> {
     const user = await this.users.findByChat(chatId);
     if (
       user?.telegramLangChosen &&
@@ -424,7 +524,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Số liệu màn 👤 — chỉ những con số CÓ THẬT: tổng chi + đơn đã giao. */
-  private async accountStats(userId: string): Promise<{ spentUsdt: number; doneCount: number }> {
+  private async accountStats(
+    userId: string,
+  ): Promise<{ spentUsdt: number; doneCount: number }> {
     const [tong, done] = await Promise.all([
       this.prisma.order.aggregate({
         _sum: { totalAmount: true },
@@ -447,7 +549,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       this.settings.getTelegramConfig(),
     ]);
     const ten = from?.first_name ?? user?.telegramName ?? '';
-    return renderHub(ten, user ? Number(user.balance) : null, lang, rates, cfg.greeting);
+    return renderHub(
+      ten,
+      user ? Number(user.balance) : null,
+      lang,
+      rates,
+      cfg.greeting,
+    );
   }
 
   private async handleMessage(
@@ -456,6 +564,24 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     stop: AbortSignal,
   ): Promise<void> {
     if (!message?.text || message.from?.is_bot) return;
+    const rawText = message.text.trim();
+    // Lệnh vận hành duy nhất được trả trong nhóm: giúp lấy đúng chat ID rồi
+    // dán vào trang quản trị. Không đọc/ghi dữ liệu cửa hàng.
+    if (/^\/chatid(?:@\w+)?$/i.test(rawText)) {
+      if (!this.passCooldown(message.chat.id)) return;
+      try {
+        await this.sendHtml(
+          token,
+          message.chat.id,
+          `Chat ID: <code>${message.chat.id}</code>`,
+          null,
+          stop,
+        );
+      } catch (err) {
+        this.logger.warn(`Trả chat ID trượt: ${errText(err)}`);
+      }
+      return;
+    }
     // Chỉ tiếp chat riêng: bot bán hàng không có việc gì trong group, và trả
     // lời trong group là một người lạ bất kỳ điều khiển được bot nói chuyện.
     if (message.chat.type !== 'private') return;
@@ -464,14 +590,21 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const chatId = message.chat.id;
     const lang = await this.resolveLang(chatId, message.from?.language_code);
     const dict = botDict(lang);
-    const text = message.text.trim();
+    const text = rawText;
     try {
       // Nút menu cố định gửi TEXT của nó — so với nhãn của cả ba ngôn ngữ.
       const menu: MenuAction | null = text.startsWith('/orders')
         ? 'orders'
         : matchMenuAction(text);
       if (menu !== null && menu !== 'shop') {
-        await this.handleMenuAction(token, chatId, message.from, lang, menu, stop);
+        await this.handleMenuAction(
+          token,
+          chatId,
+          message.from,
+          lang,
+          menu,
+          stop,
+        );
         return;
       }
       if (menu === 'shop') {
@@ -486,7 +619,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       if (/^[0-9]{3,10}$/.test(text)) {
         const vnd = Number(text);
         if (vnd < DEPOSIT_MIN_VND || vnd > DEPOSIT_MAX_VND) {
-          await this.sendHtml(token, chatId, escapeText(dict.depositRange), null, stop);
+          await this.sendHtml(
+            token,
+            chatId,
+            escapeText(dict.depositRange),
+            null,
+            stop,
+          );
           return;
         }
         const view = renderDepositConfirm(vnd, lang);
@@ -638,6 +777,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
     try {
       await this.runCallback(token, parsed, {
+        callbackId: cb.id,
         chatId,
         from: cb.from,
         lang,
@@ -669,7 +809,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       case 'search': {
         // Bot không có trạng thái hội thoại — lời nhắc chỉ để hướng dẫn,
         // thực tế GÕ BẤT KỲ chữ gì cũng được đem đi tìm (xem handleMessage).
-        await this.sendHtml(token, chatId, escapeText(dict.searchPrompt), null, stop);
+        await this.sendHtml(
+          token,
+          chatId,
+          escapeText(dict.searchPrompt),
+          null,
+          stop,
+        );
         return;
       }
       case 'orders': {
@@ -683,7 +829,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       case 'account': {
-        const user = await this.users.findOrCreate(chatId, tgDisplayName(from), lang);
+        const user = await this.users.findOrCreate(
+          chatId,
+          tgDisplayName(from),
+          lang,
+        );
         const [stats, rates] = await Promise.all([
           this.accountStats(user.id),
           this.settings.getPublicRates(),
@@ -702,23 +852,38 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         return;
       }
       case 'deposit': {
-        const cfg = await this.settings.getSepayConfig();
-        if (!cfg.ready || cfg.vndPerUsdt <= 0) {
-          // Fail-closed: chưa có đường đối soát thì nói thẳng, không chào mã nạp.
-          await this.sendHtml(token, chatId, escapeText(dict.depositUnavailable), null, stop);
+        // Menu cố định phải dùng CÙNG nguồn với nút inline. Trước đây nhánh
+        // này kiểm riêng SePay nên tắt ngân hàng là che luôn BEP20/TRC20/Binance.
+        const methods = await this.balance.listDepositMethods();
+        if (methods.length === 0) {
+          await this.sendHtml(
+            token,
+            chatId,
+            escapeText(dict.depositUnavailable),
+            null,
+            stop,
+          );
           return;
         }
         const [user, rates] = await Promise.all([
           this.users.findByChat(chatId),
           this.settings.getPublicRates(),
         ]);
-        const view = renderDepositMenu(lang, user ? Number(user.balance) : null, rates);
+        const view = renderDepositMenu(
+          lang,
+          user ? Number(user.balance) : null,
+          rates,
+        );
         await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
         return;
       }
       case 'support': {
         const info = await this.settings.getSupportInfo();
-        const view = renderSupport(info.supportChannels, info.supportNote, lang);
+        const view = renderSupport(
+          info.supportChannels,
+          info.supportNote,
+          lang,
+        );
         await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
         return;
       }
@@ -730,11 +895,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     token: string,
     parsed: BotCallback,
     ctx: {
+      callbackId: string;
       chatId: number;
       from: TgUser;
       lang: BotLang;
       answer: (payload?: Record<string, unknown>) => Promise<void>;
-      edit: (view: { text: string; keyboard: TgInlineKeyboard }) => Promise<void>;
+      edit: (view: {
+        text: string;
+        keyboard: TgInlineKeyboard;
+      }) => Promise<void>;
       stop: AbortSignal;
     },
   ): Promise<void> {
@@ -751,14 +920,20 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       case 'catalog': {
         const data = await this.loadStorefront(lang);
         await answer();
-        await edit(renderStorefront(data.products, lang, data.rates, parsed.page));
+        await edit(
+          renderStorefront(data.products, lang, data.rates, parsed.page),
+        );
         return;
       }
       case 'category': {
         const data = await this.loadStorefront(lang);
         await answer();
         const view = renderCategoryProducts(
-          data.products, parsed.catIndex, lang, data.rates, parsed.page,
+          data.products,
+          parsed.catIndex,
+          lang,
+          data.rates,
+          parsed.page,
         );
         // Danh mục đổi giữa hai cú bấm (admin sửa) → vẽ lại màn cửa hàng.
         await edit(view ?? renderStorefront(data.products, lang, data.rates));
@@ -776,7 +951,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         }
         await answer();
         await edit(
-          renderProductDetail(product, lang, data.rates, data.support, parsed.backPage),
+          renderProductDetail(
+            product,
+            lang,
+            data.rates,
+            data.support,
+            parsed.backPage,
+          ),
         );
         return;
       }
@@ -807,7 +988,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         // gửi thông báo admin — gửi trước lúc chọn là sai thứ tiếng.
         const truoc = await this.users.findByChat(chatId);
         const lanDau = !truoc?.telegramLangChosen;
-        await this.users.setLanguage(chatId, tgDisplayName(ctx.from), parsed.lang);
+        await this.users.setLanguage(
+          chatId,
+          tgDisplayName(ctx.from),
+          parsed.lang,
+        );
         const dictMoi = botDict(parsed.lang);
         await answer({
           text: dictMoi.langSet(dictMoi.langNames[parsed.lang] ?? parsed.lang),
@@ -839,13 +1024,23 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       case 'buy': {
         const data = await this.loadStorefront(lang);
         const product = data.products.find((p) => p.id === parsed.productId);
-        const variant = product?.variants.find((v) => v.id === parsed.variantId);
+        const variant = product?.variants.find(
+          (v) => v.id === parsed.variantId,
+        );
         if (!product || !variant || variant.availableStock <= 0) {
           await answer({ text: dict.variantSoldOut, show_alert: true });
           return;
         }
         await answer();
-        await edit(renderQuantityPicker(product, variant, lang, data.rates, parsed.backPage));
+        await edit(
+          renderQuantityPicker(
+            product,
+            variant,
+            lang,
+            data.rates,
+            parsed.backPage,
+          ),
+        );
         return;
       }
       case 'qty': {
@@ -854,16 +1049,27 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           tgDisplayName(ctx.from),
           lang,
         );
-        const pending = await this.prisma.order.count({
-          where: { userId: user.id, status: 'PENDING' },
+        const replay = await this.prisma.order.findUnique({
+          where: { telegramCallbackId: ctx.callbackId },
+          select: { userId: true },
         });
-        if (pending >= MAX_PENDING_PER_CHAT) {
-          await answer({ text: dict.tooManyPending(pending), show_alert: true });
-          return;
+        if (!replay) {
+          const pending = await this.prisma.order.count({
+            where: { userId: user.id, status: 'PENDING' },
+          });
+          if (pending >= MAX_PENDING_PER_CHAT) {
+            await answer({
+              text: dict.tooManyPending(pending),
+              show_alert: true,
+            });
+            return;
+          }
         }
-        const created = await this.orders.create(user, {
-          items: [{ variantId: parsed.variantId, quantity: parsed.qty }],
-        });
+        const created = await this.orders.create(
+          user,
+          { items: [{ variantId: parsed.variantId, quantity: parsed.qty }] },
+          { telegramCallbackId: ctx.callbackId },
+        );
         const [methods, rates] = await Promise.all([
           this.settings.getEnabledMethods(),
           this.settings.getPublicRates(),
@@ -875,12 +1081,26 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         // kể cả khi cửa hàng chỉ bật một cổng.
         if (methods.length > 1 || soDu >= created.order.totalAmount) {
           await edit(
-            renderMethodChooser(created.order, methods, lang, rates, phut, soDu),
+            renderMethodChooser(
+              created.order,
+              methods,
+              lang,
+              rates,
+              phut,
+              soDu,
+            ),
           );
           return;
         }
         // Chỉ một phương thức — create() đã áp nó sẵn, vào thẳng hướng dẫn.
-        await this.showInstructions(token, created.order, lang, rates, methods, ctx);
+        await this.showInstructions(
+          token,
+          created.order,
+          lang,
+          rates,
+          methods,
+          ctx,
+        );
         return;
       }
       case 'method': {
@@ -896,9 +1116,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       }
       case 'check': {
         const user = await this.requireUser(chatId);
-        const result = await this.orders.checkPayment(user.id, parsed.orderCode);
+        const result = await this.orders.checkPayment(
+          user.id,
+          parsed.orderCode,
+        );
         if (result.delivered) {
-          const detail = await this.orders.getOwnDetail(user.id, parsed.orderCode);
+          const detail = await this.orders.getOwnDetail(
+            user.id,
+            parsed.orderCode,
+          );
           await answer();
           await edit(renderOrderDelivered(detail, lang));
           // Khách đã thấy key qua nút kiểm tra — đánh dấu để vòng đẩy không
@@ -915,7 +1141,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           return;
         }
         // EXPIRED/CANCELLED — vẽ lại trạng thái cuối để nút thanh toán biến mất.
-        const detail = await this.orders.getOwnDetail(user.id, parsed.orderCode);
+        const detail = await this.orders.getOwnDetail(
+          user.id,
+          parsed.orderCode,
+        );
         const rates = await this.settings.getPublicRates();
         await answer();
         await edit(renderOrderView(detail, lang, rates, null));
@@ -923,9 +1152,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       }
       case 'mockConfirm': {
         const user = await this.requireUser(chatId);
-        const result = await this.payments.confirmMock(user.id, parsed.orderCode);
+        const result = await this.payments.confirmMock(
+          user.id,
+          parsed.orderCode,
+        );
         if (result.status === 'DELIVERED') {
-          const detail = await this.orders.getOwnDetail(user.id, parsed.orderCode);
+          const detail = await this.orders.getOwnDetail(
+            user.id,
+            parsed.orderCode,
+          );
           await answer();
           await edit(renderOrderDelivered(detail, lang));
           await this.markNotified(detail.id);
@@ -972,13 +1207,21 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         if (detail.status === 'DELIVERED') await this.markNotified(detail.id);
         // Xem lại đơn PENDING thì KHÔNG gửi lại ảnh QR — dội ảnh mỗi lần mở là spam.
         const view = renderOrderView(
-          detail, lang, rates, minutesLeft(detail.expiresAt), sepayHolder(methods),
+          detail,
+          lang,
+          rates,
+          minutesLeft(detail.expiresAt),
+          sepayHolder(methods),
         );
         await edit({ text: view.text, keyboard: view.keyboard });
         return;
       }
       case 'account': {
-        const user = await this.users.findOrCreate(chatId, tgDisplayName(ctx.from), lang);
+        const user = await this.users.findOrCreate(
+          chatId,
+          tgDisplayName(ctx.from),
+          lang,
+        );
         const [stats, rates] = await Promise.all([
           this.accountStats(user.id),
           this.settings.getPublicRates(),
@@ -1011,7 +1254,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           this.settings.getPublicRates(),
         ]);
         await answer();
-        await edit(renderDepositMenu(lang, user ? Number(user.balance) : null, rates));
+        await edit(
+          renderDepositMenu(lang, user ? Number(user.balance) : null, rates),
+        );
         return;
       }
       case 'depositAmount': {
@@ -1055,7 +1300,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           ]);
           await answer();
           await edit(
-            renderDepositCredited(Number(deposit.amountUsdt), soDu, lang, rates),
+            renderDepositCredited(
+              Number(deposit.amountUsdt),
+              soDu,
+              lang,
+              rates,
+            ),
           );
           await this.balance.markDepositNotified(deposit.id);
           return;
@@ -1091,9 +1341,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       }
       case 'payBalance': {
         const user = await this.requireUser(chatId);
-        const kq = await this.balance.payOrderWithBalance(user.id, parsed.orderCode);
+        const kq = await this.balance.payOrderWithBalance(
+          user.id,
+          parsed.orderCode,
+        );
         if (kq.delivered) {
-          const detail = await this.orders.getOwnDetail(user.id, parsed.orderCode);
+          const detail = await this.orders.getOwnDetail(
+            user.id,
+            parsed.orderCode,
+          );
           await answer();
           await edit(renderOrderDelivered(detail, lang));
           await this.markNotified(detail.id);
@@ -1111,11 +1367,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   private async taoMaNap(
     token: string,
     ctx: {
+      callbackId: string;
       chatId: number;
       from: TgUser;
       lang: BotLang;
       answer: (payload?: Record<string, unknown>) => Promise<void>;
-      edit: (view: { text: string; keyboard: TgInlineKeyboard }) => Promise<void>;
+      edit: (view: {
+        text: string;
+        keyboard: TgInlineKeyboard;
+      }) => Promise<void>;
       stop: AbortSignal;
     },
     vnd: number,
@@ -1123,8 +1383,17 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     const { chatId, lang, answer, edit, stop } = ctx;
     const dict = botDict(lang);
-    const user = await this.users.findOrCreate(chatId, tgDisplayName(ctx.from), lang);
-    const kq = await this.balance.createDeposit(user, vnd, method);
+    const user = await this.users.findOrCreate(
+      chatId,
+      tgDisplayName(ctx.from),
+      lang,
+    );
+    const kq = await this.balance.createDeposit(
+      user,
+      vnd,
+      method,
+      ctx.callbackId,
+    );
     await answer();
     const view = renderDepositInstructions(
       {
@@ -1187,13 +1456,16 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         // Khách trước cột telegramLang chưa có ngôn ngữ lưu lại — cửa hàng VN
         // nên lùi về tiếng Việt (khác mặc định "en" của lượt chat trực tiếp,
         // nơi còn language_code để đoán).
-        const lang: BotLang = (['vi', 'en', 'zh'] as readonly string[]).includes(
-          order.user.telegramLang,
-        )
+        const lang: BotLang = (
+          ['vi', 'en', 'zh'] as readonly string[]
+        ).includes(order.user.telegramLang)
           ? (order.user.telegramLang as BotLang)
           : 'vi';
         try {
-          const detail = await this.orders.getOwnDetail(order.userId, order.code);
+          const detail = await this.orders.getOwnDetail(
+            order.userId,
+            order.code,
+          );
           const view = renderOrderDelivered(detail, lang);
           await this.sendHtml(
             token,
@@ -1215,7 +1487,9 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
             await this.markNotified(order.id);
           } else {
             // Lỗi mạng/CSDL thoáng qua — để nguyên, lượt sau thử lại.
-            this.logger.warn(`Đẩy key đơn ${order.code} trượt: ${errText(err)}`);
+            this.logger.warn(
+              `Đẩy key đơn ${order.code} trượt: ${errText(err)}`,
+            );
           }
         }
       }
@@ -1223,12 +1497,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       const napCho = await this.balance.listUnnotifiedDeposits(NOTIFY_BATCH);
       for (const nap of napCho) {
         if (this.activeToken !== token) return;
-        const lang: BotLang = (['vi', 'en', 'zh'] as readonly string[]).includes(nap.lang)
+        const lang: BotLang = (
+          ['vi', 'en', 'zh'] as readonly string[]
+        ).includes(nap.lang)
           ? (nap.lang as BotLang)
           : 'vi';
         try {
           const rates = await this.settings.getPublicRates();
-          const view = renderDepositCredited(nap.amountUsdt, nap.balance, lang, rates);
+          const view = renderDepositCredited(
+            nap.amountUsdt,
+            nap.balance,
+            lang,
+            rates,
+          );
           await this.sendHtml(
             token,
             Number(nap.chatId),
@@ -1252,27 +1533,29 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
       // Thông báo hàng mới là outbox theo từng khách. Một chat chặn bot không
       // được làm kẹt những khách còn lại; lỗi mạng thì dừng lượt để thử lại sau.
-      const stockRecipients = await this.prisma.telegramStockAlertRecipient.findMany({
-        where: { sentAt: null, failedAt: null },
-        select: {
-          alertId: true,
-          userId: true,
-          lang: true,
-          user: { select: { telegramChatId: true } },
-          alert: true,
-        },
-        orderBy: { createdAt: 'asc' },
-        take: STOCK_ALERT_BATCH,
-      });
-      const stockRates = stockRecipients.length > 0
-        ? await this.settings.getPublicRates()
-        : null;
+      const stockRecipients =
+        await this.prisma.telegramStockAlertRecipient.findMany({
+          where: { sentAt: null, failedAt: null },
+          select: {
+            alertId: true,
+            userId: true,
+            lang: true,
+            user: { select: { telegramChatId: true } },
+            alert: true,
+          },
+          orderBy: { createdAt: 'asc' },
+          take: STOCK_ALERT_BATCH,
+        });
+      const stockRates =
+        stockRecipients.length > 0
+          ? await this.settings.getPublicRates()
+          : null;
       for (const recipient of stockRecipients) {
         if (this.activeToken !== token) return;
         const chatId = Number(recipient.user.telegramChatId);
-        const lang: BotLang = (['vi', 'en', 'zh'] as readonly string[]).includes(
-          recipient.lang,
-        )
+        const lang: BotLang = (
+          ['vi', 'en', 'zh'] as readonly string[]
+        ).includes(recipient.lang)
           ? (recipient.lang as BotLang)
           : 'vi';
         if (!Number.isSafeInteger(chatId)) {
@@ -1290,7 +1573,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
               productName: recipient.alert.productName,
               variantName: recipient.alert.variantName,
               price: Number(recipient.alert.price),
-              priceCurrency: recipient.alert.priceCurrency as 'USDT' | 'VND' | 'USD' | 'CNY',
+              priceCurrency: recipient.alert.priceCurrency as
+                | 'USDT'
+                | 'VND'
+                | 'USD'
+                | 'CNY',
               priceAmount: Number(recipient.alert.priceAmount),
               added: recipient.alert.added,
               total: recipient.alert.total,
@@ -1300,7 +1587,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
             stockRates,
             this.botUsername,
           );
-          await this.sendHtml(token, chatId, view.text, view.keyboard, this.stopController.signal);
+          await this.sendHtml(
+            token,
+            chatId,
+            view.text,
+            view.keyboard,
+            this.stopController.signal,
+          );
           await this.prisma.telegramStockAlertRecipient.updateMany({
             where: {
               alertId: recipient.alertId,
@@ -1336,10 +1629,210 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           recipients: { none: { sentAt: null, failedAt: null } },
         },
       });
+
+      // Cảnh báo vận hành dùng chat riêng và các mốc outbox riêng; lỗi ở đây
+      // không được làm mất phần đẩy key/cộng ví phía trên.
+      await this.notifyOwnerAlerts(token);
     } catch (err) {
       this.logger.warn(`Vòng đẩy key trượt: ${errText(err)}`);
     } finally {
       this.notifying = false;
+    }
+  }
+
+  private async notifyOwnerAlerts(token: string): Promise<void> {
+    const cfg = await this.settings.getTelegramConfig();
+    const chatId = parseTelegramChatId(cfg.ownerChatId);
+    if (chatId === null) return;
+
+    if (!cfg.ownerOrderAlertsEnabled) {
+      // Tắt cảnh báo đơn = bỏ những sự kiện cũ; bật lại chỉ nhận đơn phát sinh
+      // sau đó, không dội lịch sử nhiều tháng vào chat.
+      await this.prisma.order.updateMany({
+        where: { telegramOwnerNewOrderNotifiedAt: null },
+        data: { telegramOwnerNewOrderNotifiedAt: new Date() },
+      });
+    } else {
+      const orders = await this.prisma.order.findMany({
+        where: { telegramOwnerNewOrderNotifiedAt: null },
+        select: {
+          id: true,
+          code: true,
+          totalAmount: true,
+          createdAt: true,
+          user: {
+            select: { email: true, telegramName: true, code: true },
+          },
+          items: {
+            select: {
+              productName: true,
+              variantName: true,
+              quantity: true,
+            },
+          },
+          payment: { select: { vndAmount: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: OWNER_ALERT_BATCH,
+      });
+      const stuckCutoff = new Date(Date.now() - cfg.ownerStuckMinutes * 60_000);
+      for (const order of orders) {
+        const text = renderOwnerNewOrderAlert({
+          code: order.code,
+          customer:
+            order.user.email ??
+            (order.user.telegramName.trim() || `#${order.user.code}`),
+          items: order.items.map((item) => ({
+            name: item.variantName
+              ? `${item.productName} · ${item.variantName}`
+              : item.productName,
+            quantity: item.quantity,
+          })),
+          total:
+            order.payment?.vndAmount != null
+              ? formatMoney(Number(order.payment.vndAmount), 'VND')
+              : formatUsdt(Number(order.totalAmount)),
+          createdAt: order.createdAt,
+        });
+        await this.sendHtml(
+          token,
+          chatId,
+          text,
+          null,
+          this.stopController.signal,
+        );
+        await this.prisma.order.updateMany({
+          where: { id: order.id, telegramOwnerNewOrderNotifiedAt: null },
+          data: {
+            telegramOwnerNewOrderNotifiedAt: new Date(),
+            // Nếu worker từng tắt lâu, tin "đơn mới" đã mang giờ tạo; đừng
+            // gửi thêm ngay một tin "kẹt" cho cùng đơn trong lượt kế tiếp.
+            ...(order.createdAt <= stuckCutoff
+              ? { telegramOwnerStuckNotifiedAt: new Date() }
+              : {}),
+          },
+        });
+      }
+    }
+
+    if (cfg.ownerStuckAlertsEnabled) {
+      const cutoff = new Date(Date.now() - cfg.ownerStuckMinutes * 60_000);
+      const stuck = await this.prisma.order.findMany({
+        where: {
+          status: 'PENDING',
+          createdAt: { lte: cutoff },
+          telegramOwnerNewOrderNotifiedAt: { not: null },
+          telegramOwnerStuckNotifiedAt: null,
+        },
+        select: {
+          id: true,
+          code: true,
+          totalAmount: true,
+          createdAt: true,
+          user: {
+            select: { email: true, telegramName: true, code: true },
+          },
+          items: {
+            select: {
+              productName: true,
+              variantName: true,
+              quantity: true,
+            },
+          },
+          payment: { select: { vndAmount: true } },
+        },
+        orderBy: { createdAt: 'asc' },
+        take: OWNER_ALERT_BATCH,
+      });
+      for (const order of stuck) {
+        const text = renderOwnerStuckOrderAlert(
+          {
+            code: order.code,
+            customer:
+              order.user.email ??
+              (order.user.telegramName.trim() || `#${order.user.code}`),
+            items: order.items.map((item) => ({
+              name: item.variantName
+                ? `${item.productName} · ${item.variantName}`
+                : item.productName,
+              quantity: item.quantity,
+            })),
+            total:
+              order.payment?.vndAmount != null
+                ? formatMoney(Number(order.payment.vndAmount), 'VND')
+                : formatUsdt(Number(order.totalAmount)),
+            createdAt: order.createdAt,
+          },
+          (Date.now() - order.createdAt.getTime()) / 60_000,
+        );
+        await this.sendHtml(
+          token,
+          chatId,
+          text,
+          null,
+          this.stopController.signal,
+        );
+        await this.prisma.order.updateMany({
+          where: { id: order.id, telegramOwnerStuckNotifiedAt: null },
+          data: { telegramOwnerStuckNotifiedAt: new Date() },
+        });
+      }
+    }
+
+    if (!cfg.ownerLowStockAlertsEnabled) return;
+    const variants = await this.prisma.productVariant.findMany({
+      where: { active: true, product: { active: true } },
+      select: {
+        id: true,
+        name: true,
+        telegramOwnerLowStockNotifiedAt: true,
+        product: { select: { name: true } },
+        _count: {
+          select: { stockItems: { where: { status: 'AVAILABLE' } } },
+        },
+      },
+      orderBy: [{ productId: 'asc' }, { sortOrder: 'asc' }],
+    });
+    const recovered = variants
+      .filter(
+        (variant) =>
+          variant._count.stockItems > cfg.ownerLowStockThreshold &&
+          variant.telegramOwnerLowStockNotifiedAt !== null,
+      )
+      .map((variant) => variant.id);
+    if (recovered.length > 0) {
+      await this.prisma.productVariant.updateMany({
+        where: { id: { in: recovered } },
+        data: { telegramOwnerLowStockNotifiedAt: null },
+      });
+    }
+
+    for (const variant of variants
+      .filter(
+        (row) =>
+          row._count.stockItems <= cfg.ownerLowStockThreshold &&
+          row.telegramOwnerLowStockNotifiedAt === null,
+      )
+      .slice(0, OWNER_ALERT_BATCH)) {
+      await this.sendHtml(
+        token,
+        chatId,
+        renderOwnerLowStockAlert({
+          productName: variant.product.name,
+          variantName: variant.name,
+          available: variant._count.stockItems,
+          threshold: cfg.ownerLowStockThreshold,
+        }),
+        null,
+        this.stopController.signal,
+      );
+      await this.prisma.productVariant.updateMany({
+        where: {
+          id: variant.id,
+          telegramOwnerLowStockNotifiedAt: null,
+        },
+        data: { telegramOwnerLowStockNotifiedAt: new Date() },
+      });
     }
   }
 
@@ -1379,12 +1872,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     methods: { method: string; accountHolder?: string }[],
     ctx: {
       chatId: number;
-      edit: (view: { text: string; keyboard: TgInlineKeyboard }) => Promise<void>;
+      edit: (view: {
+        text: string;
+        keyboard: TgInlineKeyboard;
+      }) => Promise<void>;
       stop: AbortSignal;
     },
   ): Promise<void> {
     const view = renderPaymentInstructions(
-      order, lang, rates, minutesLeft(order.expiresAt), sepayHolder(methods),
+      order,
+      lang,
+      rates,
+      minutesLeft(order.expiresAt),
+      sepayHolder(methods),
     );
     await ctx.edit({ text: view.text, keyboard: view.keyboard });
     if (view.photo) {
@@ -1425,7 +1925,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const now = Date.now();
     const last = this.chatCooldown.get(chatId) ?? 0;
     if (now - last < CHAT_COOLDOWN_MS) return false;
-    if (this.chatCooldown.size >= COOLDOWN_MAX_ENTRIES) this.chatCooldown.clear();
+    if (this.chatCooldown.size >= COOLDOWN_MAX_ENTRIES)
+      this.chatCooldown.clear();
     this.chatCooldown.set(chatId, now);
     return true;
   }
@@ -1445,6 +1946,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
 function errText(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
+}
+
+/** Telegram dùng số nguyên có dấu 64-bit; JS number chỉ nhận phần an toàn. */
+function parseTelegramChatId(raw: string): number | null {
+  if (!/^-?[0-9]{5,20}$/.test(raw)) return null;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) ? value : null;
 }
 
 /** Escape tối thiểu cho chuỗi TỪ ĐIỂN chèn thẳng làm text HTML của một tin. */

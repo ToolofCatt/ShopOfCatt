@@ -1,11 +1,20 @@
 import {
   IsBoolean,
+  IsInt,
   IsOptional,
   IsString,
   Matches,
+  Max,
   MaxLength,
+  Min,
 } from 'class-validator';
-import { TELEGRAM_GREETING_MAX_LENGTH } from '@webcatt/shared';
+import {
+  TELEGRAM_GREETING_MAX_LENGTH,
+  TELEGRAM_OWNER_LOW_STOCK_MAX,
+  TELEGRAM_OWNER_LOW_STOCK_MIN,
+  TELEGRAM_OWNER_STUCK_MINUTES_MAX,
+  TELEGRAM_OWNER_STUCK_MINUTES_MIN,
+} from '@webcatt/shared';
 import { K } from '../../i18n/messages';
 
 /**
@@ -35,6 +44,44 @@ export class UpdateTelegramSettingsDto {
   @IsOptional()
   @IsBoolean({ message: K.adminSettingsFlagInvalid })
   telegramStockAlertsEnabled?: boolean;
+
+  @IsOptional()
+  @IsString({ message: K.adminTelegramOwnerChatInvalid })
+  @MaxLength(24, { message: K.adminTelegramOwnerChatInvalid })
+  @Matches(/^$|-?[0-9]{5,20}$/, { message: K.adminTelegramOwnerChatInvalid })
+  telegramOwnerChatId?: string;
+
+  @IsOptional()
+  @IsBoolean({ message: K.adminSettingsFlagInvalid })
+  telegramOwnerOrderAlertsEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean({ message: K.adminSettingsFlagInvalid })
+  telegramOwnerStuckAlertsEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt({ message: K.adminTelegramOwnerNumberInvalid })
+  @Min(TELEGRAM_OWNER_STUCK_MINUTES_MIN, {
+    message: K.adminTelegramOwnerNumberInvalid,
+  })
+  @Max(TELEGRAM_OWNER_STUCK_MINUTES_MAX, {
+    message: K.adminTelegramOwnerNumberInvalid,
+  })
+  telegramOwnerStuckMinutes?: number;
+
+  @IsOptional()
+  @IsBoolean({ message: K.adminSettingsFlagInvalid })
+  telegramOwnerLowStockAlertsEnabled?: boolean;
+
+  @IsOptional()
+  @IsInt({ message: K.adminTelegramOwnerNumberInvalid })
+  @Min(TELEGRAM_OWNER_LOW_STOCK_MIN, {
+    message: K.adminTelegramOwnerNumberInvalid,
+  })
+  @Max(TELEGRAM_OWNER_LOW_STOCK_MAX, {
+    message: K.adminTelegramOwnerNumberInvalid,
+  })
+  telegramOwnerLowStockThreshold?: number;
 
   @IsOptional()
   @IsString({ message: K.adminTelegramGreetingTooLong })

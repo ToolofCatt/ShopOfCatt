@@ -150,8 +150,7 @@ export const en: Dictionary = {
     sepayHolderLabel: 'Account holder',
     sepayMemoLabel: 'Transfer NOTE (required)',
     sepayMemoHint: 'Without this note we cannot tell which order the money is for.',
-    sepayExactHint:
-      'Transfer this exact amount. Anything more or less needs a manual check.',
+    sepayExactHint: 'Transfer this exact amount. Anything more or less needs a manual check.',
     sepayQrAlt: 'Bank transfer QR code',
     sepayQrHint: 'Scan with your banking app — amount and note are filled in.',
     sepayRate: (usdt: string) => `Equivalent to ${usdt} USDT at the shop rate.`,
@@ -278,8 +277,7 @@ export const en: Dictionary = {
     captchaRefresh: 'Get another question',
     errCaptchaRequired: 'Please answer the verification question.',
     forgotTitle: 'Forgot your password?',
-    forgotHint:
-      'Contact the store admin to have it reset — include your account email.',
+    forgotHint: 'Contact the store admin to have it reset — include your account email.',
   },
 
   /* ===== v3 — account (change password) ===== */
@@ -321,12 +319,12 @@ export const en: Dictionary = {
   },
 
   legal: {
-    termsTitle: "Terms of service",
-    refundTitle: "Refund & warranty policy",
-    privacyTitle: "Privacy policy",
-    updatedAt: "Last updated:",
-    emptyTitle: "No content yet",
-    emptyHint: "The store has not written this page yet. Please contact us for help.",
+    termsTitle: 'Terms of service',
+    refundTitle: 'Refund & warranty policy',
+    privacyTitle: 'Privacy policy',
+    updatedAt: 'Last updated:',
+    emptyTitle: 'No content yet',
+    emptyHint: 'The store has not written this page yet. Please contact us for help.',
   },
 
   notFound: {
@@ -446,7 +444,8 @@ export const en: Dictionary = {
     formShortDescription: 'Short description',
     formShortDescriptionPlaceholder: 'One sentence shown on the product card.',
     formDescription: 'Description',
-    formDescriptionHint: "Use a blank line to split paragraphs, start a line with '- ' for bullets.",
+    formDescriptionHint:
+      "Use a blank line to split paragraphs, start a line with '- ' for bullets.",
     formDescriptionPlaceholder:
       'Detailed product description...\n\n- How to activate\n- Warranty policy',
     formSortOrder: 'Sort order',
@@ -472,8 +471,7 @@ export const en: Dictionary = {
       'Shown under the cover image on the product page. Adding or removing saves right away — no need to press Save.',
     formGalleryChoose: 'Add images',
     formGalleryRemaining: (n: number) => `${n} more image(s) allowed`,
-    formGalleryFull: (max: number) =>
-      `Limit of ${max} images reached — remove one to add another`,
+    formGalleryFull: (max: number) => `Limit of ${max} images reached — remove one to add another`,
     formGalleryMoveLeft: 'Move earlier',
     formGalleryMoveRight: 'Move later',
     formImageSize: (size: string) => `Compressed to ${size}`,
@@ -543,7 +541,8 @@ export const en: Dictionary = {
     deliveredLines: (delivered: number, quantity: number) =>
       `Delivered lines (${delivered}/${quantity})`,
     noDeliveredLines: 'No lines delivered yet.',
-    missingLines: (n: number) => `${n} ${n === 1 ? 'line' : 'lines'} missing — waiting for restock.`,
+    missingLines: (n: number) =>
+      `${n} ${n === 1 ? 'line' : 'lines'} missing — waiting for restock.`,
     orderInfoTitle: 'Order information',
     infoCode: 'Order code',
     infoCustomer: 'Customer',
@@ -605,7 +604,8 @@ export const en: Dictionary = {
 
     // ----- Automatic translation -----
     translationsTitle: 'Automatic translations',
-    translationsEmpty: 'No translation yet. Click "Translate automatically (EN + ZH)" to create one.',
+    translationsEmpty:
+      'No translation yet. Click "Translate automatically (EN + ZH)" to create one.',
     translateAction: 'Translate automatically (EN + ZH)',
     translateModel: (model: string) => `Model: ${model}`,
     translateHintSaves: 'The Vietnamese original is saved before translating.',
@@ -778,20 +778,19 @@ export const en: Dictionary = {
     markPaidAction: 'Mark as paid',
     markPaidPrompt:
       'Confirm that you HAVE RECEIVED the money for this order and deliver it now.\n\nNote where the money came from so it can be reconciled later (e.g. "Bank transfer 14:05", "USDT sent on the wrong network, verified manually"):',
-    cancelOrderConfirm: (code: string) =>
-      `Cancel order ${code}? Reserved stock will be released.`,
+    cancelOrderConfirm: (code: string) => `Cancel order ${code}? Reserved stock will be released.`,
 
     /* ===== v5 — payment settings + Binance status ===== */
-    navLegal: "Policies",
-    legalTitle: "Policy pages",
-    legalSubtitle: "Terms, refunds and privacy — customers reach them from the footer.",
-    legalLoadError: "Could not load policy pages",
-    legalFieldTitle: "Title",
-    legalFieldBody: "Content",
-    legalBodyHint: "Write it like a Word document. Leave empty to show a placeholder.",
-    legalBodyPlaceholder: "Write your policy…",
-    legalSaved: "Policy page saved.",
-    legalViewPublic: "View public page",
+    navLegal: 'Policies',
+    legalTitle: 'Policy pages',
+    legalSubtitle: 'Terms, refunds and privacy — customers reach them from the footer.',
+    legalLoadError: 'Could not load policy pages',
+    legalFieldTitle: 'Title',
+    legalFieldBody: 'Content',
+    legalBodyHint: 'Write it like a Word document. Leave empty to show a placeholder.',
+    legalBodyPlaceholder: 'Write your policy…',
+    legalSaved: 'Policy page saved.',
+    legalViewPublic: 'View public page',
     legalUpdatedAt: (d) => `Last updated: ${d}`,
     exportCsv: 'Export CSV',
 
@@ -844,8 +843,7 @@ export const en: Dictionary = {
     settingBinanceIdValueHint:
       'Digits only. Open the Binance app → Pay → receive section to find your ID.',
     errBinanceIdRequired: 'Enter a Binance ID before enabling this',
-    errSepayIncomplete:
-      'Enabling SePay requires an account number, bank, VND rate and API key.',
+    errSepayIncomplete: 'Enabling SePay requires an account number, bank, VND rate and API key.',
     errAiModelRequired: 'A model name is required for OpenAI-compatible providers.',
     settingCrypto: 'USDT on-chain (BEP20 / TRC20)',
     settingCryptoHint:
@@ -864,8 +862,7 @@ export const en: Dictionary = {
     rateHourHint: '0–23. Fetched exactly once a day at this hour.',
     rateSourceHint: 'Source: open.er-api.com/v6/latest/USD',
     rateTitle: 'Exchange rate',
-    rateHint:
-      'Used to build the VND transfer amount and to show prices in the chosen language.',
+    rateHint: 'Used to build the VND transfer amount and to show prices in the chosen language.',
     rateAutoLabel: 'Update daily',
     rateAutoHint:
       'Fetches the USD rate from a public source each day and adds your markup. On failure the current rate is kept.',
@@ -883,7 +880,7 @@ export const en: Dictionary = {
     settingVndRateHint: 'Prices are in USDT, so a rate is needed to get the VND amount.',
     settingTelegramTitle: 'Telegram bot',
     settingTelegramSectionHint:
-      'Sales channel via bot — under construction; for now the bot only greets customers.',
+      'Complete sales channel: catalog, payments, key delivery and operational alerts.',
     settingTelegramEnable: 'Enable the Telegram bot',
     settingTelegramEnableHint: 'The bot runs on this server; no extra ports needed.',
     settingTelegramTokenLabel: 'Bot token (from @BotFather)',
@@ -908,6 +905,27 @@ export const en: Dictionary = {
     telegramStockAlertsHint:
       'When keys are added to an active option, the bot sends its price, quantity and buy button to previous bot customers.',
     telegramStockAlertsPreview: 'Preview restock alert',
+    telegramLastSuccess: (time: string) => `Last successful connection: ${time}`,
+    telegramLastFailure: (time: string) => `Last connection failure: ${time}`,
+    telegramFailureCount: (count: number) => `${count} consecutive failures`,
+    telegramOwnerAlertsTitle: 'Store owner notifications',
+    telegramOwnerAlertsPreview: 'Preview owner alert',
+    telegramOwnerAlertsHint:
+      'Receive operational alerts in a dedicated chat; customers never see these messages.',
+    telegramOwnerChatLabel: 'Alert destination chat ID',
+    telegramOwnerChatHint:
+      'Send /chatid to the bot in a private chat or group, then paste the returned number.',
+    telegramOwnerOrderAlertsLabel: 'Notify immediately for new orders',
+    telegramOwnerOrderAlertsHint: 'Includes items, quantity, total, customer and order code.',
+    telegramOwnerStuckAlertsLabel: 'Notify for stalled orders',
+    telegramOwnerStuckAlertsHint: 'Each order is notified once after the time set alongside.',
+    telegramOwnerStuckMinutesLabel: 'After (minutes)',
+    telegramOwnerLowStockAlertsLabel: 'Notify for low or empty stock',
+    telegramOwnerLowStockAlertsHint: 'Each option is notified once and resets after restocking.',
+    telegramOwnerLowStockThresholdLabel: 'Remaining',
+    telegramOwnerSendTest: 'Send test message',
+    telegramOwnerTestSent: 'Sent to the alert destination',
+    telegramOwnerSaveBeforeTest: 'Save the chat ID before sending a test.',
     telegramGreetingLabel: 'Custom greeting',
     telegramGreetingHint:
       'Leave empty for the default greeting per customer language. If set, it is used verbatim for all languages.',
@@ -1019,8 +1037,7 @@ export const en: Dictionary = {
     settingAiModelHint: 'Leave empty for claude-opus-5.',
     settingApiKeyLabel: 'Claude API key',
     settingApiKeyReplaceLabel: 'Replace with a new key',
-    settingApiKeyHint:
-      'The key for the selected provider. Leave empty to keep the current key.',
+    settingApiKeyHint: 'The key for the selected provider. Leave empty to keep the current key.',
     settingApiKeySaved: (hint: string) => `Key saved ····${hint}`,
     settingApiKeyClear: 'Remove key',
     settingApiKeyWillClear: 'The key will be removed when you save — auto-translation turns off.',
