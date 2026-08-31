@@ -33,8 +33,8 @@ interface ProductEditorTabsProps {
 }
 
 /**
- * Điều hướng cấp trang khác với `Tabs` dạng segmented dùng để lọc bảng kho.
- * Giữ hai kiểu riêng giúp tab lồng trong Kho không bị hiểu nhầm là cùng một cấp.
+ * Điều hướng cấp trang có thêm icon, số lượng và liên kết tab/panel riêng.
+ * Tab phụ dùng cùng kiểu gạch chân nhưng thấp hơn để vẫn nhìn ra hai cấp điều hướng.
  */
 export function ProductEditorTabs({
   items,
