@@ -84,7 +84,9 @@ function toPreviewProduct(input: ProductPreviewInput, fallbackName: string): Pro
     stockDrawMode: 'SEQUENTIAL',
     active: true,
     availableStock: active.reduce((sum, variant) => sum + variant.availableStock, 0),
-    sold: active.reduce((sum, variant) => sum + variant.sold, 0),
+    // Tổng đã bán là trọn đời: loại đã tắt vẫn góp vào số liệu, dù không còn
+    // xuất hiện trong lựa chọn mua và không góp vào tồn kho khả dụng.
+    sold: variants.reduce((sum, variant) => sum + variant.sold, 0),
     variants,
     createdAt: '',
   };
@@ -110,12 +112,12 @@ export function ProductPreview({ input }: { input: ProductPreviewInput }) {
         `inert` chặn luôn cả điều hướng bằng bàn phím, thứ pointer-events không chặn.
       */}
       <div className="pointer-events-none select-none" aria-hidden="true" inert>
-        <div className="space-y-4">
-          <div className="max-w-xs">
+        <div className="grid gap-5 lg:grid-cols-[minmax(260px,340px)_minmax(0,1fr)] lg:items-start">
+          <div className="mx-auto w-full max-w-sm lg:mx-0">
             <ProductCard product={product} />
           </div>
 
-          <div className="rounded-xl border border-neutral-200 bg-white p-4">
+          <div className="min-w-0 rounded-xl border border-neutral-200 bg-white p-4 sm:p-5">
             <ProductDetail product={product} />
           </div>
         </div>

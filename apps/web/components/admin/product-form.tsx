@@ -1,8 +1,19 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import {
+  AlertCircle,
+  Boxes,
+  CheckCircle2,
+  Eye,
+  FileImage,
+  Languages,
+  Layers,
+  Save,
+  Settings2,
+} from 'lucide-react';
 import {
   STOCK_DRAW_MODES,
   TRANSLATABLE_LOCALES,
@@ -23,6 +34,17 @@ import type { CompressedPair } from '@/lib/image-compress';
 import { ProductPreview } from '@/components/admin/product-preview';
 import { ToggleRow } from '@/components/admin/toggle-row';
 import { TranslationSection, type TranslationBlock } from '@/components/admin/translation';
+import { VariantManager } from '@/components/admin/variant-manager';
+import { VariantStockPanel } from '@/components/admin/variant-stock-panel';
+import {
+  PRODUCT_EDITOR_TABS,
+  ProductEditorTabs,
+  productPanelId,
+  productTabId,
+  type ProductEditorTab,
+  type ProductEditorTabItem,
+} from '@/components/admin/product-editor-tabs';
+import { cn } from '@/lib/cn';
 
 interface ProductFieldErrors {
   name?: string;
@@ -30,81 +52,199 @@ interface ProductFieldErrors {
   sortOrder?: string;
 }
 
-export interface ProductFormProps {
-  /** When set → edit mode (PATCH); otherwise create mode (POST). */
-  product?: ProductDto;
-  /** Edit mode: sản phẩm vừa được lưu/dịch lại — cha cập nhật lại state. */
-  onProductUpdated?: (product: ProductDto) => void;
+interface ProductDraft {
+  name: string;
+  slug: string;
+  price: string;
+  priceCurrency: DisplayCurrency;
+  category: string;
+  shortDescription: string;
+  description: string;
+  sortOrder: string;
+  active: boolean;
+  stockDrawMode: StockDrawMode;
 }
 
-export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
+const CREATE_TABS: readonly ProductEditorTab[] = ['overview', 'content', 'preview'];
+
+function makeDraft(product?: ProductDto): ProductDraft {
+  return {
+    name: product?.name ?? '',
+    slug: product?.slug ?? '',
+    price: '',
+    priceCurrency: 'USDT',
+    category: product?.category ?? '',
+    shortDescription: product?.shortDescription ?? '',
+    description: product?.description ?? '',
+    sortOrder: product ? String(product.sortOrder) : '0',
+    active: product?.active ?? true,
+    stockDrawMode: product?.stockDrawMode ?? 'SEQUENTIAL',
+  };
+}
+
+function draftKey(draft: ProductDraft): string {
+  return JSON.stringify(draft);
+}
+
+function isEditorTab(value: string | null): value is ProductEditorTab {
+  return value !== null && PRODUCT_EDITOR_TABS.some((tab) => tab === value);
+}
+
+function TabPanel({
+  tab,
+  activeTab,
+  children,
+  className,
+}: {
+  tab: ProductEditorTab;
+  activeTab: ProductEditorTab;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      id={productPanelId(tab)}
+      role="tabpanel"
+      aria-labelledby={productTabId(tab)}
+      tabIndex={0}
+      hidden={activeTab !== tab}
+      className={cn('focus:outline-none', className)}
+    >
+      {children}
+    </section>
+  );
+}
+
+export interface ProductFormProps {
+  /** Khi có sản phẩm → chế độ sửa (PATCH); không có → tạo mới (POST). */
+  product?: ProductDto;
+  /** Sản phẩm vừa được lưu/dịch/đổi ảnh — cha cập nhật tiêu đề và số liệu. */
+  onProductUpdated?: (product: ProductDto) => void;
+  /** Nạp lại sản phẩm sau khi thêm/sửa/xóa loại. */
+  onProductRefresh?: () => Promise<void> | void;
+  /** Nạp lại bộ đếm sau thao tác kho; lỗi không chặn thao tác vừa hoàn thành. */
+  onStockChanged?: () => void;
+}
+
+export function ProductForm({
+  product,
+  onProductUpdated,
+  onProductRefresh,
+  onStockChanged,
+}: ProductFormProps) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const { token } = useAuth();
   const { t } = useI18n();
   const isEdit = Boolean(product);
 
-  const [name, setName] = useState(product?.name ?? '');
-  const [slug, setSlug] = useState(product?.slug ?? '');
-  // Giá chỉ có ở chế độ tạo mới — nó sinh ra loại đầu tiên ("Mặc định").
-  const [price, setPrice] = useState('');
-  const [category, setCategory] = useState(product?.category ?? '');
   /*
-   * Ảnh bìa: `null` = chủ shop CHƯA đụng vào, khác null = vừa chọn ảnh mới (hoặc
-   * vừa xoá, khi cả hai chuỗi rỗng).
-   *
-   * Không giữ ảnh trong một state rồi gửi nguyên si như trước được nữa:
-   * `product.image` bây giờ là ĐỊA CHỈ ảnh (`/api/images/...`), gửi ngược lên là
-   * ghi đè cột base64 bằng chính cái địa chỉ đó — ảnh biến mất vĩnh viễn và
-   * endpoint phục vụ ảnh quay ra tự chuyển hướng về chính nó.
+   * Một bản nháp sống xuyên suốt mọi tab. Nạp lại product để cập nhật kho/giá
+   * không được phép ghi đè phần chủ shop đang gõ nhưng chưa bấm Lưu.
    */
+  const [draft, setDraft] = useState<ProductDraft>(() => makeDraft(product));
+  const [savedDraft, setSavedDraft] = useState<ProductDraft>(() => makeDraft(product));
   const [imagePick, setImagePick] = useState<CompressedPair | null>(null);
-  /** Thứ đang hiển thị: ảnh vừa chọn, hoặc địa chỉ ảnh đã lưu. */
   const image = imagePick ? imagePick.image : (product?.image ?? '');
-  const [shortDescription, setShortDescription] = useState(product?.shortDescription ?? '');
-  const [description, setDescription] = useState(product?.description ?? '');
-  const [sortOrder, setSortOrder] = useState(product ? String(product.sortOrder) : '0');
-  const [active, setActive] = useState(product?.active ?? true);
-  const [stockDrawMode, setStockDrawMode] = useState<StockDrawMode>(
-    product?.stockDrawMode ?? 'SEQUENTIAL',
-  );
 
-  /*
-   * Ảnh phụ KHÔNG nằm trong biểu mẫu: mỗi thao tác gọi thẳng API và nhận về sản
-   * phẩm mới nhất. Vì thế bấm Huỷ cũng không hoàn tác được ảnh đã thêm — đúng
-   * như vậy, ảnh đã nằm trong CSDL rồi.
-   */
+  /* Ảnh phụ lưu tức thời, độc lập với bản nháp của biểu mẫu. */
   const [images, setImages] = useState<ProductImageDto[]>(product?.images ?? []);
   const [galleryBusy, setGalleryBusy] = useState(false);
   const [galleryError, setGalleryError] = useState<string | null>(null);
 
   const [fieldErrors, setFieldErrors] = useState<ProductFieldErrors>({});
-  /* Đơn vị NEO của giá loại "Mặc định" sắp tạo — mặc định USDT như trước. */
-  const [priceCurrency, setPriceCurrency] = useState<DisplayCurrency>('USDT');
-  const [error, setError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [savedOnce, setSavedOnce] = useState(isEdit);
+  const [pendingFocus, setPendingFocus] = useState<string | null>(null);
 
-  /** Kiểm tra biểu mẫu — trả về lỗi theo trường, hoặc null khi hợp lệ. */
+  const allowedTabs = isEdit ? PRODUCT_EDITOR_TABS : CREATE_TABS;
+  const requestedTab = searchParams.get('tab');
+  const activeTab =
+    isEditorTab(requestedTab) && allowedTabs.includes(requestedTab) ? requestedTab : 'overview';
+
+  const setActiveTab = (next: ProductEditorTab) => {
+    if (!allowedTabs.includes(next)) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', next);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  // URL cũ, tab sai hoặc chưa có `tab` đều được chuẩn hóa để có thể copy link.
+  useEffect(() => {
+    if (requestedTab === activeTab) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', activeTab);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [activeTab, pathname, requestedTab, router, searchParams]);
+
+  useEffect(() => {
+    if (!pendingFocus || activeTab !== 'overview') return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(pendingFocus)?.focus();
+      setPendingFocus(null);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, pendingFocus]);
+
+  const tabItems = useMemo<ProductEditorTabItem[]>(() => {
+    const all: ProductEditorTabItem[] = [
+      { value: 'overview', label: t.admin.productTabOverview, icon: Settings2 },
+      { value: 'content', label: t.admin.productTabContent, icon: FileImage },
+      {
+        value: 'variants',
+        label: t.admin.productTabVariants,
+        icon: Layers,
+        count: product?.variants.length ?? 0,
+      },
+      {
+        value: 'stock',
+        label: t.admin.productTabStock,
+        icon: Boxes,
+        count: product?.availableStock ?? 0,
+      },
+      { value: 'translations', label: t.admin.productTabTranslations, icon: Languages },
+      { value: 'preview', label: t.admin.productTabPreview, icon: Eye },
+    ];
+    return all.filter((item) => allowedTabs.includes(item.value));
+  }, [allowedTabs, product?.availableStock, product?.variants.length, t]);
+
+  const dirty = draftKey(draft) !== draftKey(savedDraft) || imagePick !== null;
+
+  const updateDraft = <K extends keyof ProductDraft>(key: K, value: ProductDraft[K]) => {
+    setDraft((current) => ({ ...current, [key]: value }));
+    setSaveError(null);
+  };
+
   const validate = (): ProductFieldErrors | null => {
     const errors: ProductFieldErrors = {};
-    if (!name.trim()) errors.name = t.admin.errNameRequired;
+    if (!draft.name.trim()) errors.name = t.admin.errNameRequired;
 
     if (!isEdit) {
-      const priceNumber = Number(price);
-      if (price.trim() === '' || !Number.isFinite(priceNumber) || priceNumber < 0) {
+      const priceNumber = Number(draft.price);
+      if (
+        draft.price.trim() === '' ||
+        !Number.isFinite(priceNumber) ||
+        priceNumber < 0
+      ) {
         errors.price = t.admin.errPriceInvalid;
       }
     }
 
-    const sortOrderNumber = sortOrder.trim() === '' ? 0 : Number(sortOrder);
+    const sortOrderNumber = draft.sortOrder.trim() === '' ? 0 : Number(draft.sortOrder);
     if (!Number.isInteger(sortOrderNumber)) errors.sortOrder = t.admin.errSortOrderInvalid;
-
     return Object.keys(errors).length > 0 ? errors : null;
   };
 
-  /** Thân yêu cầu gửi lên API (đã kiểm tra hợp lệ trước đó). */
+  const focusFirstError = (errors: ProductFieldErrors) => {
+    setActiveTab('overview');
+    if (errors.name) setPendingFocus('product-name');
+    else if (errors.price) setPendingFocus('product-price');
+    else if (errors.sortOrder) setPendingFocus('product-sort-order');
+  };
+
   const buildBody = (): Record<string, unknown> => {
-    // Optional text fields: omitted when empty on create; sent as null on edit
-    // so the admin can clear a previously set value.
     const optional = (value: string): string | null | undefined => {
       const trimmed = value.trim();
       if (trimmed) return trimmed;
@@ -112,39 +252,111 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
     };
 
     const body: Record<string, unknown> = {
-      name: name.trim(),
-      sortOrder: sortOrder.trim() === '' ? 0 : Number(sortOrder),
-      active,
-      stockDrawMode,
-      shortDescription: optional(shortDescription),
-      description: optional(description),
-      // Chỉ gửi ảnh khi chủ shop thực sự đổi. Bỏ qua nhánh này là mọi lần bấm
-      // Lưu đều ghi đè cột ảnh bằng địa chỉ đang hiển thị.
+      name: draft.name.trim(),
+      sortOrder: draft.sortOrder.trim() === '' ? 0 : Number(draft.sortOrder),
+      active: draft.active,
+      stockDrawMode: draft.stockDrawMode,
+      shortDescription: optional(draft.shortDescription),
+      description: optional(draft.description),
+      category: optional(draft.category),
+      // Chỉ gửi ảnh khi chủ shop thực sự đổi; gửi lại URL ảnh cũ sẽ phá dữ liệu base64.
       ...(imagePick
         ? {
             image: optional(imagePick.image),
             thumbnail: optional(imagePick.thumbnail),
           }
         : {}),
-      category: optional(category),
     };
-    // Giá chỉ gửi khi tạo mới: API dùng nó để tạo loại "Mặc định".
     if (!isEdit) {
-      body.price = Number(price);
-      body.priceCurrency = priceCurrency;
+      body.price = Number(draft.price);
+      body.priceCurrency = draft.priceCurrency;
     }
-    // Slug is never nullable: send only when provided (create auto-generates from name).
-    if (slug.trim()) body.slug = slug.trim();
+    if (draft.slug.trim()) body.slug = draft.slug.trim();
     for (const key of Object.keys(body)) {
       if (body[key] === undefined) delete body[key];
     }
     return body;
   };
 
+  /** Lưu một lần cho cả Tổng quan và Nội dung, bất kể tab hiện tại. */
+  const persistDraft = async (): Promise<ProductDto> => {
+    if (submitting) throw new Error(t.admin.productDraftSaving);
+
+    const errors = validate();
+    setFieldErrors(errors ?? {});
+    if (errors) {
+      setSaveError(t.admin.productDraftInvalid);
+      focusFirstError(errors);
+      throw new Error(t.admin.translateFixForm);
+    }
+
+    setSubmitting(true);
+    setSaveError(null);
+    try {
+      const updated =
+        isEdit && product
+          ? await apiFetch<ProductDto>(`/admin/products/${product.id}`, {
+              method: 'PATCH',
+              body: buildBody(),
+              token,
+            })
+          : await apiFetch<ProductDto>('/admin/products', {
+              method: 'POST',
+              body: buildBody(),
+              token,
+            });
+
+      const normalized = makeDraft(updated);
+      setDraft(normalized);
+      setSavedDraft(normalized);
+      setImagePick(null);
+      setSavedOnce(true);
+      onProductUpdated?.(updated);
+
+      if (!isEdit) router.push(`/admin/products/${updated.id}?tab=variants`);
+      return updated;
+    } catch (err) {
+      setSaveError(apiErrorMessage(err, t.common.connectionError));
+      throw err;
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!dirty || submitting) return;
+    try {
+      await persistDraft();
+    } catch {
+      // Lỗi đã nằm cạnh trường và trong thanh lưu cố định.
+    }
+  };
+
+  /** Lưu bản tiếng Việt đang gõ rồi mới dịch để hai bản luôn cùng phiên bản. */
+  const handleTranslate = async () => {
+    if (!product) return;
+    if (dirty) await persistDraft();
+    else {
+      const errors = validate();
+      setFieldErrors(errors ?? {});
+      if (errors) {
+        setSaveError(t.admin.productDraftInvalid);
+        focusFirstError(errors);
+        throw new Error(t.admin.translateFixForm);
+      }
+    }
+
+    const translated = await apiFetch<ProductDto>(`/admin/products/${product.id}/translate`, {
+      method: 'POST',
+      token,
+    });
+    onProductUpdated?.(translated);
+  };
+
   /**
-   * Chạy một thao tác ảnh phụ. Trả về false khi hỏng để bên gọi dừng vòng lặp
-   * nhiều tệp — ném lỗi ra ngoài thì GalleryPicker lại hiện thông báo "không
-   * đọc được tệp", sai hẳn nguyên nhân.
+   * Ảnh phụ đã được lưu riêng ngay khi thao tác. Không trộn nó vào snapshot của
+   * form, nếu không bấm Lưu sau đó có thể ghi đè kết quả mới bằng dữ liệu cũ.
    */
   const runGallery = async (action: () => Promise<ProductDto>): Promise<boolean> => {
     setGalleryBusy(true);
@@ -192,53 +404,6 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
     );
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (submitting) return;
-
-    const errors = validate();
-    setFieldErrors(errors ?? {});
-    if (errors) return;
-
-    setSubmitting(true);
-    setError(null);
-    try {
-      if (isEdit && product) {
-        await apiFetch<ProductDto>(`/admin/products/${product.id}`, {
-          method: 'PATCH',
-          body: buildBody(),
-          token,
-        });
-      } else {
-        await apiFetch<ProductDto>('/admin/products', { method: 'POST', body: buildBody(), token });
-      }
-      router.push('/admin/products');
-    } catch (err) {
-      setError(apiErrorMessage(err, t.common.connectionError));
-      setSubmitting(false);
-    }
-  };
-
-  /** Lưu bản tiếng Việt rồi dịch — bảo đảm bản dịch khớp nội dung đang xem. */
-  const handleTranslate = async () => {
-    if (!product) return;
-
-    const errors = validate();
-    setFieldErrors(errors ?? {});
-    if (errors) throw new Error(t.admin.translateFixForm);
-
-    await apiFetch<ProductDto>(`/admin/products/${product.id}`, {
-      method: 'PATCH',
-      body: buildBody(),
-      token,
-    });
-    const translated = await apiFetch<ProductDto>(`/admin/products/${product.id}/translate`, {
-      method: 'POST',
-      token,
-    });
-    onProductUpdated?.(translated);
-  };
-
   const translationBlocks: TranslationBlock[] = product
     ? TRANSLATABLE_LOCALES.map((locale) => ({
         locale,
@@ -266,228 +431,279 @@ export function ProductForm({ product, onProductUpdated }: ProductFormProps) {
       }))
     : [];
 
-  return (
-    <div className="space-y-6">
-      {/*
-        Biểu mẫu bên trái, xem trước bên phải. Cột phải dính theo màn hình để nó
-        vẫn trong tầm mắt khi cuộn xuống ô mô tả dài. Dưới `xl` thì xem trước
-        xuống dưới biểu mẫu thay vì bóp cả hai lại.
-      */}
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px] xl:items-start">
-        <Card className="p-6">
-          <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4" noValidate>
-            <Field label={t.admin.formName} htmlFor="product-name" error={fieldErrors.name}>
-              <Input
-                id="product-name"
-                value={name}
-                invalid={Boolean(fieldErrors.name)}
-                placeholder={t.admin.formNamePlaceholder}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </Field>
+  const status = submitting
+    ? t.admin.productDraftSaving
+    : saveError
+      ? t.admin.productDraftError
+      : dirty || !savedOnce
+        ? t.admin.productDraftUnsaved
+        : t.admin.productDraftSaved;
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label={t.admin.formSlug} htmlFor="product-slug">
+  return (
+    <div className="pb-24">
+      <ProductEditorTabs
+        items={tabItems}
+        value={activeTab}
+        onChange={setActiveTab}
+        ariaLabel={t.admin.productTabsAria}
+      />
+
+      <form id="product-editor-form" onSubmit={(event) => void handleSubmit(event)} noValidate>
+        <TabPanel tab="overview" activeTab={activeTab}>
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5">
+              <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
+                {t.admin.productOverviewTitle}
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">{t.admin.productOverviewHint}</p>
+            </div>
+
+            <div className="space-y-4">
+              <Field label={t.admin.formName} htmlFor="product-name" error={fieldErrors.name}>
                 <Input
-                  id="product-slug"
-                  value={slug}
-                  placeholder={isEdit ? 'my-product' : t.admin.formSlugAuto}
-                  className="font-mono"
-                  onChange={(event) => setSlug(event.target.value)}
+                  id="product-name"
+                  value={draft.name}
+                  invalid={Boolean(fieldErrors.name)}
+                  placeholder={t.admin.formNamePlaceholder}
+                  onChange={(event) => updateDraft('name', event.target.value)}
                 />
               </Field>
-              {isEdit ? (
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label={t.admin.formSlug} htmlFor="product-slug">
+                  <Input
+                    id="product-slug"
+                    value={draft.slug}
+                    placeholder={isEdit ? 'my-product' : t.admin.formSlugAuto}
+                    className="font-mono"
+                    onChange={(event) => updateDraft('slug', event.target.value)}
+                  />
+                </Field>
                 <Field label={t.admin.formCategory} htmlFor="product-category">
                   <Input
                     id="product-category"
-                    value={category}
+                    value={draft.category}
                     placeholder={t.admin.formCategoryPlaceholder}
-                    onChange={(event) => setCategory(event.target.value)}
+                    onChange={(event) => updateDraft('category', event.target.value)}
                   />
                 </Field>
-              ) : (
-                <Field
-                  label={t.admin.formPrice}
-                  htmlFor="product-price"
-                  error={fieldErrors.price}
-                >
-                  {/*
-                    Đơn vị chọn ở đây là cái NEO của giá: gõ 100.000 rồi chọn ₫
-                    thì khách Việt thấy đúng 100.000 ₫ mãi về sau, không trôi
-                    theo tỉ giá.
-                  */}
+              </div>
+
+              {!isEdit && (
+                <Field label={t.admin.formPrice} htmlFor="product-price" error={fieldErrors.price}>
                   <PriceInput
                     id="product-price"
-                    value={price}
-                    currency={priceCurrency}
+                    value={draft.price}
+                    currency={draft.priceCurrency}
                     onChange={(amount, unit) => {
-                      setPrice(amount);
-                      setPriceCurrency(unit);
+                      setDraft((current) => ({
+                        ...current,
+                        price: amount,
+                        priceCurrency: unit,
+                      }));
+                      setSaveError(null);
                     }}
                     invalid={Boolean(fieldErrors.price)}
                     placeholder="9.99"
                   />
                 </Field>
               )}
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                <Field
+                  label={t.admin.formSortOrder}
+                  htmlFor="product-sort-order"
+                  error={fieldErrors.sortOrder}
+                  hint={t.admin.formSortOrderHint}
+                >
+                  <Input
+                    id="product-sort-order"
+                    type="number"
+                    step={1}
+                    inputMode="numeric"
+                    value={draft.sortOrder}
+                    invalid={Boolean(fieldErrors.sortOrder)}
+                    onChange={(event) => updateDraft('sortOrder', event.target.value)}
+                  />
+                </Field>
+
+                <Field label={t.admin.formStockDrawMode} htmlFor="product-draw-mode">
+                  <div id="product-draw-mode" className="grid gap-2 sm:grid-cols-2">
+                    {STOCK_DRAW_MODES.map((mode) => (
+                      <label
+                        key={mode}
+                        className="flex cursor-pointer items-start gap-3 rounded-lg border border-neutral-200 p-3.5 transition-colors hover:border-neutral-400 has-[:checked]:border-neutral-950 has-[:checked]:bg-neutral-50"
+                      >
+                        <input
+                          type="radio"
+                          name="stock-draw-mode"
+                          value={mode}
+                          checked={draft.stockDrawMode === mode}
+                          onChange={() => updateDraft('stockDrawMode', mode)}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-neutral-950">
+                            {t.admin.formStockDrawModes[mode]}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-neutral-500">
+                            {t.admin.formStockDrawModeHints[mode]}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </Field>
+              </div>
+
+              <ToggleRow
+                id="product-active"
+                checked={draft.active}
+                onChange={(value) => updateDraft('active', value)}
+                label={t.admin.formActive}
+                hint={t.admin.formActiveHint}
+              />
+            </div>
+          </Card>
+        </TabPanel>
+
+        <TabPanel tab="content" activeTab={activeTab}>
+          <Card className="p-5 sm:p-6">
+            <div className="mb-5">
+              <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
+                {t.admin.productContentTitle}
+              </h2>
+              <p className="mt-1 text-sm text-neutral-500">{t.admin.productContentHint}</p>
             </div>
 
-            {!isEdit && (
-              <Field label={t.admin.formCategory} htmlFor="product-category">
+            <div className="space-y-4">
+              <Field label={t.admin.formImage} htmlFor="product-image">
+                <ImagePicker
+                  value={image}
+                  bytes={imagePick ? null : product?.imageBytes ?? null}
+                  onChange={(value) => {
+                    setImagePick(value);
+                    setSaveError(null);
+                  }}
+                />
+              </Field>
+
+              {isEdit && product && (
+                <Field
+                  label={t.admin.formGallery}
+                  htmlFor="product-gallery"
+                  hint={t.admin.formGalleryHint}
+                  error={galleryError ?? undefined}
+                >
+                  <GalleryPicker
+                    images={images}
+                    coverCount={image ? 1 : 0}
+                    busy={galleryBusy}
+                    onAdd={handleAddImage}
+                    onRemove={handleRemoveImage}
+                    onMove={handleMoveImage}
+                  />
+                </Field>
+              )}
+
+              <Field label={t.admin.formShortDescription} htmlFor="product-short-description">
                 <Input
-                  id="product-category"
-                  value={category}
-                  placeholder={t.admin.formCategoryPlaceholder}
-                  onChange={(event) => setCategory(event.target.value)}
+                  id="product-short-description"
+                  value={draft.shortDescription}
+                  placeholder={t.admin.formShortDescriptionPlaceholder}
+                  onChange={(event) => updateDraft('shortDescription', event.target.value)}
                 />
               </Field>
-            )}
 
-            <Field label={t.admin.formImage} htmlFor="product-image">
-              <ImagePicker
-                value={image}
-                bytes={imagePick ? null : product?.imageBytes ?? null}
-                onChange={setImagePick}
-              />
-            </Field>
-
-            {isEdit && product && (
               <Field
-                label={t.admin.formGallery}
-                htmlFor="product-gallery"
-                hint={t.admin.formGalleryHint}
-                error={galleryError ?? undefined}
+                label={t.admin.formDescription}
+                htmlFor="product-description"
+                hint={t.admin.formDescriptionHint}
               >
-                <GalleryPicker
-                  images={images}
-                  coverCount={image ? 1 : 0}
-                  busy={galleryBusy}
-                  onAdd={handleAddImage}
-                  onRemove={handleRemoveImage}
-                  onMove={handleMoveImage}
+                <textarea
+                  id="product-description"
+                  rows={12}
+                  value={draft.description}
+                  placeholder={t.admin.formDescriptionPlaceholder}
+                  onChange={(event) => updateDraft('description', event.target.value)}
+                  className={TEXTAREA_CLASSES}
                 />
               </Field>
-            )}
+            </div>
+          </Card>
+        </TabPanel>
+      </form>
 
-            <Field label={t.admin.formShortDescription} htmlFor="product-short-description">
-              <Input
-                id="product-short-description"
-                value={shortDescription}
-                placeholder={t.admin.formShortDescriptionPlaceholder}
-                onChange={(event) => setShortDescription(event.target.value)}
-              />
-            </Field>
+      {product && (
+        <>
+          <TabPanel tab="variants" activeTab={activeTab}>
+            <VariantManager product={product} onChanged={onProductRefresh ?? (() => undefined)} />
+          </TabPanel>
 
-            <Field
-              label={t.admin.formDescription}
-              htmlFor="product-description"
-              hint={t.admin.formDescriptionHint}
-            >
-              <textarea
-                id="product-description"
-                rows={8}
-                value={description}
-                placeholder={t.admin.formDescriptionPlaceholder}
-                onChange={(event) => setDescription(event.target.value)}
-                className={TEXTAREA_CLASSES}
-              />
-            </Field>
+          <TabPanel tab="stock" activeTab={activeTab}>
+            <VariantStockPanel product={product} onStockChanged={onStockChanged ?? (() => undefined)} />
+          </TabPanel>
 
-            <Field
-              label={t.admin.formSortOrder}
-              htmlFor="product-sort-order"
-              error={fieldErrors.sortOrder}
-              hint={t.admin.formSortOrderHint}
-            >
-              <Input
-                id="product-sort-order"
-                type="number"
-                step={1}
-                inputMode="numeric"
-                value={sortOrder}
-                invalid={Boolean(fieldErrors.sortOrder)}
-                onChange={(event) => setSortOrder(event.target.value)}
-              />
-            </Field>
+          <TabPanel tab="translations" activeTab={activeTab}>
+            <Card className="p-5 sm:p-6">
+              <TranslationSection blocks={translationBlocks} onTranslate={handleTranslate} />
+            </Card>
+          </TabPanel>
+        </>
+      )}
 
-            {/*
-              Cách rút kho. Chỉ có nghĩa khi một loại hàng có nhiều key KHÁC
-              NHAU về giá trị (ví dụ tài khoản còn số ngày ngẫu nhiên) — lúc đó
-              rút cũ trước khiến khách mua sớm vét hết phần đầu kho.
-            */}
-            <Field label={t.admin.formStockDrawMode} htmlFor="product-draw-mode">
-              <div id="product-draw-mode" className="space-y-2">
-                {STOCK_DRAW_MODES.map((mode) => (
-                  <label
-                    key={mode}
-                    className="flex cursor-pointer items-start gap-3 rounded-lg border border-neutral-200 p-3.5 transition-colors hover:border-neutral-400 has-[:checked]:border-neutral-950 has-[:checked]:bg-neutral-50"
-                  >
-                    <input
-                      type="radio"
-                      name="stock-draw-mode"
-                      value={mode}
-                      checked={stockDrawMode === mode}
-                      onChange={() => setStockDrawMode(mode)}
-                      className="mt-0.5 shrink-0"
-                    />
-                    <span className="min-w-0">
-                      <span className="block text-sm font-medium text-neutral-950">
-                        {t.admin.formStockDrawModes[mode]}
-                      </span>
-                      <span className="mt-0.5 block text-xs text-neutral-500">
-                        {t.admin.formStockDrawModeHints[mode]}
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </Field>
+      <TabPanel tab="preview" activeTab={activeTab}>
+        <ProductPreview
+          input={{
+            name: draft.name,
+            slug: draft.slug,
+            category: draft.category,
+            shortDescription: draft.shortDescription,
+            description: draft.description,
+            image,
+            thumbnail: imagePick ? imagePick.thumbnail : (product?.thumbnail ?? ''),
+            images,
+            price: draft.price,
+            priceCurrency: draft.priceCurrency,
+            variants: product?.variants ?? [],
+          }}
+        />
+      </TabPanel>
 
-            <ToggleRow
-              id="product-active"
-              checked={active}
-              onChange={setActive}
-              label={t.admin.formActive}
-              hint={t.admin.formActiveHint}
-            />
+      <div className="pointer-events-none fixed bottom-4 left-[4.75rem] right-4 z-40 md:left-[16rem] lg:left-[17rem] lg:right-8">
+        <div className="pointer-events-auto mx-auto flex max-w-6xl items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white/95 px-3 py-3 shadow-lg backdrop-blur sm:px-4">
+          <div className="min-w-0" aria-live="polite">
+            <div className="flex items-center gap-2 text-sm font-medium text-neutral-800">
+              {saveError ? (
+                <AlertCircle className="h-4 w-4 shrink-0 text-red-600" aria-hidden="true" />
+              ) : !dirty && savedOnce ? (
+                <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden="true" />
+              ) : (
+                <Save className="h-4 w-4 shrink-0 text-neutral-500" aria-hidden="true" />
+              )}
+              <span>{status}</span>
+            </div>
+            {saveError && <p className="mt-0.5 truncate text-xs text-red-600">{saveError}</p>}
+          </div>
 
-            {error && <p className="text-sm text-red-600">{error}</p>}
-
-            <div className="flex items-center gap-2 border-t border-neutral-100 pt-4">
-              <Button type="submit" loading={submitting}>
-                {isEdit ? t.admin.formSubmitSave : t.admin.formSubmitCreate}
-              </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <span className="hidden sm:block">
               <Link href="/admin/products" className={buttonVariants({ variant: 'ghost' })}>
                 {t.common.cancel}
               </Link>
-            </div>
-          </form>
-        </Card>
-
-        <div className="xl:sticky xl:top-24">
-          <ProductPreview
-            input={{
-              name,
-              slug,
-              category,
-              shortDescription,
-              description,
-              image,
-              thumbnail: imagePick ? imagePick.thumbnail : (product?.thumbnail ?? ''),
-              images,
-              price,
-              priceCurrency,
-              variants: product?.variants ?? [],
-            }}
-          />
+            </span>
+            <Button
+              type="submit"
+              form="product-editor-form"
+              loading={submitting}
+              disabled={!dirty || galleryBusy}
+            >
+              {!submitting && <Save className="h-4 w-4" aria-hidden="true" />}
+              {isEdit ? t.admin.formSubmitSave : t.admin.formSubmitCreate}
+            </Button>
+          </div>
         </div>
       </div>
-
-      {/* Bảng dịch giữ nguyên chiều ngang đầy đủ — nó có lưới 2 cột riêng bên trong. */}
-      {product && (
-        <Card className="p-6">
-          <TranslationSection blocks={translationBlocks} onTranslate={handleTranslate} />
-        </Card>
-      )}
     </div>
   );
 }

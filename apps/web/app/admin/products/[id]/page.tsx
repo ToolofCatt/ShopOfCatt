@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { use, useCallback, useEffect, useState } from 'react';
+import { Suspense, use, useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, PackageX, ServerCrash } from 'lucide-react';
 import type { ProductDto } from '@webcatt/shared';
 import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
@@ -10,8 +10,6 @@ import { useI18n } from '@/lib/i18n/client';
 import { Badge, Button, EmptyState, Spinner, buttonVariants } from '@/components/ui';
 import { PageHeader } from '@/components/admin/page-header';
 import { ProductForm } from '@/components/admin/product-form';
-import { VariantManager } from '@/components/admin/variant-manager';
-import { VariantStockPanel } from '@/components/admin/variant-stock-panel';
 import { formatProductPrice } from '@/components/admin/helpers';
 
 export default function AdminEditProductPage({ params }: { params: Promise<{ id: string }> }) {
@@ -136,11 +134,20 @@ export default function AdminEditProductPage({ params }: { params: Promise<{ id:
         }
       />
 
-      <div className="space-y-6">
-        <ProductForm product={product} onProductUpdated={setProduct} />
-        <VariantManager product={product} onChanged={refresh} />
-        <VariantStockPanel product={product} onStockChanged={refreshQuietly} />
-      </div>
+      <Suspense
+        fallback={
+          <div className="flex justify-center py-24">
+            <Spinner className="h-6 w-6 text-neutral-400" />
+          </div>
+        }
+      >
+        <ProductForm
+          product={product}
+          onProductUpdated={setProduct}
+          onProductRefresh={refresh}
+          onStockChanged={refreshQuietly}
+        />
+      </Suspense>
     </div>
   );
 }
