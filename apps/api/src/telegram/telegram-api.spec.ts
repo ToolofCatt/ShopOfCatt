@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { TelegramApiError, tgCallIdempotent } from './telegram-api';
+import {
+  isTelegramTokenRejected,
+  TelegramApiError,
+  tgCallIdempotent,
+} from './telegram-api';
 
 function telegramResponse(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -50,5 +54,14 @@ describe('tgCallIdempotent', () => {
       tgCallIdempotent('token', 'editMessageText', { text: 'cu' }),
     ).rejects.toBeInstanceOf(TelegramApiError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('isTelegramTokenRejected', () => {
+  it('chỉ nhận 401/404, không gắn nhầm lỗi mạng thành token hỏng', () => {
+    expect(isTelegramTokenRejected(new TelegramApiError('getMe', 401, 'Unauthorized'))).toBe(true);
+    expect(isTelegramTokenRejected(new TelegramApiError('getMe', 404, 'Not Found'))).toBe(true);
+    expect(isTelegramTokenRejected(new TelegramApiError('getMe', 500, 'Internal error'))).toBe(false);
+    expect(isTelegramTokenRejected(new TypeError('fetch failed'))).toBe(false);
   });
 });

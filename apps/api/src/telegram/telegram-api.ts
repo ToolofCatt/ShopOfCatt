@@ -71,6 +71,12 @@ export class TelegramApiError extends Error {
   }
 }
 
+/** Chỉ 401/404 mới chứng minh token không còn dùng được; `fetch failed`, timeout
+ * hay 5xx là lỗi kết nối tạm thời và supervisor phải thử lại ở lượt sau. */
+export function isTelegramTokenRejected(err: unknown): err is TelegramApiError {
+  return err instanceof TelegramApiError && (err.code === 401 || err.code === 404);
+}
+
 /**
  * Gọi một method Bot API. Ném `TelegramApiError` khi Telegram trả `ok: false`,
  * ném lỗi fetch thường khi rớt mạng — hai loại phân biệt được ở nơi gọi: lỗi

@@ -55,6 +55,7 @@ import {
 import { botDict, botLang, type BotLang } from './messages';
 import {
   TelegramApiError,
+  isTelegramTokenRejected,
   tgCall,
   tgCallIdempotent,
   tgDisplayName,
@@ -215,11 +216,18 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         const me = await tgCallIdempotent<TgUser>(cfg.token, 'getMe');
         username = me.username ? `@${me.username}` : String(me.id);
       } catch (err) {
-        this.lastBadToken = cfg.token;
-        this.lastError = `Token bị Telegram từ chối: ${errText(err)}`;
-        this.logger.error(
-          `Token bot bị Telegram từ chối (${errText(err)}) — bot KHÔNG chạy. Dán lại token trong /admin/telegram.`,
-        );
+        if (isTelegramTokenRejected(err)) {
+          this.lastBadToken = cfg.token;
+          this.lastError = `Token bị Telegram từ chối: ${errText(err)}`;
+          this.logger.error(
+            `Token bot bị Telegram từ chối (${errText(err)}) — bot KHÔNG chạy. Dán lại token trong /admin/telegram.`,
+          );
+        } else {
+          // Mạng tới api.telegram.org đôi lúc chớp ngay sau khi container lên.
+          // Không đóng đinh token là hỏng: supervisor sẽ thử lại sau 15 giây.
+          this.lastError = `Tạm thời không kết nối được Telegram: ${errText(err)}`;
+          this.logger.warn(`getMe tạm thời trượt (${errText(err)}) — sẽ thử lại`);
+        }
         return;
       }
 
@@ -284,7 +292,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         }
       } catch (err) {
         if (this.generation !== gen) return; // dừng chủ động — không phải lỗi
-        if (err instanceof TelegramApiError && (err.code === 401 || err.code === 404)) {
+        if (isTelegramTokenRejected(err)) {
           // Token bị thu hồi GIỮA CHỪNG (chủ shop revoke trên @BotFather).
           this.lastBadToken = token;
           this.lastError = 'Token bị thu hồi trên @BotFather — bot đã dừng.';
