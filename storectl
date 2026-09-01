@@ -4,6 +4,16 @@ set -eu
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 cd "$ROOT"
 
+env_value() {
+  [ -f .env ] || return 0
+  value=$(sed -n "s/^$1=//p" .env | tail -n 1)
+  case "$value" in
+    \"*\") value=${value#\"}; value=${value%\"} ;;
+    \'*\') value=${value#\'}; value=${value%\'} ;;
+  esac
+  printf '%s' "$value"
+}
+
 doctor() {
   JSON=false
   [ "${1:-}" = "--json" ] && JSON=true
@@ -22,9 +32,8 @@ doctor() {
   if [ -f .env ]; then
     mode=$(stat -c '%a' .env 2>/dev/null || stat -f '%Lp' .env 2>/dev/null || echo unknown)
     [ "$mode" = 600 ] && add pass env-permissions ".env mode is 600." || add warn env-permissions ".env mode is $mode; run chmod 600 .env."
-    # shellcheck disable=SC1091
-    . ./.env
-    jwt_secret=${JWT_SECRET:-}
+    # .env la du lieu, khong duoc source vi ten cua hang co the chua khoang trang.
+    jwt_secret=$(env_value JWT_SECRET)
     [ "${#jwt_secret}" -ge 32 ] && add pass jwt-secret "JWT secret has sufficient length." || add fail jwt-secret "JWT_SECRET is missing or too short."
   else add fail env ".env does not exist."; fi
 
@@ -47,7 +56,7 @@ doctor() {
     [ -n "$gzip_file" ] && gzip -t "backups/$gzip_file" 2>/dev/null && add pass backup "Latest backup passes gzip -t: $gzip_file" || add fail backup "Backup heartbeat points to a missing or damaged file."
   else add warn backup "No successful backup heartbeat yet."; fi
 
-  domain=${SITE_DOMAIN:-}
+  domain=$(env_value SITE_DOMAIN)
   if [ -n "$domain" ] && getent ahostsv4 "$domain" >/dev/null 2>&1; then add pass dns "$domain resolves."; else add fail dns "SITE_DOMAIN does not resolve."; fi
   if [ -n "$domain" ] && command -v curl >/dev/null 2>&1 && curl -fsS --max-time 12 "https://$domain/api/health" >/dev/null 2>&1; then add pass https "HTTPS health endpoint responds."; else add warn https "HTTPS health endpoint is not reachable yet."; fi
 

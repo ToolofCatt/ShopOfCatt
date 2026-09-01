@@ -19,6 +19,7 @@
     "docker:logs": "docker compose logs -f",
     "docker:reset": "docker compose down -v",
     "test": "turbo test",
+    "test:storectl": "docker run --rm -v .:/repo -w /repo alpine:3.20 sh scripts/storectl.spec.sh",
     "release:zip": "node scripts/release.mjs"
   },
   "devDependencies": {
