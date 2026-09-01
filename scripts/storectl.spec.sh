@@ -26,7 +26,8 @@ case "${1:-}" in
   ps)
     case "${2:-}" in
       postgres|api|web) printf 'running healthy\n' ;;
-      backup|proxy) printf 'running\n' ;;
+      backup) printf 'running\n' ;;
+      proxy) [ "${STORECTL_PROXY_STATE:-running}" = missing ] || printf 'running\n' ;;
     esac
     exit 0
     ;;
@@ -58,6 +59,13 @@ output=$(PATH="$FIXTURE/bin:$PATH" "$FIXTURE/storectl" doctor --json 2>&1) || {
 printf '%s' "$output" | grep -q '"ok":true'
 printf '%s' "$output" | grep -q '"id":"jwt-secret","state":"pass"'
 printf '%s' "$output" | grep -q '"id":"dns","state":"pass"'
+
+external_output=$(STORECTL_PROXY_STATE=missing PATH="$FIXTURE/bin:$PATH" "$FIXTURE/storectl" doctor --json 2>&1) || {
+  printf '%s\n' "$external_output" >&2
+  exit 1
+}
+printf '%s' "$external_output" | grep -q '"ok":true'
+printf '%s' "$external_output" | grep -q '"id":"proxy","state":"pass"'
 
 rm "$FIXTURE/.env"
 set +e

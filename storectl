@@ -42,10 +42,11 @@ doctor() {
       status=$(docker compose ps "$service" --format '{{.State}} {{.Health}}' 2>/dev/null || true)
       [ "$status" = "running healthy" ] && add pass "container-$service" "$service is running and healthy." || add fail "container-$service" "$service status is '${status:-missing}', expected running healthy."
     done
-    for service in backup proxy; do
+    for service in backup; do
       state=$(docker compose ps "$service" --format '{{.State}}' 2>/dev/null || true)
       [ "$state" = "running" ] && add pass "container-$service" "$service is running." || add fail "container-$service" "$service status is '${state:-missing}', expected running."
     done
+    proxy_state=$(docker compose ps proxy --format '{{.State}}' 2>/dev/null || true)
   else add fail compose "Cannot read Docker Compose status."; fi
 
   if docker compose exec -T api ./node_modules/.bin/prisma migrate status >/tmp/digital-store-migrate.$$ 2>&1; then add pass migrations "Database migrations are current."; else add fail migrations "Prisma migrate status failed: $(tail -1 /tmp/digital-store-migrate.$$ 2>/dev/null || true)"; fi
@@ -58,7 +59,16 @@ doctor() {
 
   domain=$(env_value SITE_DOMAIN)
   if [ -n "$domain" ] && getent ahostsv4 "$domain" >/dev/null 2>&1; then add pass dns "$domain resolves."; else add fail dns "SITE_DOMAIN does not resolve."; fi
-  if [ -n "$domain" ] && command -v curl >/dev/null 2>&1 && curl -fsS --max-time 12 "https://$domain/api/health" >/dev/null 2>&1; then add pass https "HTTPS health endpoint responds."; else add warn https "HTTPS health endpoint is not reachable yet."; fi
+  https_ok=false
+  if [ -n "$domain" ] && command -v curl >/dev/null 2>&1 && curl -fsS --max-time 12 "https://$domain/api/health" >/dev/null 2>&1; then
+    https_ok=true
+    add pass https "HTTPS health endpoint responds."
+  else add warn https "HTTPS health endpoint is not reachable yet."; fi
+  if [ "${proxy_state:-}" = running ]; then
+    add pass proxy "Compose proxy is running."
+  elif [ "$https_ok" = true ]; then
+    add pass proxy "External HTTPS proxy is serving the store."
+  else add fail proxy "Neither the Compose proxy nor an external HTTPS endpoint is available."; fi
 
   if [ "$JSON" = true ]; then printf '{"ok":%s,"failures":%s,"warnings":%s,"checks":[%s]}\n' "$([ "$failures" -eq 0 ] && echo true || echo false)" "$failures" "$warnings" "$results"; fi
   [ "$failures" -eq 0 ]
