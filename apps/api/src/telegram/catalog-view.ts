@@ -122,6 +122,7 @@ function fitEscaped(raw: string, budget: number): string {
 
 export type BotCallback =
   | { kind: 'hub' }
+  | { kind: 'searchPrompt' }
   | { kind: 'catalog'; page: number }
   | { kind: 'category'; catIndex: number; page: number }
   | { kind: 'product'; productId: string; backPage: number }
@@ -168,6 +169,8 @@ export function encodeCallback(cb: BotCallback): string {
   switch (cb.kind) {
     case 'hub':
       return 'h';
+    case 'searchPrompt':
+      return 'f';
     case 'catalog':
       return `c:${cb.page}`;
     case 'category':
@@ -229,6 +232,7 @@ export function parseCallback(data: string | undefined): BotCallback | null {
   if (!data || Buffer.byteLength(data, 'utf8') > CALLBACK_MAX_BYTES) return null;
   let m: RegExpExecArray | null;
   if (data === 'h') return { kind: 'hub' };
+  if (data === 'f') return { kind: 'searchPrompt' };
   if ((m = /^c:([1-9][0-9]{0,5})$/.exec(data))) {
     return { kind: 'catalog', page: Number(m[1]) };
   }
@@ -408,15 +412,8 @@ export function renderHub(
   ].join('\n');
 
   const keyboard: TgInlineKeyboard = [
-    [{ text: dict.hubShopBtn, callback_data: encodeCallback({ kind: 'catalog', page: 1 }) }],
-    [
-      { text: dict.hubAccountBtn, callback_data: encodeCallback({ kind: 'account' }) },
-      { text: dict.hubOrdersBtn, callback_data: encodeCallback({ kind: 'orders' }) },
-    ],
-    [
-      { text: dict.hubDepositBtn, callback_data: encodeCallback({ kind: 'depositMenu' }) },
-      { text: dict.hubSupportBtn, callback_data: encodeCallback({ kind: 'support' }) },
-    ],
+    [{ text: dict.menuShop, callback_data: encodeCallback({ kind: 'catalog', page: 1 }) }],
+    [{ text: dict.searchBtn, callback_data: encodeCallback({ kind: 'searchPrompt' }) }],
     [{ text: dict.hubLangBtn, callback_data: encodeCallback({ kind: 'langMenu' }) }],
   ];
   return { text, keyboard };
@@ -697,6 +694,14 @@ export function renderProductDetail(
       },
     ]);
   }
+  if (!hasStock) {
+    keyboard.push([
+      {
+        text: dict.detailOutOfStockSupport,
+        callback_data: encodeCallback({ kind: 'support' }),
+      },
+    ]);
+  }
   if (hasMoreDescription) {
     keyboard.push([
       {
@@ -827,7 +832,7 @@ export function renderSupport(
       lines.push(`• ${escapeHtml(channel.label)}: ${escapeHtml(channel.value)}`);
     }
   } else {
-    lines.push('', escapeHtml(dict.menuHint));
+    lines.push('', escapeHtml(dict.supportUnavailable));
   }
   return {
     text: lines.join('\n'),

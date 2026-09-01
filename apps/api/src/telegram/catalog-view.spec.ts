@@ -20,6 +20,7 @@ import {
   renderProductDetail,
   renderProductDescription,
   renderStorefront,
+  renderSupport,
   truncateLabel,
 } from './catalog-view';
 
@@ -162,13 +163,16 @@ describe('productButtonLabel', () => {
 });
 
 describe('encodeCallback / parseCallback', () => {
-  it('roundtrip hai loại callback', () => {
+  it('roundtrip các callback điều hướng chính', () => {
     const c = { kind: 'catalog', page: 2 } as const;
     const p = { kind: 'product', productId: 'ckqq1234567890abcdefghijk', backPage: 3 } as const;
     const pd = { kind: 'productDescription', productId: 'ckqq1234567890abcdefghijk', backPage: 3 } as const;
     expect(parseCallback(encodeCallback(c))).toEqual(c);
     expect(parseCallback(encodeCallback(p))).toEqual(p);
     expect(parseCallback(encodeCallback(pd))).toEqual(pd);
+    expect(parseCallback(encodeCallback({ kind: 'searchPrompt' }))).toEqual({
+      kind: 'searchPrompt',
+    });
   });
 
   it('callback_data của nút sản phẩm không vượt 64 byte với cuid thật', () => {
@@ -193,19 +197,13 @@ describe('encodeCallback / parseCallback', () => {
 });
 
 describe('renderHub — tối giản kiểu Panda Shop', () => {
-  it('chào ⭐ + số dư trong CHỮ + đủ các nhánh', () => {
+  it('chào ⭐ + số dư trong CHỮ + chỉ ba hành động inline', () => {
     const { text, keyboard } = renderHub('An <x>', 3.5, 'vi', RATES);
     expect(text).toContain('⭐ Catt Store Xin Chào An &lt;x&gt; ⭐');
     expect(text).toContain('💰 Số dư: 91.000 ₫'); // 3.5 × 26000
     const data = keyboard.flat().map((b) => b.callback_data);
-    expect(data).toContain('c:1'); // Cửa Hàng
-    expect(data).toContain('o'); // Đơn hàng
-    expect(data).toContain('a'); // Tài khoản
-    expect(data).toContain('d'); // Nạp tiền
-    expect(data).toContain('s'); // Hỗ trợ
-    expect(data).toContain('lg'); // Ngôn ngữ
-    // Panda: Cửa Hàng một mình một hàng trên cùng
-    expect(keyboard[0][0].callback_data).toBe('c:1');
+    expect(data).toEqual(['c:1', 'f', 'lg']);
+    expect(keyboard.every((row) => row.length === 1)).toBe(true);
   });
 
   it('lời chào tuỳ chỉnh thay câu mặc định và được escape', () => {
@@ -343,7 +341,7 @@ describe('renderProductDetail', () => {
     expect(text).toContain('• <b>Retail</b> — 250.000 ₫ — 📦 12');
     expect(text).toContain('• <b>OEM</b> — 180.000 ₫ — Hết hàng');
     // Kiểu Panda: kho/đã bán là dòng ⭐ ở đầu — "Đã bán: 0" vẫn hiện (số thật).
-    expect(text).toContain('📦 Tồn kho: 0');
+    expect(text).toContain('📦 Còn lại: 0');
     expect(text).toContain('🔥 Đã bán: 0');
     // Nút Mua: CHỈ loại còn hàng (Retail) — OEM hết hàng không chào nút hỏng.
     const data = keyboard.flat().map((b) => b.callback_data);
@@ -384,10 +382,10 @@ describe('renderProductDetail', () => {
     expect(renderProductDescription(p, 'vi', 1).text.length).toBeLessThan(4096);
   });
 
-  it('đầu trang: 💵 Giá / 📦 Tồn kho / 🔥 Đã bán — icon đa dạng theo yêu cầu chủ shop', () => {
+  it('đầu trang: giá / còn lại / đã bán dùng icon riêng', () => {
     const { text } = renderProductDetail(product(), 'vi', RATES, [], 1);
     expect(text).toContain('💵 Giá: 75k');
-    expect(text).toContain('📦 Tồn kho: 10');
+    expect(text).toContain('📦 Còn lại: 10');
     expect(text).toContain('🔥 Đã bán: 3');
     expect(text).toContain('🛒 Chọn loại muốn mua bên dưới:');
   });
@@ -401,5 +399,26 @@ describe('renderProductDetail', () => {
     expect(text).toContain('Sản phẩm hiện đang hết hàng');
     expect(text).not.toContain('Chọn loại muốn mua');
     expect(keyboard.flat().some((button) => button.callback_data.startsWith('b:'))).toBe(false);
+    expect(keyboard.flat().some((button) => button.callback_data === 's')).toBe(true);
+  });
+});
+
+describe('renderSupport', () => {
+  it.each([
+    ['vi', 'Kênh hỗ trợ đang được cập nhật'],
+    ['en', 'Support channels are being updated'],
+    ['zh', '客服渠道正在更新'],
+  ] as const)('báo rõ cấu hình trống bằng %s', (lang, expected) => {
+    expect(renderSupport([], '', lang).text).toContain(expected);
+  });
+
+  it('hiện ghi chú và kênh đã cấu hình, dữ liệu được escape', () => {
+    const view = renderSupport(
+      [{ label: 'Telegram', value: '@cattajust <x>' }],
+      'Hỗ trợ đơn hàng & bảo hành.',
+      'vi',
+    );
+    expect(view.text).toContain('Hỗ trợ đơn hàng &amp; bảo hành.');
+    expect(view.text).toContain('Telegram: @cattajust &lt;x&gt;');
   });
 });

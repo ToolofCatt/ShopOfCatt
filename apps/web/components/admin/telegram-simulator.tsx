@@ -238,6 +238,12 @@ export function TelegramSimulator({
   };
 
   const tenBot = botName ?? t.admin.telegramSimBotName;
+  const replyKeyboard = [...messages]
+    .reverse()
+    .find(
+      (message): message is Extract<SimMessage, { from: 'bot'; kind: 'screens' }> =>
+        message.from === 'bot' && message.kind === 'screens',
+    )?.data.replyKeyboard ?? [];
 
   return (
     <div className="space-y-3">
@@ -360,6 +366,26 @@ export function TelegramSimulator({
             </div>
           )}
         </div>
+
+        {replyKeyboard.length > 0 && (
+          <div className="space-y-1 border-t border-black/40 bg-[#17212b] px-3 py-2">
+            {replyKeyboard.map((row, rowIndex) => (
+              <div key={rowIndex} className="flex gap-1">
+                {row.map((label) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => void sendCustomer(label, lang)}
+                    className="min-w-0 flex-1 truncate rounded-md bg-[#253849] px-2 py-2 text-xs font-medium text-white transition hover:bg-[#30485d] active:bg-[#38546c]"
+                    title={label}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Ô nhập — gõ thử như khách, Enter để gửi. */}
         <form

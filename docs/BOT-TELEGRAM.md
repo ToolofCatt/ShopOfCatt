@@ -1,8 +1,9 @@
 # Bot Telegram bán hàng — thiết kế và lộ trình
 
-> Trạng thái: **Bot bán hàng, thanh toán, ví và giao key tự động đã chạy.** Bố cục theo mẫu chủ shop
-> chốt (kiểu bot "Piggy AI Premium"): /start → tin "Thông báo từ Admin" (từ hộp
-> thông báo trang chủ) + tin chào; sản phẩm là NÚT BẤM inline — nhãn
+> Trạng thái: **Bot bán hàng, thanh toán, ví và giao key tự động đã chạy.** Bố cục
+> hiện tại theo phong cách Panda Shop tối giản: `/start` của khách cũ có tối đa
+> một thông báo Admin và một tin chào gắn menu cố định; hub inline chỉ còn Mua
+> hàng, Tìm kiếm và Ngôn ngữ. Sản phẩm là NÚT BẤM inline — nhãn
 > `{tên} | {giá} | 📦 {tồn kho}` — bấm vào là chi tiết (các loại, giá neo theo
 > ngôn ngữ, tồn kho) sửa tại chỗ bằng editMessageText, có phân trang. Lõi dựng
 > chuỗi nằm ở `telegram/catalog-view.ts` (thuần, có unit test); giá đi đúng
@@ -34,8 +35,9 @@
 > nằm ở "🧾 Đơn của tôi". Ngôn ngữ đẩy lấy từ `User.telegramLang` nhớ từ lần
 > mua (vòng đẩy chạy ngoài mọi tương tác, không có language_code để đoán).
 > **GĐ ví số dư + menu cố định đã xong** (mô phỏng các shop bot VN như
-> "Lâm Shop"): menu cố định dưới ô nhập (🛒 Mua hàng │ 💰 Nạp tiền │ 🧾 Đơn của
-> tôi │ 👤 Tài khoản │ ☎️ Hỗ trợ — nhãn so trên CẢ BA ngôn ngữ); ví
+> "Lâm Shop"): menu cố định dưới ô nhập (🛒 Mua hàng │ 💰 Nạp tiền │ 🔎 Tìm
+> kiếm │ 🧾 Đơn của tôi │ 👤 Tài khoản │ ☎️ Hỗ trợ — nhãn so trên CẢ BA ngôn
+> ngữ); ví
 > `User.balance` với SỔ CÁI `BalanceEntry` (mọi thay đổi số dư đi qua
 > `balance/balance.service.ts` và kèm đúng một entry — sổ cái là sự thật, cột
 > balance chỉ là ảnh chụp); nạp qua chuyển khoản với mã `NAP-xxx` (bảng
@@ -46,19 +48,22 @@
 > lần, thiếu tiền lăn ngược sạch (test tích hợp trên PG thật ở
 > `balance.integration.spec.ts`); vòng đẩy báo "đã cộng ví" dùng chung outbox.
 > Payment.mode có thêm giá trị `BALANCE`; trang khách hàng admin hiện số dư.
-> **Giao diện đã theo mẫu bot "Lâm Shop"** (khảo sát thật bằng Telethon,
-> transcript trong scratchpad phiên làm việc): /start → HUB điều khiển
-> all-inline sửa tại chỗ (chào tên khách, nút số dư đứng đầu, 2 nút/hàng) →
-> 🛒 Cửa hàng → DANH MỤC kèm đếm số (một danh mục thì vào thẳng danh sách) →
+> **Hành trình mua hiện tại**: lần đầu gửi 👋 rồi chọn Việt/Anh/Trung theo gợi ý
+> từ ngôn ngữ Telegram; lựa chọn được ghim cho các lần sau. Menu cố định giữ sáu
+> chức năng thường dùng, còn hub inline chỉ giữ ba đường điều hướng cần thiết để
+> không lặp nút. 🛒 Cửa hàng → DANH MỤC (một danh mục thì vào thẳng danh sách) →
 > nút sản phẩm `Tên | giá | Còn n`/`Hết hàng` → chi tiết 📦/📝 + trạng thái
-> ✅/❌ + "Cách mua". Màn 👤 kiểu bảng thống kê (tên/số dư/mã khách/tổng chi/
+> → chọn loại → chọn trực tiếp `1..min(tồn kho, 10)`. Mỗi nút số lượng ghi cả
+> số món và tổng tiền, bấm là tạo đơn ngay; tồn trên 10 có đường liên hệ để mua
+> số lượng lớn, hết hàng có đường hỏi lịch nhập hàng. Màn 👤 (tên/số dư/mã khách/tổng chi/
 > đơn hoàn thành — chỉ số CÓ THẬT, không bịa hạng VIP/hoa hồng). Nạp tiền: nút
 > nhanh HOẶC GÕ SỐ tự do → bot hỏi xác nhận bằng nút rồi mới tạo mã (bot không
 > có trạng thái hội thoại — số trôi nổi mà tạo mã ngay thì gõ nhầm cũng thành
 > mã). Màn 🌐 chọn ngôn ngữ: lựa chọn lưu vào `User.telegramLang` +
 > `telegramLangChosen` — đã tự chọn thì language_code của app không ghi đè nữa.
-> Preview /admin/telegram đổi sang BẢN ĐỒ MÀN HÌNH (`screens` khoá theo
-> callback_data) — giả lập tra khoá, không chép logic điều hướng.
+> Preview `/admin/telegram` dùng BẢN ĐỒ MÀN HÌNH (`screens` khoá theo
+> callback_data) và cả menu cố định (`replyKeyboard`) — bấm nút gửi đúng text
+> như Telegram thật, không chép logic điều hướng.
 > **Thông báo hàng mới đã có**: nhập thêm ít nhất một key vào sản phẩm/loại đang
 > bán sẽ tạo outbox theo từng khách Telegram trong cùng transaction với kho.
 > Worker gửi theo lô, đúng ngôn ngữ và giá hiển thị của khách, kèm logo dịch vụ

@@ -9,10 +9,13 @@
 
 import {
   convertFromUsdt,
+  displayPriceAmount,
   formatMoney,
   formatUsdt,
+  sumMoney,
   type OrderDetailDto,
   type OrderSummaryDto,
+  type PaymentMethod,
   type PaymentMethodDto,
   type ProductDto,
   type ProductVariantDto,
@@ -30,8 +33,26 @@ import {
 import { botDict, type BotLang } from './messages';
 import type { TgInlineKeyboard, TgInlineKeyboardButton } from './telegram-api';
 
-/** Các mức số lượng chào trên nút — đơn to hơn thì khách bấm mua nhiều lần. */
-const QTY_OPTIONS = [1, 2, 3, 5, 10] as const;
+const PAYMENT_METHOD_ORDER: readonly PaymentMethod[] = [
+  'sepay',
+  'binance_id',
+  'binance_pay',
+  'crypto_bep20',
+  'crypto_trc20',
+  'mock',
+];
+
+/** Chỉ sắp thứ tự nút; danh sách phương thức được bật vẫn do Settings quyết định. */
+export function sortPaymentMethods<T extends PaymentMethod>(methods: readonly T[]): T[] {
+  const rank = (method: PaymentMethod) => {
+    const index = PAYMENT_METHOD_ORDER.indexOf(method);
+    return index === -1 ? PAYMENT_METHOD_ORDER.length : index;
+  };
+  return methods
+    .map((method, index) => ({ method, index }))
+    .sort((a, b) => rank(a.method) - rank(b.method) || a.index - b.index)
+    .map(({ method }) => method);
+}
 
 export interface BotView {
   text: string;
@@ -69,19 +90,35 @@ export function renderQuantityPicker(
     escapeHtml(dict.qtyTitle(variant.name)),
     `${escapeHtml(gia)} × 1`,
     escapeHtml(dict.inStock(variant.availableStock)),
+    '',
+    escapeHtml(dict.qtyCreateHint),
   ].join('\n');
 
-  const qtyRow: TgInlineKeyboardButton[] = QTY_OPTIONS.filter(
-    (qty) => qty <= variant.availableStock,
-  ).map((qty) => ({
-    text: `${qty}`,
-    callback_data: encodeCallback({ kind: 'qty', variantId: variant.id, qty }),
-  }));
+  const displayed = displayPriceAmount(variant, CURRENCY_BY_LANG[lang], rates);
+  const quantityButtons: TgInlineKeyboardButton[] = Array.from(
+    { length: Math.min(Math.max(0, variant.availableStock), 10) },
+    (_, index) => index + 1,
+  ).map((qty) => {
+    const total = sumMoney(Array.from({ length: qty }, () => displayed.amount));
+    return {
+      text: dict.qtyButton(qty, compactMoney(total, displayed.currency)),
+      callback_data: encodeCallback({ kind: 'qty', variantId: variant.id, qty }),
+    };
+  });
+  const quantityRows: TgInlineKeyboard = [];
+  for (let index = 0; index < quantityButtons.length; index += 2) {
+    quantityRows.push(quantityButtons.slice(index, index + 2));
+  }
+  if (variant.availableStock > 10) {
+    quantityRows.push([
+      { text: dict.bulkSupport, callback_data: encodeCallback({ kind: 'support' }) },
+    ]);
+  }
 
   return {
     text,
     keyboard: [
-      qtyRow,
+      ...quantityRows,
       [
         {
           text: dict.detailBack,
@@ -126,14 +163,15 @@ export function renderMethodChooser(
       },
     ]);
   }
-  for (const entry of methods) {
+  const sortedMethods = sortPaymentMethods(methods.map((entry) => entry.method));
+  for (const method of sortedMethods) {
     keyboard.push([
       {
-        text: dict.methodNames[entry.method] ?? entry.method,
+        text: dict.methodNames[method] ?? method,
         callback_data: encodeCallback({
           kind: 'method',
           orderCode: order.code,
-          method: entry.method,
+          method,
         }),
       },
     ]);
@@ -167,6 +205,7 @@ export function renderPaymentInstructions(
   const lines = [`<b>${escapeHtml(dict.payTitle(order.code))}</b>`];
   const keyboard: TgInlineKeyboard = [];
   let photo: string | null = null;
+  let awaitingPayment = false;
 
   // KHÔNG còn nút "Tôi đã chuyển": vòng đẩy tự giao hàng khi tiền vào (GĐ4),
   // nút kiểm tra chỉ làm khách tưởng phải bấm mới nhận được hàng.
@@ -187,6 +226,7 @@ export function renderPaymentInstructions(
       break;
     }
     case 'BINANCE': {
+      awaitingPayment = true;
       lines.push(
         escapeHtml(dict.payAmount(formatUsdt(order.totalAmount))),
         escapeHtml(dict.payOpenCheckout),
@@ -201,6 +241,7 @@ export function renderPaymentInstructions(
       break;
     }
     case 'BINANCE_ID': {
+      awaitingPayment = true;
       lines.push(
         escapeHtml(dict.payBinanceIdLabel),
         `<code>${escapeHtml(payment.binanceId ?? '')}</code>`,
@@ -211,6 +252,7 @@ export function renderPaymentInstructions(
       break;
     }
     case 'CRYPTO': {
+      awaitingPayment = true;
       lines.push(
         escapeHtml(dict.payCryptoNetwork(payment.cryptoNetwork ?? '')),
         escapeHtml(dict.payAddressLabel),
@@ -222,6 +264,7 @@ export function renderPaymentInstructions(
       break;
     }
     case 'SEPAY': {
+      awaitingPayment = true;
       lines.push(
         escapeHtml(dict.payBankLine(payment.sepayBank ?? '', payment.sepayAccountNumber ?? '')),
       );
@@ -242,6 +285,7 @@ export function renderPaymentInstructions(
     }
   }
 
+  if (awaitingPayment) lines.push('', escapeHtml(dict.paymentWaiting));
   if (minutesLeft !== null) {
     lines.push('', escapeHtml(dict.payDeadline(minutesLeft)));
   }
@@ -311,7 +355,7 @@ export function renderOrderView(
     lines.push(escapeHtml(dict.checkPaidWaitDelivery));
     keyboard.push([
       {
-        text: dict.btnPaid,
+        text: dict.btnCheckDelivery,
         callback_data: encodeCallback({ kind: 'check', orderCode: order.code }),
       },
     ]);

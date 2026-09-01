@@ -58,6 +58,7 @@ import { renderOwnerNewOrderAlert } from './owner-alert-view';
 import type { TgInlineKeyboard } from './telegram-api';
 import {
   DEPOSIT_VND_OPTIONS,
+  mainMenuKeyboard,
   renderAccount,
   renderDepositCancelled,
   renderDepositConfirm,
@@ -269,7 +270,13 @@ export class TelegramAdminController {
       };
     };
 
-    dua('h', renderHub('Khách', 0, lang, rates, cfg.greeting));
+    const hub = renderHub('Khách', 0, lang, rates, cfg.greeting);
+    dua('h', hub);
+    dua('start', { text: hub.text, keyboard: [] });
+    dua('f', {
+      text: botDict(lang).searchPrompt,
+      keyboard: [[{ text: botDict(lang).hubBackBtn, callback_data: 'h' }]],
+    });
     dua('s', renderSupport(support.supportChannels, support.supportNote, lang));
     dua('lg', renderLanguageMenu(lang));
     dua(
@@ -497,7 +504,7 @@ export class TelegramAdminController {
     }
 
     const input = query.text?.trim() ?? '';
-    let entry = 'h';
+    let entry = input.startsWith('/start') ? 'start' : 'h';
     if (input !== '' && !input.startsWith('/start')) {
       const action = input.startsWith('/orders') ? 'orders' : matchMenuAction(input);
       const byAction = {
@@ -532,6 +539,9 @@ export class TelegramAdminController {
       announcement: cfg.sendAnnouncement ? renderAnnouncement(announcement, lang) : null,
       entry,
       screens,
+      replyKeyboard: mainMenuKeyboard(lang).keyboard.map((row) =>
+        row.map((button) => button.text),
+      ),
     };
   }
 }

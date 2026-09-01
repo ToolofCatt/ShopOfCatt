@@ -386,6 +386,8 @@ export interface TelegramPreviewDto {
   /** Khoá màn hình đầu tiên (hub). */
   entry: string;
   screens: Record<string, TelegramMessagePreview>;
+  /** Menu cố định dưới ô nhập, đúng nhãn mà bot thật nhận dưới dạng text. */
+  replyKeyboard: string[][];
 }
 
 export interface TelegramStatusDto {

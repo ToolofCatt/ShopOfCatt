@@ -7,6 +7,7 @@ import {
   DEPOSIT_VND_OPTIONS,
   mainMenuKeyboard,
   matchMenuAction,
+  renderAccount,
   renderDepositCredited,
   renderDepositCancelled,
   renderDepositInstructions,
@@ -58,6 +59,21 @@ describe('menu cố định', () => {
   });
 });
 
+describe('nhãn tài khoản', () => {
+  it.each([
+    ['vi', 'TÀI KHOẢN CỦA BẠN'],
+    ['en', 'YOUR ACCOUNT'],
+    ['zh', '您的账户'],
+  ] as const)('dùng tiêu đề hướng về khách ở %s', (lang, expected) => {
+    const view = renderAccount(
+      { name: 'Khách', code: 100000, balance: 0, spentUsdt: 0, doneCount: 0 },
+      lang,
+      RATES,
+    );
+    expect(view.text).toContain(expected);
+  });
+});
+
 describe('màn nạp tiền', () => {
   it('mỗi mức nạp một nút dn:, có hàng quay lại', () => {
     const view = renderDepositMenu('vi', 3.5, RATES);
@@ -66,6 +82,14 @@ describe('màn nạp tiền', () => {
       for (const vnd of row) expect(data).toContain(`dn:${vnd}`);
     }
     expect(view.text).toContain('91.000 ₫'); // số dư 3.5 × 26000
+    expect(view.keyboard.flat().find((button) => button.callback_data === 'dn:1000000')?.text)
+      .toBe('1 triệu');
+    expect(view.keyboard.flat().find((button) => button.callback_data === 'dn:2000000')?.text)
+      .toBe('2 triệu');
+    expect(renderDepositMenu('en', 0, RATES).keyboard.flat()
+      .find((button) => button.callback_data === 'dn:1000000')?.text).toBe('1M');
+    expect(renderDepositMenu('zh', 0, RATES).keyboard.flat()
+      .find((button) => button.callback_data === 'dn:2000000')?.text).toBe('2M');
   });
 
   it('hướng dẫn nạp: số VND + mã NAP bắt buộc + QR đúng nội dung', () => {
@@ -87,6 +111,7 @@ describe('màn nạp tiền', () => {
     expect(view.text).toContain('3.85 USDT');
     expect(view.photo).toContain('qr.sepay.vn');
     expect(view.photo).toContain('NAP-XYZ789');
+    expect(view.text).toContain('⏳ Đang chờ hệ thống ghi nhận thanh toán.');
     const data = view.keyboard.flat().map((b) => b.callback_data);
     // Không còn nút kiểm tra — tiền vào là vòng đẩy tự báo cộng ví.
     expect(data).not.toContain('dk:NAP-XYZ789');
@@ -105,6 +130,21 @@ describe('màn nạp tiền', () => {
     expect(data).toContain('dw:100000:bi');
     expect(data).toContain('d'); // quay lại màn nạp
     expect(view.text).toContain('100.000 ₫');
+  });
+
+  it('bảng chọn cách nạp dùng cùng thứ tự phương thức với luồng mua', () => {
+    const view = renderDepositMethodChooser(
+      100_000,
+      ['crypto_trc20', 'binance_id', 'crypto_bep20', 'sepay'],
+      'vi',
+    );
+    expect(view.keyboard.flat().map((button) => button.callback_data)).toEqual([
+      'dw:100000:sp',
+      'dw:100000:bi',
+      'dw:100000:cb',
+      'dw:100000:ct',
+      'd',
+    ]);
   });
 
   it('hướng dẫn nạp CRYPTO: địa chỉ + số USDT đủ 6 số lẻ trong <code>, không QR', () => {
@@ -128,6 +168,7 @@ describe('màn nạp tiền', () => {
     // Mã nạp hiện để khách đưa cho hỗ trợ — on-chain không có chỗ ghi memo.
     expect(view.text).toContain('NAP-CRY001');
     expect(view.text).toContain('29 phút');
+    expect(view.text).toContain('⏳ Đang chờ hệ thống ghi nhận thanh toán.');
     expect(view.photo ?? null).toBeNull();
     const data = view.keyboard.flat().map((b) => b.callback_data);
     expect(data).toContain('dx:NAP-CRY001');

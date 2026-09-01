@@ -13,7 +13,7 @@ import {
 } from '@webcatt/shared';
 import { sepayQrUrl } from '../payments/sepay-qr';
 import { encodeCallback, escapeHtml } from './catalog-view';
-import { orderMoney, type BotView } from './order-view';
+import { orderMoney, sortPaymentMethods, type BotView } from './order-view';
 import { botDict, type BotLang } from './messages';
 import type { TgInlineKeyboard, TgReplyKeyboard } from './telegram-api';
 
@@ -27,8 +27,11 @@ export const DEPOSIT_VND_OPTIONS = [
   [500_000, 1_000_000, 2_000_000],
 ] as const;
 
-/** "50k" / "1000k" — cùng lối viết gọn với nhãn giá sản phẩm. */
-function vndShort(vnd: number): string {
+/** Mức triệu dùng cách đọc tự nhiên theo ngôn ngữ thay vì nhãn "1000k". */
+function vndShort(vnd: number, lang: BotLang): string {
+  if (vnd >= 1_000_000 && vnd % 1_000_000 === 0) {
+    return botDict(lang).depositMillion(vnd / 1_000_000);
+  }
   return `${vnd / 1_000}k`;
 }
 
@@ -123,7 +126,7 @@ export function renderDepositMenu(lang: BotLang, balanceUsdt: number | null, rat
 
   const keyboard: TgInlineKeyboard = DEPOSIT_VND_OPTIONS.map((row) =>
     row.map((vnd) => ({
-      text: vndShort(vnd),
+      text: vndShort(vnd, lang),
       callback_data: encodeCallback({ kind: 'depositAmount', vnd }),
     })),
   );
@@ -168,7 +171,7 @@ export function renderDepositMethodChooser(
   lang: BotLang,
 ): BotView {
   const dict = botDict(lang);
-  const keyboard: TgInlineKeyboard = methods.map((method) => [
+  const keyboard: TgInlineKeyboard = sortPaymentMethods(methods).map((method) => [
     {
       text: dict.methodNames[method] ?? method,
       callback_data: encodeCallback({ kind: 'depositMethod', vnd, method }),
@@ -257,6 +260,7 @@ export function renderDepositInstructions(
       lines.push('', escapeHtml(dict.depositRefCode(deposit.code)));
     }
   }
+  lines.push('', escapeHtml(dict.paymentWaiting));
   if (minutesLeft !== null) lines.push('', escapeHtml(dict.payDeadline(minutesLeft)));
 
   return {

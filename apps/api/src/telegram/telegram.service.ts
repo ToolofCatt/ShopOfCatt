@@ -17,6 +17,7 @@ import { ProductsService } from '../products/products.service';
 import { SettingsService } from '../settings/settings.service';
 import { animateEmoji } from './animated-emoji';
 import {
+  encodeCallback,
   parseCallback,
   renderAnnouncement,
   renderCategoryProducts,
@@ -558,6 +559,37 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  /** `/start` chỉ phát tối đa một thông báo và một tin chào có menu cố định. */
+  private async sendStartMessages(
+    token: string,
+    chatId: number,
+    from: TgUser | undefined,
+    lang: BotLang,
+    includeAnnouncement: boolean,
+    stop: AbortSignal,
+  ): Promise<void> {
+    if (includeAnnouncement) {
+      const cfg = await this.settings.getTelegramConfig();
+      if (cfg.sendAnnouncement) {
+        const announcement = renderAnnouncement(
+          await this.announcements.getPublic(lang),
+          lang,
+        );
+        if (announcement !== null) {
+          await this.sendHtml(token, chatId, announcement, null, stop);
+        }
+      }
+    }
+    const hub = await this.hubFor(chatId, from, lang);
+    await this.sendHtml(
+      token,
+      chatId,
+      hub.text,
+      mainMenuKeyboard(lang),
+      stop,
+    );
+  }
+
   private async handleMessage(
     token: string,
     message: TgMessage | undefined,
@@ -647,25 +679,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
           return;
         }
-        const cfg = await this.settings.getTelegramConfig();
-        if (cfg.sendAnnouncement) {
-          const announcement = renderAnnouncement(
-            await this.announcements.getPublic(lang),
-            lang,
-          );
-          if (announcement !== null) {
-            await this.sendHtml(token, chatId, announcement, null, stop);
-          }
-        }
-        // Tin riêng gắn bàn phím CỐ ĐỊNH: Telegram chỉ cho một reply_markup
-        // mỗi tin, mà HUB đã dùng chỗ đó cho nút inline.
-        await this.sendHtml(
-          token,
-          chatId,
-          escapeText(dict.menuHint),
-          mainMenuKeyboard(lang),
-          stop,
-        );
+        await this.sendStartMessages(token, chatId, message.from, lang, true, stop);
+        return;
       }
       // Text thường → đem đi TÌM KIẾM sản phẩm (học Panda Shop) — có kết quả
       // thì trả kết quả, không có gì khớp thì về HUB như cũ.
@@ -917,6 +932,21 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         await edit(hub);
         return;
       }
+      case 'searchPrompt': {
+        await answer();
+        await edit({
+          text: escapeText(dict.searchPrompt),
+          keyboard: [
+            [
+              {
+                text: dict.hubBackBtn,
+                callback_data: encodeCallback({ kind: 'hub' }),
+              },
+            ],
+          ],
+        });
+        return;
+      }
       case 'catalog': {
         const data = await this.loadStorefront(lang);
         await answer();
@@ -994,29 +1024,19 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           parsed.lang,
         );
         const dictMoi = botDict(parsed.lang);
-        await answer({
-          text: dictMoi.langSet(dictMoi.langNames[parsed.lang] ?? parsed.lang),
+        await answer();
+        await edit({
+          text: escapeText(
+            dictMoi.langSet(dictMoi.langNames[parsed.lang] ?? parsed.lang),
+          ),
+          keyboard: [],
         });
-        if (lanDau) {
-          const cfg = await this.settings.getTelegramConfig();
-          if (cfg.sendAnnouncement) {
-            const announcement = renderAnnouncement(
-              await this.announcements.getPublic(parsed.lang),
-              parsed.lang,
-            );
-            if (announcement !== null) {
-              await this.sendHtml(token, chatId, announcement, null, stop);
-            }
-          }
-        }
-        // HUB vẽ lại bằng ngôn ngữ mới + bàn phím CỐ ĐỊNH mới (nhãn đổi tiếng).
-        const hub = await this.hubFor(chatId, ctx.from, parsed.lang);
-        await edit(hub);
-        await this.sendHtml(
+        await this.sendStartMessages(
           token,
           chatId,
-          escapeText(dictMoi.menuHint),
-          mainMenuKeyboard(parsed.lang),
+          ctx.from,
+          parsed.lang,
+          lanDau,
           stop,
         );
         return;
