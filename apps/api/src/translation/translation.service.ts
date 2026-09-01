@@ -157,6 +157,12 @@ interface AiConfig {
   model: string;
 }
 
+export interface TranslationConnectionProbe {
+  configured: boolean;
+  connected: boolean;
+  detail: string;
+}
+
 @Injectable()
 export class TranslationService {
   private readonly logger = new Logger(TranslationService.name);
@@ -219,6 +225,27 @@ export class TranslationService {
       provider: cfg.provider,
       model: cfg.model,
     };
+  }
+
+  /** Kiểm tra khóa/kết nối mà không gửi nội dung và không tạo token dịch. */
+  async probeConnection(): Promise<TranslationConnectionProbe> {
+    const cfg = await this.resolveConfig();
+    if (cfg.key === '') return { configured: false, connected: false, detail: 'AI dịch đang tắt.' };
+    try {
+      if (cfg.provider === 'anthropic') {
+        await this.getAnthropicClient(cfg).models.list({ limit: 1 });
+      } else {
+        const base = cfg.baseUrl === '' ? 'https://api.openai.com/v1' : cfg.baseUrl;
+        const response = await fetch(`${base}/models`, {
+          headers: { Authorization: `Bearer ${cfg.key}` },
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      }
+      return { configured: true, connected: true, detail: `${cfg.provider} kết nối được; model ${cfg.model}.` };
+    } catch (error) {
+      return { configured: true, connected: false, detail: `Không kết nối được ${cfg.provider}: ${moTaLoi(error).slice(0, 180)}` };
+    }
   }
 
   /**

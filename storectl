@@ -1,0 +1,80 @@
+#!/bin/sh
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$ROOT"
+
+doctor() {
+  JSON=false
+  [ "${1:-}" = "--json" ] && JSON=true
+  failures=0 warnings=0 results=""
+  add() {
+    state=$1 id=$2 detail=$3
+    [ "$state" = fail ] && failures=$((failures + 1))
+    [ "$state" = warn ] && warnings=$((warnings + 1))
+    escaped=$(printf '%s' "$detail" | sed 's/\\/\\\\/g; s/"/\\"/g')
+    item=$(printf '{"id":"%s","state":"%s","detail":"%s"}' "$id" "$state" "$escaped")
+    [ -z "$results" ] && results=$item || results="$results,$item"
+    [ "$JSON" = true ] || printf '%-5s %-22s %s\n' "$state" "$id" "$detail"
+  }
+
+  command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && add pass docker "Docker and Compose are available." || add fail docker "Docker Engine or Compose plugin is missing."
+  if [ -f .env ]; then
+    mode=$(stat -c '%a' .env 2>/dev/null || stat -f '%Lp' .env 2>/dev/null || echo unknown)
+    [ "$mode" = 600 ] && add pass env-permissions ".env mode is 600." || add warn env-permissions ".env mode is $mode; run chmod 600 .env."
+    # shellcheck disable=SC1091
+    . ./.env
+    jwt_secret=${JWT_SECRET:-}
+    [ "${#jwt_secret}" -ge 32 ] && add pass jwt-secret "JWT secret has sufficient length." || add fail jwt-secret "JWT_SECRET is missing or too short."
+  else add fail env ".env does not exist."; fi
+
+  if docker compose ps >/dev/null 2>&1; then
+    for service in postgres api web; do
+      status=$(docker compose ps "$service" --format '{{.State}} {{.Health}}' 2>/dev/null || true)
+      [ "$status" = "running healthy" ] && add pass "container-$service" "$service is running and healthy." || add fail "container-$service" "$service status is '${status:-missing}', expected running healthy."
+    done
+    for service in backup proxy; do
+      state=$(docker compose ps "$service" --format '{{.State}}' 2>/dev/null || true)
+      [ "$state" = "running" ] && add pass "container-$service" "$service is running." || add fail "container-$service" "$service status is '${state:-missing}', expected running."
+    done
+  else add fail compose "Cannot read Docker Compose status."; fi
+
+  if docker compose exec -T api ./node_modules/.bin/prisma migrate status >/tmp/digital-store-migrate.$$ 2>&1; then add pass migrations "Database migrations are current."; else add fail migrations "Prisma migrate status failed: $(tail -1 /tmp/digital-store-migrate.$$ 2>/dev/null || true)"; fi
+  rm -f /tmp/digital-store-migrate.$$
+
+  if [ -f backups/.last-success.json ]; then
+    gzip_file=$(sed -n 's/.*"file":"\([^"]*\)".*/\1/p' backups/.last-success.json)
+    [ -n "$gzip_file" ] && gzip -t "backups/$gzip_file" 2>/dev/null && add pass backup "Latest backup passes gzip -t: $gzip_file" || add fail backup "Backup heartbeat points to a missing or damaged file."
+  else add warn backup "No successful backup heartbeat yet."; fi
+
+  domain=${SITE_DOMAIN:-}
+  if [ -n "$domain" ] && getent ahostsv4 "$domain" >/dev/null 2>&1; then add pass dns "$domain resolves."; else add fail dns "SITE_DOMAIN does not resolve."; fi
+  if [ -n "$domain" ] && command -v curl >/dev/null 2>&1 && curl -fsS --max-time 12 "https://$domain/api/health" >/dev/null 2>&1; then add pass https "HTTPS health endpoint responds."; else add warn https "HTTPS health endpoint is not reachable yet."; fi
+
+  if [ "$JSON" = true ]; then printf '{"ok":%s,"failures":%s,"warnings":%s,"checks":[%s]}\n' "$([ "$failures" -eq 0 ] && echo true || echo false)" "$failures" "$warnings" "$results"; fi
+  [ "$failures" -eq 0 ]
+}
+
+command_name=${1:-help}
+[ "$#" -eq 0 ] || shift
+
+case "$command_name" in
+  doctor) doctor "$@" ;;
+  status) docker compose ps ;;
+  logs) docker compose logs "$@" ;;
+  # backup.sh chạy một bản dump ngay khi container khởi động.
+  backup) docker compose restart backup ;;
+  restore)
+    [ "$#" -eq 1 ] || { echo "Usage: ./storectl restore backups/file.sql.gz" >&2; exit 2; }
+    exec ./docker/restore.sh "$1"
+    ;;
+  *) cat <<'EOF'
+Digital Store control utility
+  ./storectl doctor [--json]  Check environment, containers, DNS/HTTPS, migrations and backup
+  ./storectl status           Show Docker Compose status
+  ./storectl logs [service]   Show logs
+  ./storectl backup           Run a backup now by restarting the backup worker
+  ./storectl restore FILE     Restore a verified .sql.gz backup
+EOF
+    ;;
+esac

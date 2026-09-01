@@ -1,6 +1,7 @@
 {
   "name": "webcatt",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@9.15.9",
   "engines": {
     "node": ">=20"
@@ -17,9 +18,12 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "docker:reset": "docker compose down -v",
-    "test": "turbo test"
+    "test": "turbo test",
+    "release:zip": "node scripts/release.mjs"
   },
   "devDependencies": {
+    "@types/archiver": "^6.0.3",
+    "archiver": "^7.0.1",
     "turbo": "^2.5.0"
   }
 }

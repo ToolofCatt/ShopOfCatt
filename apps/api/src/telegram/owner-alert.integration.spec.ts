@@ -17,6 +17,7 @@ import type { PaymentsService } from '../payments/payments.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { ProductsService } from '../products/products.service';
 import type { SettingsService } from '../settings/settings.service';
+import type { StorefrontService } from '../storefront/storefront.service';
 import type { TelegramUsersService } from './telegram-users.service';
 import { TelegramService } from './telegram.service';
 
@@ -111,6 +112,7 @@ beforeAll(async () => {
     {} as TelegramUsersService,
     {} as BalanceService,
     prisma as unknown as PrismaService,
+    {} as StorefrontService,
   );
 
   const user = await prisma.user.create({

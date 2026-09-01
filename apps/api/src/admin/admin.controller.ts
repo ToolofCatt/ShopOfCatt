@@ -73,6 +73,12 @@ import { StockQueryDto } from './dto/stock-query.dto';
 import { WithdrawStockDto } from './dto/withdraw-stock.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
+import {
+  PatchAiSettingsDto,
+  PatchPaymentSettingsDto,
+  PatchRateSettingsDto,
+  PatchSupportSettingsDto,
+} from '../settings/dto/update-settings-sections.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -150,6 +156,26 @@ export class AdminController {
     @Body() dto: UpdateSettingsDto,
   ): Promise<AdminStoreSettingDto> {
     return this.settingsService.update(user, dto);
+  }
+
+  @Patch('settings/payments')
+  patchPayments(@CurrentUser() user: User, @Body() dto: PatchPaymentSettingsDto): Promise<AdminStoreSettingDto> {
+    return this.settingsService.updateSection(user, dto);
+  }
+
+  @Patch('settings/rates')
+  patchRates(@CurrentUser() user: User, @Body() dto: PatchRateSettingsDto): Promise<AdminStoreSettingDto> {
+    return this.settingsService.updateSection(user, dto);
+  }
+
+  @Patch('settings/support')
+  patchSupport(@CurrentUser() user: User, @Body() dto: PatchSupportSettingsDto): Promise<AdminStoreSettingDto> {
+    return this.settingsService.updateSection(user, dto);
+  }
+
+  @Patch('settings/ai')
+  patchAi(@CurrentUser() user: User, @Body() dto: PatchAiSettingsDto): Promise<AdminStoreSettingDto> {
+    return this.settingsService.updateSection(user, dto);
   }
 
   @Get('binance/status')

@@ -1,5 +1,7 @@
 // ===== Shared types & constants between @webcatt/api and @webcatt/web =====
 
+export * from './storefront';
+
 export type Role = 'USER' | 'ADMIN' | 'SUPERADMIN';
 
 /** ADMIN và SUPERADMIN đều vào được trang quản trị. */
@@ -788,6 +790,13 @@ export const AUDIT_ACTIONS = [
   'coupon.create',
   'coupon.update',
   'coupon.delete',
+  'storefront.draft.update',
+  'storefront.publish',
+  'storefront.restore',
+  'storefront.media.add',
+  'storefront.media.delete',
+  'storefront.maintenance',
+  'setup.check',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

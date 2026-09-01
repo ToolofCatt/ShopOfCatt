@@ -1,6 +1,11 @@
-# Catt Store — Web bán hàng số (digital goods)
+# Digital Store - self-hosted digital goods storefront
 
-Web bán hàng số chuyên nghiệp giao diện **trắng đen**: bán key bản quyền, gift card, mã kích hoạt... **Giao hàng tự động** ngay sau khi thanh toán — **mỗi dòng trong kho = 1 sản phẩm** được giao. Thanh toán crypto (USDT) qua **Binance Pay**, kèm chế độ **giả lập thanh toán** để dev/demo không cần tài khoản Binance Merchant.
+Mã nguồn self-hosted cho một cửa hàng sản phẩm số: key bản quyền, gift card và
+mã kích hoạt được tự giao sau thanh toán. Mỗi dòng kho là một món hàng. Bản phát
+hành dùng MIT, không có license runtime, updater hay dịch vụ cấp phép bắt buộc.
+
+Hướng dẫn: [Tiếng Việt](docs/VI/HUONG-DAN-NGUOI-DUNG.md) ·
+[English](docs/EN/USER-GUIDE.md) · [Agent guide](docs/AGENT-GUIDE.md)
 
 ## Công nghệ
 
@@ -9,7 +14,7 @@ Web bán hàng số chuyên nghiệp giao diện **trắng đen**: bán key bả
 | Monorepo | Turborepo + pnpm workspaces |
 | Frontend `apps/web` | Next.js 15 (App Router) · React 19 · Tailwind CSS v4 · lucide-react · Geist font |
 | Backend `apps/api` | NestJS 11 · Prisma 6 · JWT · Binance Pay API |
-| Database | PostgreSQL 16 |
+| Database | PostgreSQL 17 |
 | Dùng chung `packages/shared` | TypeScript types + hằng số dùng chung FE/BE |
 | Đa ngôn ngữ | Tiếng Việt · English · 中文 (cả giao diện lẫn thông báo lỗi từ API) |
 | Triển khai | Docker + docker compose (image multi-stage, có healthcheck) |
@@ -128,7 +133,7 @@ Seed chỉ **tạo mới** tài khoản này khi chưa tồn tại — chạy l�
 hay vai trò của tài khoản đang dùng.
 
 Đặt `SEED_DEMO=true` nếu muốn thêm sản phẩm/khách hàng mẫu để xem thử
-(khách demo `user@cattstore.local` / `User@123`). Cửa hàng thật để `false`.
+(khách demo `user@digital-store.local` / `User@123`). Cửa hàng thật để `false`.
 
 ## Luồng bán hàng số
 

@@ -25,6 +25,7 @@ import { LOCALES, type Locale } from '../i18n/locale';
 import { ProductsService } from '../products/products.service';
 import { sepayQrUrl } from '../payments/sepay-qr';
 import { SettingsService } from '../settings/settings.service';
+import { StorefrontService } from '../storefront/storefront.service';
 import { RateLimit } from '../security/rate-limit.guard';
 import { UpdateTelegramSettingsDto } from '../settings/dto/update-telegram-settings.dto';
 import {
@@ -210,6 +211,7 @@ export class TelegramAdminController {
     private readonly products: ProductsService,
     private readonly announcements: AnnouncementService,
     private readonly audit: AuditService,
+    private readonly storefront: StorefrontService,
   ) {}
 
   @Get('status')
@@ -270,7 +272,8 @@ export class TelegramAdminController {
       };
     };
 
-    const hub = renderHub('Khách', 0, lang, rates, cfg.greeting);
+    const storefront = await this.storefront.getPublic();
+    const hub = renderHub('Khách', 0, lang, rates, cfg.greeting, storefront.document.brand.name);
     dua('h', hub);
     dua('start', { text: hub.text, keyboard: [] });
     dua('f', {
@@ -308,7 +311,7 @@ export class TelegramAdminController {
           },
           lang,
           rates,
-          this.telegram.getStatus().botUsername ?? '@cattstore_shop_bot',
+          this.telegram.getStatus().botUsername ?? '@your_store_bot',
         ),
       );
     }

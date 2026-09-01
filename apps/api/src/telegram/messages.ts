@@ -113,7 +113,7 @@ const vi = {
   payWithBalance: (balance: string) => `💳 Trả bằng số dư (${balance})`,
 
   /** ---- Giao diện kiểu Panda Shop: tối giản, motif ⭐ ---- */
-  hubHello: (name: string) => `⭐ Catt Store Xin Chào ${name} ⭐`,
+  hubHello: (storeName: string, name: string) => `⭐ ${storeName} xin chào ${name} ⭐`,
   hubChoose: '👇 Chọn các nút bên dưới để bắt đầu:',
   hubBalanceLine2: (balance: string) => `💰 Số dư: ${balance}`,
   hubShopBtn: '🛒 Cửa Hàng',
@@ -272,7 +272,7 @@ const en: BotDictionary = {
   depositUnavailable: 'Top-ups are not open yet — the store has not enabled any top-up channel.',
   payWithBalance: (balance: string) => `💳 Pay with balance (${balance})`,
 
-  hubHello: (name: string) => `⭐ Catt Store welcomes ${name} ⭐`,
+  hubHello: (storeName: string, name: string) => `⭐ ${storeName} welcomes ${name} ⭐`,
   hubChoose: '👇 Pick a button below to get started:',
   hubBalanceLine2: (balance: string) => `💰 Balance: ${balance}`,
   hubShopBtn: '🛒 Store',
@@ -426,7 +426,7 @@ const zh: BotDictionary = {
   depositUnavailable: '充值尚未开放——商店未启用任何充值渠道。',
   payWithBalance: (balance: string) => `💳 用余额支付（${balance}）`,
 
-  hubHello: (name: string) => `⭐ Catt Store 欢迎您 ${name} ⭐`,
+  hubHello: (storeName: string, name: string) => `⭐ ${storeName} 欢迎您 ${name} ⭐`,
   hubChoose: '👇 请选择下方按钮开始：',
   hubBalanceLine2: (balance: string) => `💰 余额：${balance}`,
   hubShopBtn: '🛒 商店',

@@ -21,8 +21,8 @@ export type ButtonVariant = 'primary' | 'outline' | 'ghost' | 'danger';
 export type ButtonSize = 'sm' | 'md';
 
 const BUTTON_VARIANT_CLASSES: Record<ButtonVariant, string> = {
-  primary: 'bg-neutral-950 text-white hover:bg-neutral-800',
-  outline: 'border border-neutral-300 bg-white text-neutral-950 hover:border-neutral-500 hover:bg-neutral-50',
+  primary: 'wc-button-primary bg-[var(--store-primary)] text-[var(--store-primary-foreground)] hover:brightness-90',
+  outline: 'border border-[var(--store-border)] bg-[var(--store-surface)] text-[var(--store-foreground)] hover:brightness-95',
   ghost: 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950',
   danger: 'border border-red-200 bg-white text-red-600 hover:border-red-400 hover:bg-red-50',
 };
@@ -38,8 +38,8 @@ export function buttonVariants(
 ): string {
   const { variant = 'primary', size = 'md', className } = options;
   return cn(
-    'inline-flex cursor-pointer select-none items-center justify-center gap-2 rounded-lg font-medium transition-colors',
-    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950',
+    'wc-button inline-flex cursor-pointer select-none items-center justify-center gap-2 rounded-[var(--store-radius)] font-medium transition-colors',
+    'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--store-primary)]',
     'disabled:pointer-events-none disabled:opacity-50',
     BUTTON_VARIANT_CLASSES[variant],
     BUTTON_SIZE_CLASSES[size],
@@ -87,7 +87,7 @@ export function Input({ className, invalid = false, ...rest }: InputProps) {
     <input
       aria-invalid={invalid || undefined}
       className={cn(
-        'h-10 w-full rounded-lg border bg-white px-3 text-sm text-neutral-950 transition-colors',
+        'h-10 w-full rounded-[var(--store-radius)] border bg-[var(--store-surface)] px-3 text-sm text-[var(--store-foreground)] transition-colors',
         'placeholder:text-neutral-400 focus:outline-none focus:ring-2',
         invalid
           ? 'border-red-400 focus:border-red-500 focus:ring-red-600/10'
@@ -176,7 +176,7 @@ export const ORDER_STATUS_BADGE_VARIANT: Record<OrderStatus, BadgeVariant> = {
 
 export function Card({ className, children, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('rounded-xl border border-neutral-200 bg-white', className)} {...rest}>
+    <div className={cn('rounded-[var(--store-radius)] border border-[var(--store-border)] bg-[var(--store-surface)]', className)} {...rest}>
       {children}
     </div>
   );

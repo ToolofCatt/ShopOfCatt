@@ -389,8 +389,9 @@ export function renderHub(
   balanceUsdt: number | null,
   lang: BotLang,
   rates: StoreRatesDto | null,
-  /** Lời chào chủ shop tự soạn; rỗng = câu mặc định "⭐ Catt Store Xin Chào…". */
+  /** Lời chào chủ shop tự soạn; rỗng = câu mặc định dùng thương hiệu đang xuất bản. */
   greeting = '',
+  storeName = 'Digital Store',
 ): { text: string; keyboard: TgInlineKeyboard } {
   const dict = botDict(lang);
 
@@ -403,7 +404,7 @@ export function renderHub(
   const chao =
     greeting.trim() !== ''
       ? escapeHtml(greeting.trim())
-      : escapeHtml(dict.hubHello(customerName.trim() || '...'));
+      : escapeHtml(dict.hubHello(storeName.trim() || 'Digital Store', customerName.trim() || '...'));
   const text = [
     chao,
     escapeHtml(dict.hubBalanceLine2(nhanSoDu)),

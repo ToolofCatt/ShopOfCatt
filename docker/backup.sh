@@ -56,6 +56,13 @@ run_backup() {
   fi
 
   mv "$tmp" "$target"
+  # Heartbeat chỉ xuất hiện SAU cả pg_dump và gzip -t. API đọc file này để
+  # wizard phân biệt "container còn chạy" với "đã có backup khôi phục được".
+  heartbeat_tmp="$BACKUP_DIR/.last-success.json.partial"
+  printf '{"completedAt":"%s","file":"%s","bytes":%s}\n' \
+    "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$(basename "$target")" "$(wc -c < "$target" | tr -d ' ')" \
+    > "$heartbeat_tmp"
+  mv "$heartbeat_tmp" "$BACKUP_DIR/.last-success.json"
   echo "[backup] $(date -u '+%F %T') OK  -> $(basename "$target") ($(du -h "$target" | cut -f1))"
 
   # Dọn bản cũ, chỉ giữ $BACKUP_KEEP bản mới nhất

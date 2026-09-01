@@ -18,7 +18,7 @@ const RATES = { vndPerUsdt: 25_959.2, cnyPerUsdt: 7.1, updatedAt: null };
 
 describe('renderStockAlert', () => {
   it('dựng tin Việt đúng giá neo, escape dữ liệu và nút mở đúng sản phẩm', () => {
-    const view = renderStockAlert(ALERT, 'vi', RATES, '@cattstore_shop_bot');
+    const view = renderStockAlert(ALERT, 'vi', RATES, '@your_store_bot');
 
     expect(view.text).toContain('HÀNG MỚI VỀ');
     expect(view.text).toContain('emoji-id="5359726582447487916"');
@@ -26,7 +26,7 @@ describe('renderStockAlert', () => {
     expect(view.text).toContain('100.000 ₫');
     expect(view.text).toContain('Vừa thêm: 5');
     expect(view.text).toContain('Tồn kho hiện tại: 9');
-    expect(view.text).toContain('@cattstore_shop_bot');
+    expect(view.text).toContain('@your_store_bot');
     expect(parseCallback(view.keyboard[0][0].callback_data)).toEqual({
       kind: 'product',
       productId: 'product-1',

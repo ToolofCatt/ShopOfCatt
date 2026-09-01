@@ -676,6 +676,58 @@ model StoreSetting {
   updatedAt   DateTime @updatedAt
 }
 
+/// Trạng thái cài đặt của deployment một-cửa-hàng. Tách khỏi StoreSetting để
+/// thay đổi wizard không kéo theo DTO chứa bí mật thanh toán.
+model StoreSetup {
+  id                  String    @id @default("main")
+  setupVersion        Int       @default(1)
+  maintenanceMode     Boolean   @default(true)
+  publishedAt         DateTime?
+  publishedRevisionId String?
+  currentStep         String    @default("system")
+  /// Kết quả kiểm tra gần nhất, chỉ chứa mô tả an toàn, không chứa secret.
+  checkResults        Json      @default("[]")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+/// Bản nháp duy nhất. `version` là CAS để hai tab quản trị không ghi đè nhau.
+model StorefrontDraft {
+  id          String   @id @default("main")
+  document    Json
+  version     Int      @default(1)
+  updatedById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+/// Snapshot xuất bản bất biến. Khôi phục tạo snapshot mới, không sửa lịch sử.
+model StorefrontRevision {
+  id            String   @id @default(cuid())
+  version       Int      @unique
+  document      Json
+  publishedById String?
+  publishedBy   String   @default("")
+  publishedAt   DateTime @default(now())
+
+  @@index([publishedAt])
+}
+
+/// Media của page builder. Không nhận SVG vì SVG có thể mang script/foreignObject.
+model StoreMediaAsset {
+  id          String   @id @default(cuid())
+  contentType String
+  data        Bytes
+  bytes       Int
+  width       Int
+  height      Int
+  sha256      String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([sha256])
+}
+
 /// Hộp thông báo hiển thị trên trang chủ. Chỉ có duy nhất một bản ghi (id = "main").
 /// `body` là HTML đã được lọc theo danh sách thẻ cho phép (xem sanitize-html.ts).
 model Announcement {

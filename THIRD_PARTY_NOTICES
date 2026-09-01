@@ -1,0 +1,38 @@
+Digital Store includes open-source dependencies distributed under their own
+licenses. This file is informational; the full dependency graph and exact
+versions are recorded in pnpm-lock.yaml.
+
+Primary runtime components
+--------------------------
+- Next.js, React and React DOM — MIT License
+- NestJS packages — MIT License
+- Prisma Client and Prisma CLI — Apache License 2.0
+- PostgreSQL — PostgreSQL License
+- Tailwind CSS — MIT License
+- dnd-kit — MIT License
+- lucide-react — ISC License
+- sanitize-html — MIT License
+- bcryptjs — MIT License
+- class-validator and class-transformer — MIT License
+- RxJS — Apache License 2.0
+- qrcode — MIT License
+- archiver — MIT License
+- Geist font package — SIL Open Font License 1.1 / MIT package code
+
+Build and development components
+--------------------------------
+- TypeScript — Apache License 2.0
+- Vitest — MIT License
+- Turborepo — MPL-2.0
+- pnpm — MIT License
+
+Container images
+----------------
+- node:22-alpine — Node.js and Alpine Linux component licenses
+- postgres:17-alpine — PostgreSQL License plus Alpine packages
+- caddy:2-alpine — Apache License 2.0 plus Alpine packages
+
+License texts and source references are available from each package's
+repository and from the package metadata installed by pnpm. Redistributors
+must retain this notice, this project's MIT LICENSE, and all notices required
+by the dependency licenses.

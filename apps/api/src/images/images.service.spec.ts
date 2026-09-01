@@ -19,13 +19,13 @@ const WEBP = `data:image/webp;base64,${Buffer.from('xin chao').toString('base64'
 
 describe('image-url', () => {
   beforeEach(() => {
-    process.env.API_PUBLIC_URL = 'https://cattshop.site';
+    process.env.API_PUBLIC_URL = 'https://shop.example.test';
   });
 
   it('dựng địa chỉ ảnh bìa kèm tham số phiên bản theo updatedAt', () => {
     const url = productImageUrl('p1', 'cover', new Date(1_700_000_000_000));
     expect(url).toBe(
-      'https://cattshop.site/api/images/product/p1/cover?v=1700000000000',
+      'https://shop.example.test/api/images/product/p1/cover?v=1700000000000',
     );
   });
 
@@ -36,9 +36,9 @@ describe('image-url', () => {
   });
 
   it('bỏ dấu gạch chéo thừa ở cuối API_PUBLIC_URL', () => {
-    process.env.API_PUBLIC_URL = 'https://cattshop.site/';
+    process.env.API_PUBLIC_URL = 'https://shop.example.test/';
     expect(galleryImageUrl('img1')).toBe(
-      'https://cattshop.site/api/images/gallery/img1',
+      'https://shop.example.test/api/images/gallery/img1',
     );
   });
 

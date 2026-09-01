@@ -1,9 +1,12 @@
-import { cn } from '@/lib/cn';
+'use client';
 
-const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || 'Catt Store';
+import { cn } from '@/lib/cn';
+import { useStorefront } from '@/lib/storefront';
+
+const FALLBACK_SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || 'Digital Store';
 
 /**
- * Chữ hiệu của cửa hàng — "CATT" trong khối đen, "STORE" chữ giãn bên cạnh.
+ * Chữ hiệu của cửa hàng — từ đầu trong khối đen, phần tên còn lại nằm bên cạnh.
  * Đơn sắc hoàn toàn, nhại lại kiểu chữ tách hai tông của logo.
  */
 
@@ -33,10 +36,10 @@ const SIZES: Record<
   },
 };
 
-/** "Catt Store" → ["CATT", "STORE"]. Tên một từ thì chỉ có khối đen. */
+/** "Digital Store" → ["DIGITAL", "STORE"]. Tên một từ thì chỉ có khối đen. */
 function splitName(name: string): [string, string] {
   const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return ['CATT', 'STORE'];
+  if (parts.length === 0) return ['DIGITAL', 'STORE'];
   if (parts.length === 1) return [parts[0].toUpperCase(), ''];
   return [parts[0].toUpperCase(), parts.slice(1).join(' ').toUpperCase()];
 }
@@ -48,12 +51,14 @@ export function Wordmark({
   size?: WordmarkSize;
   className?: string;
 }) {
-  const [first, rest] = splitName(SITE_NAME);
+  const { document } = useStorefront();
+  const siteName = document.brand.name || FALLBACK_SITE_NAME;
+  const [first, rest] = splitName(siteName);
   const s = SIZES[size];
 
   return (
     <span
-      aria-label={SITE_NAME}
+      aria-label={siteName}
       className={cn(
         'inline-flex select-none items-center font-black uppercase leading-none',
         s.text,
@@ -81,7 +86,7 @@ export function Wordmark({
 
 /** Dạng chữ cho file .txt: "C A T T   S T O R E". */
 export function wordmarkText(): string {
-  return SITE_NAME.trim()
+  return FALLBACK_SITE_NAME.trim()
     .toUpperCase()
     .split(/\s+/)
     .map((word) => word.split('').join(' '))

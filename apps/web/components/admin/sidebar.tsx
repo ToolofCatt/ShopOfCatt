@@ -5,6 +5,8 @@ import { usePathname } from 'next/navigation';
 import {
   KeyRound,
   LayoutDashboard,
+  Palette,
+  ListChecks,
   Megaphone,
   FileText,
   Package,
@@ -19,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/client';
 import { cn } from '@/lib/cn';
+import { useStorefront } from '@/lib/storefront';
 
 interface NavItem {
   href: string;
@@ -50,9 +53,13 @@ function NavLink({ item, active }: { item: NavItem; active: boolean }) {
 export function AdminSidebar() {
   const pathname = usePathname();
   const { t } = useI18n();
+  const store = useStorefront();
+  const logo = store.mediaUrl(store.document.brand.logoAssetId) ?? '/logo-mark.png';
 
   const navItems: NavItem[] = [
     { href: '/admin', label: t.admin.navDashboard, icon: LayoutDashboard, exact: true },
+    { href: '/admin/setup', label: t.admin.navSetup, icon: ListChecks },
+    { href: '/admin/design', label: t.admin.navDesign, icon: Palette },
     { href: '/admin/products', label: t.admin.navProducts, icon: Package },
     { href: '/admin/orders', label: t.admin.navOrders, icon: ReceiptText },
     { href: '/admin/customers', label: t.admin.navCustomers, icon: Users },
@@ -70,7 +77,7 @@ export function AdminSidebar() {
         <div className="mb-2 flex items-center gap-2.5 px-2 py-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo-mark.png"
+            src={logo}
             alt={t.admin.brand}
             className="h-8 w-8 shrink-0 rounded-lg object-contain"
           />

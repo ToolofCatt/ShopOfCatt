@@ -17,8 +17,8 @@ import { useI18n } from '@/lib/i18n/client';
 import { Button, Card, Field, Input, Spinner } from '@/components/ui';
 import { PasswordInput } from '@/components/password-input';
 import { Wordmark } from '@/components/wordmark';
+import { useStorefront } from '@/lib/storefront';
 
-const SITE_NAME = process.env.NEXT_PUBLIC_SITE_NAME || 'Catt Store';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface FieldErrors {
@@ -34,6 +34,9 @@ function RegisterForm() {
   const next = searchParams.get('next') || '/';
   const { user, loading: authLoading, register } = useAuth();
   const { t } = useI18n();
+  const storefront = useStorefront();
+  const siteName = storefront.document.brand.name || 'Digital Store';
+  const logo = storefront.mediaUrl(storefront.document.brand.logoAssetId) ?? '/logo-mark.png';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -112,13 +115,13 @@ function RegisterForm() {
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <div className="flex flex-col items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-mark.png" alt="" aria-hidden="true" className="h-14 w-14 rounded-xl object-contain" />
+          <img src={logo} alt="" aria-hidden="true" className="h-14 w-14 rounded-xl object-contain" />
           <Wordmark size="lg" />
         </div>
 
         <div className="space-y-1">
           <h1 className="text-xl font-semibold tracking-tight">{t.auth.registerTitle}</h1>
-          <p className="text-sm text-neutral-500">{t.auth.registerSubtitle(SITE_NAME)}</p>
+          <p className="text-sm text-neutral-500">{t.auth.registerSubtitle(siteName)}</p>
         </div>
 
         <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4" noValidate>

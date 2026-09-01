@@ -21,6 +21,7 @@ import { SecurityModule } from './security/security.module';
 import { SettingsModule } from './settings/settings.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { TranslationModule } from './translation/translation.module';
+import { StorefrontModule } from './storefront/storefront.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { TranslationModule } from './translation/translation.module';
     AdminModule,
     CustomersModule,
     AnalyticsModule,
+    StorefrontModule,
   ],
 })
 export class AppModule {}

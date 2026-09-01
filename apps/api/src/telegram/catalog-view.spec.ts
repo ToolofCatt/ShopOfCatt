@@ -199,7 +199,7 @@ describe('encodeCallback / parseCallback', () => {
 describe('renderHub — tối giản kiểu Panda Shop', () => {
   it('chào ⭐ + số dư trong CHỮ + chỉ ba hành động inline', () => {
     const { text, keyboard } = renderHub('An <x>', 3.5, 'vi', RATES);
-    expect(text).toContain('⭐ Catt Store Xin Chào An &lt;x&gt; ⭐');
+    expect(text).toContain('⭐ Digital Store xin chào An &lt;x&gt; ⭐');
     expect(text).toContain('💰 Số dư: 91.000 ₫'); // 3.5 × 26000
     const data = keyboard.flat().map((b) => b.callback_data);
     expect(data).toEqual(['c:1', 'f', 'lg']);
@@ -209,7 +209,7 @@ describe('renderHub — tối giản kiểu Panda Shop', () => {
   it('lời chào tuỳ chỉnh thay câu mặc định và được escape', () => {
     const { text } = renderHub('An', 0, 'vi', RATES, 'Chào <bạn> & mua gì ^^');
     expect(text).toContain('Chào &lt;bạn&gt; &amp; mua gì ^^');
-    expect(text).not.toContain('Catt Store Xin Chào');
+    expect(text).not.toContain('Digital Store xin chào');
   });
 });
 

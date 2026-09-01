@@ -1,6 +1,5 @@
 import { ServerCrash } from 'lucide-react';
 import type { ProductDto } from '@webcatt/shared';
-import { Announcement } from '@/components/announcement';
 import { ProductBrowser } from '@/components/product-browser';
 import { EmptyState, buttonVariants } from '@/components/ui';
 import { apiFetch } from '@/lib/api';
@@ -20,8 +19,6 @@ export default async function HomePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-8">
-      <Announcement />
-
       {products === null ? (
         <EmptyState
           icon={ServerCrash}

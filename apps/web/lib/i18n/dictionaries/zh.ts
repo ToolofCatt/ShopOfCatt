@@ -359,6 +359,8 @@ export const zh: Dictionary = {
   admin: {
     brand: '管理',
     navDashboard: '概览',
+    navSetup: '设置向导',
+    navDesign: '界面设计',
     navProducts: '商品',
     navOrders: '订单',
     navStore: '返回商店',
@@ -752,6 +754,13 @@ export const zh: Dictionary = {
       'coupon.create': '创建优惠码',
       'coupon.update': '更新优惠码',
       'coupon.delete': '删除优惠码',
+      'storefront.draft.update': '保存店面草稿',
+      'storefront.publish': '发布店面',
+      'storefront.restore': '恢复店面',
+      'storefront.media.add': '添加店面媒体',
+      'storefront.media.delete': '删除店面媒体',
+      'storefront.maintenance': '更改维护模式',
+      'setup.check': '运行设置检查',
     },
 
     cancelOrder: '取消订单',

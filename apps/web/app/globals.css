@@ -21,6 +21,44 @@ input[type="number"] {
   appearance: textfield;
 }
 
+[data-storefront-root][data-store-button-style="outline"] .wc-button-primary {
+  border: 1px solid var(--store-primary);
+  background: transparent;
+  color: var(--store-primary);
+}
+[data-storefront-root][data-store-button-style="soft"] .wc-button-primary {
+  background: color-mix(in srgb, var(--store-primary) 12%, var(--store-surface));
+  color: var(--store-primary);
+}
+.storefront-renderer :where(button, input, select, textarea, article) {
+  border-radius: var(--store-radius);
+}
+.storefront-renderer .wc-button {
+  min-height: var(--store-control-height);
+}
+[data-storefront-preview][data-store-button-style="solid"] .wc-button-primary {
+  border: 0;
+  background: var(--store-primary);
+  color: var(--store-primary-foreground);
+}
+[data-storefront-preview][data-store-button-style="outline"] .wc-button-primary {
+  border: 1px solid var(--store-primary);
+  background: transparent;
+  color: var(--store-primary);
+}
+[data-storefront-preview][data-store-button-style="soft"] .wc-button-primary {
+  border: 0;
+  background: color-mix(in srgb, var(--store-primary) 12%, var(--store-surface));
+  color: var(--store-primary);
+}
+[data-storefront-root][data-store-preset="compact"] .storefront-renderer {
+  font-size: calc(1rem * 0.94);
+}
+[data-storefront-root][data-store-preset="commerce"] .storefront-renderer h1,
+[data-storefront-root][data-store-preset="commerce"] .storefront-renderer h2 {
+  font-family: var(--store-heading-font);
+}
+
 /* ===== Nội dung có định dạng (hộp thông báo + trình soạn thảo) =====
    Dùng chung một bộ luật để những gì admin thấy khi soạn giống hệt lúc hiển thị. */
 .wc-prose > *:first-child {

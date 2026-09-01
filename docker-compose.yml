@@ -55,6 +55,8 @@ services:
       JWT_SECRET: "${JWT_SECRET:?Thieu JWT_SECRET - hay tao file .env tu .env.docker.example}"
       WEB_URL: "${WEB_URL:-http://localhost:3000}"
       API_PUBLIC_URL: "${API_PUBLIC_URL:-http://localhost:3001}"
+      STORE_BOOTSTRAP_NAME: "${NEXT_PUBLIC_SITE_NAME:-Digital Store}"
+      BACKUP_HEARTBEAT_FILE: "/backups/.last-success.json"
       # Fail-closed: chỉ bật cổng giả lập khi ghi ĐÚNG "true".
       PAYMENT_MOCK: "${PAYMENT_MOCK:-false}"
       # Binance Pay (merchant) — dùng cho phương thức binance_pay
@@ -79,6 +81,9 @@ services:
       SEED_ON_START: "${SEED_ON_START:-true}"
       # true = tạo thêm sản phẩm/khách/thông báo MẪU. Cửa hàng thật để false.
       SEED_DEMO: "${SEED_DEMO:-false}"
+    volumes:
+      # Chỉ đọc heartbeat; API không có quyền sửa hoặc xóa bản backup.
+      - ./backups:/backups:ro
     # Mặc định CHỈ nghe trên localhost — người ngoài vào qua proxy HTTPS. Publish
     # 0.0.0.0 là để lộ API dạng HTTP không mã hoá, và Docker tự ghi luật DNAT
     # vượt qua ufw nên tường lửa cũng không chặn được.
@@ -99,7 +104,7 @@ services:
       args:
         # NEXT_PUBLIC_* được nhúng vào bundle lúc build → đổi thì phải build lại
         NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:3001/api}"
-        NEXT_PUBLIC_SITE_NAME: "${NEXT_PUBLIC_SITE_NAME:-Catt Store}"
+        NEXT_PUBLIC_SITE_NAME: "${NEXT_PUBLIC_SITE_NAME:-Digital Store}"
         NEXT_PUBLIC_SITE_URL: "${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}"
     image: webcatt-web:latest
     container_name: webcatt-web
@@ -111,7 +116,7 @@ services:
       # Server component gọi API qua mạng nội bộ của Docker
       API_URL: "http://api:3001/api"
       NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-http://localhost:3001/api}"
-      NEXT_PUBLIC_SITE_NAME: "${NEXT_PUBLIC_SITE_NAME:-Catt Store}"
+      NEXT_PUBLIC_SITE_NAME: "${NEXT_PUBLIC_SITE_NAME:-Digital Store}"
       NEXT_PUBLIC_SITE_URL: "${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}"
     ports:
       - "${APP_BIND:-127.0.0.1}:${WEB_PORT:-3000}:3000"

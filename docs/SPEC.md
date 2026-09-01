@@ -1,4 +1,4 @@
-# Catt Store — Digital Goods Shop — BUILD SPEC (v1)
+# Digital Store — Digital Goods Shop — BUILD SPEC (v1)
 
 This document is the single source of truth for building this codebase. All implementation agents MUST read it fully before writing code and MUST follow contracts exactly — the API and the Web frontend are built by different agents and only match if both follow this spec.
 
@@ -14,7 +14,7 @@ The homepage IS the product listing — no marketing hero, no intermediate landi
 
 ## 2. Tech stack & repo layout (ALREADY SCAFFOLDED — do not recreate/modify these)
 
-pnpm + Turborepo monorepo, root `C:\Users\cattfan\Desktop\Web_Catt`:
+pnpm + Turborepo monorepo:
 
 ```
 package.json / pnpm-workspace.yaml / turbo.json / tsconfig.base.json / docker-compose.yml
@@ -43,7 +43,7 @@ API (`apps/api/.env`, loaded via `@nestjs/config`):
 - `ORDER_EXPIRE_MINUTES` (30)
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (used by seed)
 
-Web: `NEXT_PUBLIC_API_URL` (browser → API), `API_URL` (server components → API), `NEXT_PUBLIC_SITE_NAME` ("Catt Store").
+Web: `NEXT_PUBLIC_API_URL` (browser → API), `API_URL` (server components → API), `NEXT_PUBLIC_SITE_NAME` ("Digital Store").
 
 ## 4. Data model (Prisma — schema already written)
 
@@ -136,7 +136,7 @@ Signed request helper (merchant API):
 
 ### 5.4 Seed (`apps/api/prisma/seed.ts`, run with tsx) — idempotent (upsert by slug/email)
 
-- Admin user from `ADMIN_EMAIL`/`ADMIN_PASSWORD` (role ADMIN, name "Quản trị viên"); demo user `user@cattstore.local` / `User@123` (name "Khách hàng demo").
+- Admin user from `ADMIN_EMAIL`/`ADMIN_PASSWORD` (role ADMIN, name "Quản trị viên"); demo user `user@digital-store.local` / `User@123` (name "Khách hàng demo").
 - 8 products (legit digital goods, Vietnamese copy, prices in USDT, icon = lucide icon name):
   1. `key-windows-11-pro` — "Key bản quyền Windows 11 Pro" — 8.50 — icon `KeyRound` — category "Phần mềm" — 15 stock lines like `W269N-WFGWX-YVC9B-4J6C9-T83GX` (generate random key-style lines)
   2. `key-office-2021-pro-plus` — "Key Microsoft Office 2021 Pro Plus" — 12.00 — `AppWindow` — "Phần mềm" — 10 lines
@@ -354,7 +354,7 @@ Status tabs above the table (reuse admin `Tabs`): Tất cả + PENDING/PAID/DELI
 - Info grid: when PENDING also show "Hết hạn lúc" (`expiresAt`, formatDate).
 - New button in the header row next to the status badge (or under the card on mobile): **"Tải đơn hàng (.txt)"** (`FileDown` icon, outline) — builds a plain-text receipt client-side and reuses the existing `downloadTxt` helper, filename `don-hang-{code}.txt`. Content (localized via dictionaries):
   ```
-  CATT STORE (NEXT_PUBLIC_SITE_NAME)
+  DIGITAL STORE (NEXT_PUBLIC_SITE_NAME)
   ================================
   Mã đơn: DH-XXXXXX      Trạng thái: <t.orderStatus[...]>
   Khách hàng: email (#code)          ← from useAuth().user

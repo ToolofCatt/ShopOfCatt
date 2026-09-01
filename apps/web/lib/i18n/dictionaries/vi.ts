@@ -376,6 +376,8 @@ export const vi = {
   admin: {
     brand: 'Quản trị',
     navDashboard: 'Tổng quan',
+    navSetup: 'Thiết lập',
+    navDesign: 'Giao diện',
     navProducts: 'Sản phẩm',
     navOrders: 'Đơn hàng',
     navStore: 'Về cửa hàng',
@@ -777,6 +779,13 @@ export const vi = {
       'coupon.create': 'Tạo mã giảm giá',
       'coupon.update': 'Cập nhật mã giảm giá',
       'coupon.delete': 'Xóa mã giảm giá',
+      'storefront.draft.update': 'Lưu bản nháp giao diện',
+      'storefront.publish': 'Xuất bản giao diện',
+      'storefront.restore': 'Khôi phục giao diện',
+      'storefront.media.add': 'Thêm media giao diện',
+      'storefront.media.delete': 'Xóa media giao diện',
+      'storefront.maintenance': 'Đổi chế độ bảo trì',
+      'setup.check': 'Chạy kiểm tra thiết lập',
     } satisfies Record<AuditAction, string>,
     auditGroupCoupons: 'Mã giảm giá',
 

@@ -349,7 +349,7 @@ const PLACEHOLDER_PASSWORDS = new Set([
 ]);
 
 async function seedUsers(): Promise<void> {
-  const adminEmail = (process.env.ADMIN_EMAIL ?? 'admin@cattstore.local')
+  const adminEmail = (process.env.ADMIN_EMAIL ?? 'admin@digital-store.local')
     .trim()
     .toLowerCase();
   const adminPassword = process.env.ADMIN_PASSWORD;
@@ -376,7 +376,7 @@ async function seedUsers(): Promise<void> {
   );
 
   if (!SEED_DEMO) return;
-  const demoEmail = 'user@cattstore.local';
+  const demoEmail = 'user@digital-store.local';
   const demoHash = await bcrypt.hash('User@123', 10);
   const demo = await ensureUser(demoEmail, demoHash, 'USER');
   console.log(`✔ Tài khoản demo: ${demoEmail} (mã #${demo.code})`);

@@ -1,4 +1,4 @@
-# Catt Store — hướng dẫn cho agent
+# Digital Store — hướng dẫn cho agent
 
 Cửa hàng bán **sản phẩm số** (key bản quyền, thẻ quà tặng, mã kích hoạt): khách
 đặt đơn → trả tiền → hệ thống **tự giao key ngay**. Giao diện tiếng Việt, có bản

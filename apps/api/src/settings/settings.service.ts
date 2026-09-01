@@ -232,6 +232,43 @@ export class SettingsService {
   }
 
   /**
+   * PATCH theo tab: merge ở máy chủ để một tab không phải echo bí mật hoặc
+   * ghi đè cấu hình tab khác bằng snapshot cũ.
+   */
+  async updateSection(
+    actor: User,
+    patch: Partial<UpdateSettingsDto>,
+  ): Promise<AdminStoreSettingDto> {
+    const current = await this.getAdmin();
+    const merged: UpdateSettingsDto = {
+      mockEnabled: current.mockEnabled,
+      binancePayEnabled: current.binancePayEnabled,
+      binanceIdEnabled: current.binanceIdEnabled,
+      binanceId: current.binanceId,
+      binanceQr: current.binanceQr,
+      cryptoEnabled: current.cryptoEnabled,
+      bep20Address: current.bep20Address,
+      trc20Address: current.trc20Address,
+      sepayEnabled: current.sepayEnabled,
+      sepayAccountNumber: current.sepayAccountNumber,
+      sepayBank: current.sepayBank,
+      sepayAccountHolder: current.sepayAccountHolder,
+      vndPerUsdt: current.vndPerUsdt,
+      cnyPerUsdt: current.cnyPerUsdt,
+      rateAuto: current.rateAuto,
+      rateMarkupPercent: current.rateMarkupPercent,
+      rateHour: current.rateHour,
+      aiProvider: current.aiProvider,
+      aiBaseUrl: current.aiBaseUrl,
+      aiModel: current.aiModel,
+      supportChannels: current.supportChannels,
+      supportNote: current.supportNote,
+      ...patch,
+    };
+    return this.update(actor, merged);
+  }
+
+  /**
    * Cập nhật RIÊNG cấu hình bot Telegram — trang /admin/telegram gọi qua đây
    * để không phải echo lại cấu hình thanh toán (hai tab admin ghi đè nhau).
    * Cùng quy tắc fail-closed và cùng nhật ký với update() đầy đủ.

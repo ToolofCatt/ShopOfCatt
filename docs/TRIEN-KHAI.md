@@ -1,4 +1,4 @@
-# Triển khai Catt Store lên máy chủ thật
+# Triển khai Digital Store lên máy chủ thật
 
 Hướng dẫn này dành cho: **một VPS riêng + Docker + một tên miền**. Làm theo đúng
 thứ tự, mỗi bước đều có cách tự kiểm chứng.
@@ -106,7 +106,7 @@ curl -I https://shop.cua-ban.com | grep -i strict-transport   # HSTS có mặt
 
 ### Biến thể: máy chủ đã có sẵn nginx phục vụ trang khác
 
-Đây chính là cách `cattshop.site` đang chạy. Máy đó còn phục vụ vài trang khác,
+Đây là cách một deployment dùng chung proxy ngoài có thể chạy. Máy đó còn phục vụ vài trang khác,
 nên **không được bật service `proxy` (Caddy)** — Caddy giành cổng 80/443 là hạ
 hết những trang kia.
 

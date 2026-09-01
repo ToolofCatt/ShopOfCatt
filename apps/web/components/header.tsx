@@ -18,18 +18,21 @@ import { cn } from '@/lib/cn';
 import { buttonVariants } from '@/components/ui';
 import { LanguageSwitcher } from '@/components/language-switcher';
 import { Wordmark } from '@/components/wordmark';
+import { useStorefront } from '@/lib/storefront';
 
 export function Header() {
   const { user, loading } = useAuth();
   const { t } = useI18n();
+  const store = useStorefront();
+  const logo = store.mediaUrl(store.document.brand.logoAssetId) ?? '/logo-mark.png';
 
   return (
-    <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/85 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4">
+    <header className="sticky top-0 z-40 border-b border-[var(--store-border)] bg-[color-mix(in_srgb,var(--store-surface)_88%,transparent)] backdrop-blur">
+      <div className="mx-auto flex h-16 items-center justify-between gap-4 px-4" style={{ maxWidth: 'var(--store-container)' }}>
         <Link href="/" className="group flex shrink-0 items-center gap-2.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/logo-mark.png"
+            src={logo}
             alt=""
             aria-hidden="true"
             className="h-8 w-8 shrink-0 rounded-lg object-contain"

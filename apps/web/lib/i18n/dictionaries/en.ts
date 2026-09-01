@@ -367,6 +367,8 @@ export const en: Dictionary = {
   admin: {
     brand: 'Admin',
     navDashboard: 'Dashboard',
+    navSetup: 'Setup',
+    navDesign: 'Design',
     navProducts: 'Products',
     navOrders: 'Orders',
     navStore: 'Back to store',
@@ -772,6 +774,13 @@ export const en: Dictionary = {
       'coupon.create': 'Create discount code',
       'coupon.update': 'Update discount code',
       'coupon.delete': 'Delete discount code',
+      'storefront.draft.update': 'Save storefront draft',
+      'storefront.publish': 'Publish storefront',
+      'storefront.restore': 'Restore storefront',
+      'storefront.media.add': 'Add storefront media',
+      'storefront.media.delete': 'Delete storefront media',
+      'storefront.maintenance': 'Change maintenance mode',
+      'setup.check': 'Run setup check',
     },
 
     cancelOrder: 'Cancel order',

@@ -7,6 +7,7 @@ import { OrdersModule } from '../orders/orders.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { ProductsModule } from '../products/products.module';
 import { SettingsModule } from '../settings/settings.module';
+import { StorefrontModule } from '../storefront/storefront.module';
 import { TelegramAdminController } from './telegram-admin.controller';
 import { TelegramUsersService } from './telegram-users.service';
 import { TelegramService } from './telegram.service';
@@ -26,6 +27,7 @@ import { TelegramService } from './telegram.service';
     AnnouncementModule,
     OrdersModule,
     PaymentsModule,
+    StorefrontModule,
   ],
   controllers: [TelegramAdminController],
   providers: [TelegramService, TelegramUsersService],

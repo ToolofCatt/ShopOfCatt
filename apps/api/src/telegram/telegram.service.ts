@@ -15,6 +15,7 @@ import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
 import { SettingsService } from '../settings/settings.service';
+import { StorefrontService } from '../storefront/storefront.service';
 import { animateEmoji } from './animated-emoji';
 import {
   encodeCallback,
@@ -183,6 +184,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly users: TelegramUsersService,
     private readonly balance: BalanceService,
     private readonly prisma: PrismaService,
+    private readonly storefront: StorefrontService,
   ) {}
 
   onModuleInit(): void {
@@ -544,10 +546,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     from: TgUser | undefined,
     lang: BotLang,
   ): Promise<{ text: string; keyboard: TgInlineKeyboard }> {
-    const [user, rates, cfg] = await Promise.all([
+    const [user, rates, cfg, storefront] = await Promise.all([
       this.users.findByChat(chatId),
       this.settings.getPublicRates(),
       this.settings.getTelegramConfig(),
+      this.storefront.getPublic(),
     ]);
     const ten = from?.first_name ?? user?.telegramName ?? '';
     return renderHub(
@@ -556,6 +559,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       lang,
       rates,
       cfg.greeting,
+      storefront.document.brand.name,
     );
   }
 

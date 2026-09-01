@@ -151,6 +151,16 @@ export const K = {
   adminStockLineNotFound: 'admin.stock_line_not_found',
   adminStockOnlyAvailableDeletable: 'admin.stock_only_available_deletable',
 
+  // --- admin: setup & page builder ---
+  adminStorefrontInvalid: 'admin.storefront_invalid',
+  adminStorefrontVersionConflict: 'admin.storefront_version_conflict',
+  adminStorefrontPublishBlocked: 'admin.storefront_publish_blocked',
+  adminStorefrontRevisionNotFound: 'admin.storefront_revision_not_found',
+  adminStorefrontMediaInvalid: 'admin.storefront_media_invalid',
+  adminStorefrontMediaTooLarge: 'admin.storefront_media_too_large',
+  adminStorefrontMediaInUse: 'admin.storefront_media_in_use',
+  adminStorefrontMediaNotFound: 'admin.storefront_media_not_found',
+
   // --- admin: queries / orders ---
   adminPageInvalid: 'admin.page_invalid',
   adminLimitInvalid: 'admin.limit_invalid',
@@ -714,6 +724,47 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'Chỉ xóa được dòng chưa bán',
     en: 'Only unsold lines can be deleted',
     zh: '只能删除未售出的行',
+  },
+
+  [K.adminStorefrontInvalid]: {
+    vi: 'Cấu hình giao diện không hợp lệ',
+    en: 'Invalid storefront configuration',
+    zh: '店铺界面配置无效',
+  },
+  [K.adminStorefrontVersionConflict]: {
+    vi: 'Bản nháp đã được sửa ở nơi khác — hãy tải lại trước khi lưu',
+    en: 'The draft was changed elsewhere — reload it before saving',
+    zh: '草稿已在其他位置修改，请重新加载后再保存',
+  },
+  [K.adminStorefrontPublishBlocked]: {
+    vi: 'Cửa hàng còn lỗi bắt buộc — xử lý hết trước khi xuất bản',
+    en: 'Required checks are still failing — fix them before publishing',
+    zh: '仍有必需检查未通过，请修复后再发布',
+  },
+  [K.adminStorefrontRevisionNotFound]: {
+    vi: 'Không tìm thấy phiên bản giao diện',
+    en: 'Storefront revision not found',
+    zh: '未找到店铺界面版本',
+  },
+  [K.adminStorefrontMediaInvalid]: {
+    vi: 'Ảnh giao diện không hợp lệ; chỉ nhận PNG, JPEG hoặc WebP',
+    en: 'Invalid storefront image; only PNG, JPEG or WebP is allowed',
+    zh: '界面图片无效，仅支持 PNG、JPEG 或 WebP',
+  },
+  [K.adminStorefrontMediaTooLarge]: {
+    vi: 'Ảnh giao diện quá lớn',
+    en: 'The storefront image is too large',
+    zh: '界面图片过大',
+  },
+  [K.adminStorefrontMediaInUse]: {
+    vi: 'Ảnh đang được dùng trong bản nháp hoặc lịch sử xuất bản',
+    en: 'The image is referenced by the draft or a published revision',
+    zh: '该图片正在草稿或已发布版本中使用',
+  },
+  [K.adminStorefrontMediaNotFound]: {
+    vi: 'Không tìm thấy ảnh giao diện',
+    en: 'Storefront image not found',
+    zh: '未找到界面图片',
   },
 
   // --- admin: queries / orders ---

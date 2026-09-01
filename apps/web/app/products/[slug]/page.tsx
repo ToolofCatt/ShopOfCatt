@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic';
 
 /**
  * Tiêu đề + mô tả riêng cho từng sản phẩm. Không có hàm này thì mọi trang đều
- * mang đúng một tiêu đề "Catt Store": tab trình duyệt, lịch sử, kết quả tìm
+ * mang đúng một tiêu đề cửa hàng: tab trình duyệt, lịch sử, kết quả tìm
  * kiếm và link chia sẻ đều không phân biệt được sản phẩm nào.
  */
 export async function generateMetadata({
