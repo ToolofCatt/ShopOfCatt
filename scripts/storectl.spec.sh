@@ -11,7 +11,7 @@ mkdir -p "$FIXTURE/bin" "$FIXTURE/backups"
 
 cat > "$FIXTURE/.env" <<'EOF'
 JWT_SECRET=0123456789abcdef0123456789abcdef
-SITE_DOMAIN=cattshop.site
+SITE_DOMAIN=store.example
 NEXT_PUBLIC_SITE_NAME=Catt Store
 EOF
 chmod 600 "$FIXTURE/.env"
