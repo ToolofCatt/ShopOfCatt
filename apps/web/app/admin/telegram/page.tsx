@@ -178,12 +178,12 @@ export default function AdminTelegramPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="mx-auto min-w-0 max-w-5xl">
       <PageHeader title={t.admin.navTelegram} description={t.admin.telegramPageHint} />
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-start">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-start">
         {/* ------------------------------ Cấu hình ------------------------------ */}
-        <Card className="space-y-5 p-6">
+        <Card className="min-w-0 space-y-5 p-4 sm:p-6">
           {/* Trạng thái sống của bot */}
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
             <div className="flex items-center gap-2 text-sm">
@@ -453,7 +453,7 @@ export default function AdminTelegramPage() {
         </Card>
 
         {/* ------------------------------ Giả lập ------------------------------ */}
-        <Card className="space-y-4 p-6">
+        <Card className="min-w-0 space-y-4 p-4 sm:p-6">
           <div>
             <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
               {t.admin.telegramPreviewTitle}
