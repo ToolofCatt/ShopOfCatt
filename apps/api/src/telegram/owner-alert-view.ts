@@ -1,4 +1,5 @@
 import { escapeHtml } from './catalog-view';
+import { brandEmojiHtml } from './animated-emoji';
 
 export interface OwnerOrderAlertInput {
   code: string;
@@ -26,21 +27,28 @@ const formatter = new Intl.DateTimeFormat('vi-VN', {
 });
 
 function orderLines(order: OwnerOrderAlertInput): string[] {
-  const items = order.items.map(
-    (item) => `📦 ${escapeHtml(item.name)} × ${item.quantity}`,
-  );
+  const items = order.items.map((item) => {
+    const trimmedName = item.name.trim();
+    // Tên do chủ shop tự đặt icon ở đầu phải được tôn trọng; chỉ dùng hộp hàng
+    // làm fallback khi không nhận ra logo hãng và tên cũng chưa có icon riêng.
+    const hasLeadingEmoji = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator})/u.test(
+      trimmedName,
+    );
+    const icon = brandEmojiHtml(trimmedName) || (hasLeadingEmoji ? '' : '📦 ');
+    return `${icon}<b>${escapeHtml(trimmedName)}</b> × <b>${item.quantity}</b>`;
+  });
   return [
     ...items,
-    `💵 Tổng tiền: <b>${escapeHtml(order.total)}</b>`,
-    `👤 Khách: ${escapeHtml(order.customer)}`,
-    `🧾 Mã đơn: <code>${escapeHtml(order.code)}</code>`,
-    `⏰ Thời gian: ${escapeHtml(formatter.format(order.createdAt))}`,
+    `💰 <b>Tổng tiền:</b> ${escapeHtml(order.total)}`,
+    `👤 <b>Khách hàng:</b> ${escapeHtml(order.customer)}`,
+    `🧾 <b>Mã đơn:</b> <code>${escapeHtml(order.code)}</code>`,
+    `⏰ <b>Thời gian:</b> ${escapeHtml(formatter.format(order.createdAt))}`,
   ];
 }
 
 /** Tin chủ shop: không có callback, không thể vô tình tạo/chốt đơn từ chat. */
 export function renderOwnerNewOrderAlert(order: OwnerOrderAlertInput): string {
-  return ['🟢 <b>ĐƠN HÀNG MỚI!</b>', '', ...orderLines(order)].join('\n');
+  return ['🛒 <b>CÓ ĐƠN HÀNG MỚI</b>', '', ...orderLines(order)].join('\n');
 }
 
 export function renderOwnerStuckOrderAlert(

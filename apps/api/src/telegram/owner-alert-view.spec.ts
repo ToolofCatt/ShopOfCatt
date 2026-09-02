@@ -17,9 +17,11 @@ const ORDER = {
 describe('owner alert views', () => {
   it('dựng đơn mới đủ dữ liệu và escape nội dung CSDL', () => {
     const text = renderOwnerNewOrderAlert(ORDER);
-    expect(text).toContain('ĐƠN HÀNG MỚI');
+    expect(text).toContain('🛒 <b>CÓ ĐƠN HÀNG MỚI</b>');
+    expect(text).not.toContain('🟢');
+    expect(text).toContain('emoji-id="5359726582447487916"');
+    expect(text).toContain('<b>ChatGPT &amp; Plus · Momo</b> × <b>2</b>');
     expect(text).toContain('An &lt;admin&gt;');
-    expect(text).toContain('ChatGPT &amp; Plus · Momo × 2');
     expect(text).toContain('<code>DH-TEST01</code>');
     expect(text).toContain('200.000 ₫');
   });
