@@ -10,6 +10,7 @@ import {
   STOREFRONT_BUSINESS_BLOCKS,
   STOREFRONT_LOCALES,
   STOREFRONT_PAGE_KINDS,
+  type AnnouncementDto,
   type ProductDto,
   type StoreMediaAssetDto,
   type StorefrontBlock,
@@ -20,6 +21,7 @@ import {
   type StorefrontPageKind,
   type StorefrontRevisionDto,
 } from '@webcatt/shared';
+import { AnnouncementCard } from '@/components/announcement-card';
 import { ProductBrowser } from '@/components/product-browser';
 import { ProductDetail } from '@/components/product-detail';
 import { StorefrontRenderer, type StorefrontSlots } from '@/components/storefront/storefront-renderer';
@@ -27,6 +29,7 @@ import { Badge, Button, Field, Input, Spinner } from '@/components/ui';
 import { apiBaseUrl, apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { cn } from '@/lib/cn';
+import { getDictionary } from '@/lib/i18n';
 import { useI18n } from '@/lib/i18n/client';
 import { themeVariables } from '@/lib/storefront';
 
@@ -51,6 +54,7 @@ export default function DesignPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [media, setMedia] = useState<StoreMediaAssetDto[]>([]);
   const [products, setProducts] = useState<ProductDto[]>([]);
+  const [announcement, setAnnouncement] = useState<AnnouncementDto | null>(null);
   const [revisions, setRevisions] = useState<StorefrontRevisionDto[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -81,7 +85,16 @@ export default function DesignPage() {
 
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
-    apiFetch<ProductDto[]>('/products', { locale }).then(setProducts).catch(() => setProducts([]));
+    let current = true;
+    void Promise.all([
+      apiFetch<ProductDto[]>('/products', { locale }).catch(() => []),
+      apiFetch<AnnouncementDto>('/announcement', { locale }).catch(() => null),
+    ]).then(([nextProducts, nextAnnouncement]) => {
+      if (!current) return;
+      setProducts(nextProducts);
+      setAnnouncement(nextAnnouncement);
+    });
+    return () => { current = false; };
   }, [locale]);
 
   const save = useCallback(async (): Promise<boolean> => {
@@ -201,7 +214,7 @@ export default function DesignPage() {
   if (!document) return <div className="flex min-h-[60vh] items-center justify-center"><Spinner className="h-6 w-6 text-neutral-400" /></div>;
   const blocks = document.pages[page].blocks;
   const selectedBlock = selected ? findBlock(blocks, selected) : null;
-  const slots = previewSlots(products);
+  const slots = previewSlots(products, announcement, getDictionary(locale).home.announcementLabel);
 
   return (
     <div className="-mx-4 -my-8 min-h-[calc(100vh-4rem)] bg-neutral-100 lg:-mx-8">
@@ -306,9 +319,10 @@ function removeBlockById(blocks: StorefrontBlock[], id: string): StorefrontBlock
   return blocks.filter((block) => block.id !== id).map((block) => block.children ? { ...block, children: removeBlockById(block.children, id) } : block);
 }
 
-function previewSlots(products: ProductDto[]): StorefrontSlots {
+function previewSlots(products: ProductDto[], announcement: AnnouncementDto | null, announcementLabel: string): StorefrontSlots {
   const placeholder = (title: string, body: string) => <div className="mx-auto w-full max-w-3xl px-4 py-10"><div className="border-y border-[var(--store-border)] py-8"><p className="text-xs font-semibold uppercase text-[var(--store-muted)]">Block nghiệp vụ</p><h3 className="mt-2 text-xl font-semibold">{title}</h3><p className="mt-2 text-sm text-[var(--store-muted)]">{body}</p></div></div>;
   return {
+    announcement: <div className="pointer-events-none select-none">{announcement?.active ? <AnnouncementCard announcement={announcement} label={announcementLabel} /> : placeholder('Thông báo', 'Thông báo đang tắt hoặc chưa có nội dung.')}</div>,
     productBrowser: <div className="pointer-events-none select-none">{products.length > 0 ? <div className="mx-auto max-w-6xl px-4 py-8"><ProductBrowser products={products} /></div> : placeholder('Danh sách sản phẩm', 'Dữ liệu sản phẩm thật sẽ xuất hiện tại đây.')}</div>,
     productDetail: <div className="pointer-events-none select-none">{products[0] ? <div className="mx-auto max-w-6xl px-4 py-8"><ProductDetail product={products[0]} /></div> : placeholder('Chi tiết sản phẩm', 'Chọn hoặc tạo sản phẩm để xem preview thật.')}</div>,
     loginForm: placeholder('Đăng nhập', 'Form email, mật khẩu và liên kết hỗ trợ.'), registerForm: placeholder('Đăng ký', 'Form tài khoản và captcha.'), checkoutPanel: placeholder('Thanh toán', 'Sản phẩm, số lượng, mã giảm giá và phương thức thanh toán.'), ordersList: placeholder('Đơn hàng của tôi', 'Danh sách đơn theo tài khoản khách.'), orderDetailPanel: placeholder('Trạng thái đơn', 'Thanh toán, tiến trình và key đã giao.'), accountPanel: placeholder('Tài khoản', 'Thông tin khách và bảo mật.'), legalContent: placeholder('Nội dung chính sách', 'Điều khoản đã được sanitize.'), maintenanceMessage: placeholder('Đang thiết lập', 'Thông báo maintenance cho khách.'),
