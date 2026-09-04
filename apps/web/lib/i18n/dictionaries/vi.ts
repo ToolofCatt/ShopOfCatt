@@ -496,11 +496,24 @@ export const vi = {
     errPriceInvalid: 'Giá không hợp lệ.',
     errSortOrderInvalid: 'Thứ tự phải là số nguyên.',
 
-    stockTitle: 'Kho hàng — mỗi dòng là một sản phẩm',
+    stockTitle: 'Kho hàng — mỗi dữ liệu là một sản phẩm',
     stockSubtitle:
-      'Dán danh sách key/mã vào ô bên dưới, mỗi dòng sẽ trở thành một sản phẩm giao cho khách.',
+      'Dán key theo dòng, dán JSON hoặc kéo file JSON vào. Mỗi dữ liệu sẽ trở thành một sản phẩm giao cho khách.',
+    stockImportDropTitle: 'Thả một hoặc nhiều file JSON vào đây',
+    stockImportDropHint:
+      'File có mảng accounts sẽ tự tách thành từng tài khoản nhưng vẫn giữ đúng cấu trúc JSON gốc.',
+    stockImportChoose: 'Chọn file JSON',
+    stockImportPlaceholder: 'KEY-AAAA-BBBB\nKEY-CCCC-DDDD\n\nHoặc dán JSON vào đây...',
+    stockImportDetected: (n: number) => `Đã nhận diện JSON • ${n} món hàng`,
+    stockImportFilesAdded: (files: number, items: number) =>
+      `Đã đọc ${files} file • Tách được ${items} món hàng`,
+    stockImportInvalidJson: 'JSON không hợp lệ. Hãy kiểm tra dấu ngoặc và dấu phẩy.',
+    stockImportAccountsInvalid: 'Trường accounts phải là một mảng.',
+    stockImportNoItems: 'JSON không chứa dữ liệu nào để thêm vào kho.',
+    stockImportWrongFile: 'Chỉ chấp nhận file .json.',
+    stockImportReadFailed: 'Không đọc được file JSON. Vui lòng thử lại.',
     stockDedupe: 'Bỏ qua dòng trùng',
-    stockLineCount: (n: number) => `${n} dòng`,
+    stockLineCount: (n: number) => `${n} món hàng sẽ thêm`,
     stockAdd: 'Thêm vào kho',
     stockAddResult: (added: number, skipped: number, total: number) =>
       `Đã thêm ${added}, bỏ qua ${skipped} • Tồn kho: ${total}`,

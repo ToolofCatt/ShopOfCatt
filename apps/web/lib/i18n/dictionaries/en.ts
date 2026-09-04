@@ -489,11 +489,24 @@ export const en: Dictionary = {
     errPriceInvalid: 'Invalid price.',
     errSortOrderInvalid: 'Sort order must be an integer.',
 
-    stockTitle: 'Stock — one line is one item',
+    stockTitle: 'Stock — one data item is one product',
     stockSubtitle:
-      'Paste your keys/codes below; every line becomes one item delivered to a customer.',
+      'Paste line-based keys, paste JSON, or drop JSON files. Each data item becomes one product delivered to a customer.',
+    stockImportDropTitle: 'Drop one or more JSON files here',
+    stockImportDropHint:
+      'Files with an accounts array are split per account while preserving the original JSON structure.',
+    stockImportChoose: 'Choose JSON files',
+    stockImportPlaceholder: 'KEY-AAAA-BBBB\nKEY-CCCC-DDDD\n\nOr paste JSON here...',
+    stockImportDetected: (n: number) => `JSON detected • ${n} stock ${n === 1 ? 'item' : 'items'}`,
+    stockImportFilesAdded: (files: number, items: number) =>
+      `Read ${files} ${files === 1 ? 'file' : 'files'} • Split into ${items} ${items === 1 ? 'item' : 'items'}`,
+    stockImportInvalidJson: 'Invalid JSON. Check its brackets and commas.',
+    stockImportAccountsInvalid: 'The accounts field must be an array.',
+    stockImportNoItems: 'The JSON does not contain any stock data.',
+    stockImportWrongFile: 'Only .json files are accepted.',
+    stockImportReadFailed: 'Could not read the JSON file. Please try again.',
     stockDedupe: 'Skip duplicate lines',
-    stockLineCount: (n: number) => `${n} ${n === 1 ? 'line' : 'lines'}`,
+    stockLineCount: (n: number) => `${n} stock ${n === 1 ? 'item' : 'items'} to add`,
     stockAdd: 'Add to stock',
     stockAddResult: (added: number, skipped: number, total: number) =>
       `Added ${added}, skipped ${skipped} • In stock: ${total}`,

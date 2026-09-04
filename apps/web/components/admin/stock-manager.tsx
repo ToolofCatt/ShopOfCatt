@@ -1,8 +1,25 @@
 'use client';
 
 import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Copy, Inbox, PackageMinus, PackagePlus, RotateCcw, Trash2 } from 'lucide-react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type DragEvent,
+} from 'react';
+import {
+  Copy,
+  FileJson2,
+  Inbox,
+  PackageMinus,
+  PackagePlus,
+  RotateCcw,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import {
   STOCK_DRAW_MODES,
   type AddStockResponse,
@@ -16,6 +33,7 @@ import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import { cn } from '@/lib/cn';
+import { parseStockImport, StockImportError } from '@/lib/stock-import';
 import { Button, EmptyState, Spinner } from '@/components/ui';
 import { TEXTAREA_CLASSES } from '@/components/admin/helpers';
 import { Pagination } from '@/components/admin/pagination';
@@ -47,11 +65,121 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
   const [adding, setAdding] = useState(false);
   const [addResult, setAddResult] = useState<AddStockResponse | null>(null);
   const [addError, setAddError] = useState<string | null>(null);
+  const [readingFiles, setReadingFiles] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [fileImportError, setFileImportError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const lineCount = useMemo(
-    () => content.split('\n').filter((line) => line.trim().length > 0).length,
+  const preparedImport = useMemo(
+    () => {
+      try {
+        return { parsed: parseStockImport(content), error: null };
+      } catch (error) {
+        return {
+          parsed: null,
+          error: error instanceof StockImportError ? error.code : ('invalid-json' as const),
+        };
+      }
+    },
     [content],
   );
+  const lineCount = preparedImport.parsed?.items.length ?? 0;
+  const parsedJson =
+    preparedImport.parsed !== null &&
+    preparedImport.parsed.kind !== 'empty' &&
+    preparedImport.parsed.kind !== 'lines';
+  const parseError = preparedImport.error
+    ? preparedImport.error === 'accounts-not-array'
+      ? t.admin.stockImportAccountsInvalid
+      : preparedImport.error === 'no-items'
+        ? t.admin.stockImportNoItems
+        : t.admin.stockImportInvalidJson
+    : null;
+
+  const describeImportError = (error: unknown): string => {
+    if (error instanceof StockImportError) {
+      if (error.code === 'accounts-not-array') return t.admin.stockImportAccountsInvalid;
+      if (error.code === 'no-items') return t.admin.stockImportNoItems;
+      return t.admin.stockImportInvalidJson;
+    }
+    return t.admin.stockImportReadFailed;
+  };
+
+  const appendImportedItems = (items: readonly string[], notice: string) => {
+    if (!preparedImport.parsed) {
+      setFileImportError(parseError ?? t.admin.stockImportInvalidJson);
+      return;
+    }
+    setContent([...preparedImport.parsed.items, ...items].join('\n'));
+    setAddResult(null);
+    setAddError(null);
+    setFileImportError(null);
+    setImportNotice(notice);
+  };
+
+  const handleFiles = async (files: readonly File[]) => {
+    if (readingFiles || files.length === 0) return;
+    if (
+      files.some(
+        (file) =>
+          file.type !== 'application/json' && !file.name.toLowerCase().endsWith('.json'),
+      )
+    ) {
+      setFileImportError(t.admin.stockImportWrongFile);
+      setImportNotice(null);
+      return;
+    }
+
+    setReadingFiles(true);
+    setFileImportError(null);
+    try {
+      const items: string[] = [];
+      for (const file of files) {
+        const parsed = parseStockImport(await file.text());
+        items.push(...parsed.items);
+      }
+      appendImportedItems(items, t.admin.stockImportFilesAdded(files.length, items.length));
+    } catch (error) {
+      setFileImportError(describeImportError(error));
+      setImportNotice(null);
+    } finally {
+      setReadingFiles(false);
+    }
+  };
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setDragActive(false);
+    void handleFiles(Array.from(event.dataTransfer.files));
+  };
+
+  const handleJsonPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+    const pasted = event.clipboardData.getData('text');
+    const trimmed = pasted.trim();
+    if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return;
+
+    event.preventDefault();
+    try {
+      const parsed = parseStockImport(pasted);
+      const target = event.currentTarget;
+      const replacesAll =
+        content.slice(0, target.selectionStart).trim() === '' &&
+        content.slice(target.selectionEnd).trim() === '';
+      if (replacesAll) {
+        setContent(parsed.items.join('\n'));
+        setAddResult(null);
+        setAddError(null);
+        setFileImportError(null);
+        setImportNotice(t.admin.stockImportDetected(parsed.items.length));
+      } else {
+        appendImportedItems(parsed.items, t.admin.stockImportDetected(parsed.items.length));
+      }
+    } catch (error) {
+      setFileImportError(describeImportError(error));
+      setImportNotice(null);
+    }
+  };
 
   // --- Rút kho ---
   const [withdrawQty, setWithdrawQty] = useState('1');
@@ -101,18 +229,20 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
   };
 
   const handleAdd = async () => {
-    if (adding || lineCount === 0) return;
+    if (adding || !preparedImport.parsed || lineCount === 0) return;
     setAdding(true);
     setAddError(null);
     setAddResult(null);
     try {
       const result = await apiFetch<AddStockResponse>(`/admin/variants/${variantId}/stock`, {
         method: 'POST',
-        body: { content, dedupe },
+        body: { content: preparedImport.parsed.items.join('\n'), dedupe },
         token,
       });
       setAddResult(result);
       setContent('');
+      setImportNotice(null);
+      setFileImportError(null);
       setPage(1);
       refreshTable();
       onStockChanged?.();
@@ -201,17 +331,89 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
     <div>
       {/* Add lines */}
       <div className="space-y-3">
+        <div
+          onDragEnter={(event) => {
+            event.preventDefault();
+            setDragActive(true);
+          }}
+          onDragOver={(event) => {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = 'copy';
+            setDragActive(true);
+          }}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+              setDragActive(false);
+            }
+          }}
+          onDrop={handleDrop}
+          className={cn(
+            'flex flex-col gap-3 rounded-lg border border-dashed px-4 py-3 transition-colors sm:flex-row sm:items-center',
+            dragActive
+              ? 'border-neutral-950 bg-neutral-100'
+              : 'border-neutral-300 bg-neutral-50',
+          )}
+        >
+          <FileJson2 className="h-5 w-5 shrink-0 text-neutral-500" strokeWidth={1.75} />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-neutral-950">
+              {t.admin.stockImportDropTitle}
+            </p>
+            <p className="mt-0.5 text-xs text-neutral-500">
+              {t.admin.stockImportDropHint}
+            </p>
+          </div>
+          <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json,application/json"
+          multiple
+          disabled={readingFiles || adding}
+            className="sr-only"
+            aria-label={t.admin.stockImportChoose}
+            onChange={(event) => {
+              void handleFiles(Array.from(event.target.files ?? []));
+              event.target.value = '';
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            loading={readingFiles}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {!readingFiles && <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />}
+            {t.admin.stockImportChoose}
+          </Button>
+        </div>
         <textarea
           rows={6}
           value={content}
+          disabled={readingFiles || adding}
+          aria-invalid={parseError !== null || fileImportError !== null || undefined}
           onChange={(event) => {
             setContent(event.target.value);
             setAddResult(null);
             setAddError(null);
+            setFileImportError(null);
+            setImportNotice(null);
           }}
-          placeholder={'KEY-AAAA-BBBB\nKEY-CCCC-DDDD\n...'}
+          onPaste={handleJsonPaste}
+          placeholder={t.admin.stockImportPlaceholder}
           className={cn(TEXTAREA_CLASSES, 'font-mono')}
         />
+        {(fileImportError || parseError) && (
+          <p role="alert" className="text-sm text-red-600">
+            {fileImportError ?? parseError}
+          </p>
+        )}
+        {importNotice ? (
+          <p className="text-sm font-medium text-emerald-700">{importNotice}</p>
+        ) : parsedJson && lineCount > 0 ? (
+          <p className="text-sm font-medium text-neutral-700">
+            {t.admin.stockImportDetected(lineCount)}
+          </p>
+        ) : null}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-neutral-800">
             <input
@@ -228,7 +430,7 @@ export function StockManager({ variantId, onStockChanged }: StockManagerProps) {
           <Button
             className="ml-auto"
             loading={adding}
-            disabled={lineCount === 0}
+            disabled={lineCount === 0 || preparedImport.parsed === null}
             onClick={() => void handleAdd()}
           >
             {!adding && <PackagePlus strokeWidth={1.75} className="h-4 w-4" />}
