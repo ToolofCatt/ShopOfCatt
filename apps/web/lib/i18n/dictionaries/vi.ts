@@ -390,7 +390,8 @@ export const vi = {
     statPending: 'Chờ thanh toán',
     statToday: 'Đơn hôm nay',
     lowStockTitle: 'Sắp hết hàng',
-    lowStockHint: (threshold: number) => `Sản phẩm đang hiển thị còn dưới ${threshold} dòng kho.`,
+    lowStockHint: (threshold: number) =>
+      `Sản phẩm đang hiển thị còn ${threshold} dòng kho trở xuống.`,
     lowStockEmpty: 'Kho ổn định ✓',
     storePanelTitle: 'Cửa hàng',
     storeActiveProducts: 'Sản phẩm đang hiển thị',

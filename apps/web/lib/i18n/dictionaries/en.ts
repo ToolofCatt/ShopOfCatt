@@ -382,7 +382,7 @@ export const en: Dictionary = {
     statToday: 'Orders today',
     lowStockTitle: 'Low stock',
     lowStockHint: (threshold: number) =>
-      `Visible products with fewer than ${threshold} stock lines.`,
+      `Visible products with ${threshold} or fewer stock lines.`,
     lowStockEmpty: 'Stock is healthy ✓',
     storePanelTitle: 'Store',
     storeActiveProducts: 'Visible products',

@@ -223,7 +223,10 @@ export class AdminService {
         variantName: variant.name,
         availableStock: counts.get(variant.id)?.available ?? 0,
       }))
-      .filter((entry) => entry.availableStock < LOW_STOCK_THRESHOLD)
+      // Trang danh sách đã gắn nhãn "Sắp hết" ở đúng ngưỡng. Dashboard phải
+      // dùng cùng biên <=, nếu không variant còn đúng 5 món biến mất khỏi hộp
+      // "Cần xử lý" dù ngay trang sản phẩm vẫn báo sắp hết.
+      .filter((entry) => entry.availableStock <= LOW_STOCK_THRESHOLD)
       .sort((a, b) => a.availableStock - b.availableStock);
 
     return {

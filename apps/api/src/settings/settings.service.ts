@@ -29,6 +29,32 @@ const TRC20_ADDRESS_RE = /^T[1-9A-HJ-NP-Za-km-z]{33}$/;
 /** Liên kết hỗ trợ chỉ nhận web/email — chặn javascript:, data:… */
 const SUPPORT_URL_RE = /^(https?:\/\/|mailto:)/i;
 
+type OwnerLowStockAlertState = Pick<
+  StoreSetting,
+  | 'telegramOwnerChatId'
+  | 'telegramOwnerLowStockAlertsEnabled'
+  | 'telegramOwnerLowStockThreshold'
+>;
+
+/**
+ * Marker kho thấp thuộc về chat nhận cảnh báo tại thời điểm gửi.
+ *
+ * Trước đây đổi owner chat vẫn giữ marker cũ, khiến chat mới không nhận bất kỳ
+ * cảnh báo nào cho những variant đang thấp kho. Đổi chat/ngưỡng hoặc bật lại
+ * tính năng đều phải đánh giá lại từ đầu.
+ */
+export function shouldRearmOwnerLowStockAlerts(
+  before: OwnerLowStockAlertState,
+  updated: OwnerLowStockAlertState,
+): boolean {
+  return (
+    updated.telegramOwnerChatId.trim() !== before.telegramOwnerChatId.trim() ||
+    updated.telegramOwnerLowStockThreshold !== before.telegramOwnerLowStockThreshold ||
+    (!before.telegramOwnerLowStockAlertsEnabled &&
+      updated.telegramOwnerLowStockAlertsEnabled)
+  );
+}
+
 /**
  * Địa chỉ API chỉ nhận http/https.
  *
@@ -314,12 +340,9 @@ export class SettingsService {
       },
     });
 
-    if (
-      updated.telegramOwnerLowStockThreshold !== before.telegramOwnerLowStockThreshold ||
-      (!before.telegramOwnerLowStockAlertsEnabled && updated.telegramOwnerLowStockAlertsEnabled)
-    ) {
-      // Ngưỡng mới phải được đánh giá lại từ đầu; giữ marker cũ có thể che mất
-      // một variant đang thấp hơn đúng ngưỡng chủ shop vừa chọn.
+    if (shouldRearmOwnerLowStockAlerts(before, updated)) {
+      // Cả ngưỡng và chat nhận đều là một phần của trạng thái thông báo. Giữ
+      // marker cũ có thể che mất variant thấp kho đối với cấu hình mới.
       await this.prisma.productVariant.updateMany({
         data: { telegramOwnerLowStockNotifiedAt: null },
       });

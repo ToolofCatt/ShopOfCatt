@@ -373,7 +373,7 @@ export const zh: Dictionary = {
     statPending: '待付款',
     statToday: '今日订单',
     lowStockTitle: '库存不足',
-    lowStockHint: (threshold: number) => `在售商品库存少于 ${threshold} 行。`,
+    lowStockHint: (threshold: number) => `在售商品库存不超过 ${threshold} 条。`,
     lowStockEmpty: '库存充足 ✓',
     storePanelTitle: '商店',
     storeActiveProducts: '在售商品',
