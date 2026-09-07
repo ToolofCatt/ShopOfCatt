@@ -11,6 +11,7 @@ import { StorefrontModule } from '../storefront/storefront.module';
 import { TelegramAdminController } from './telegram-admin.controller';
 import { TelegramUsersService } from './telegram-users.service';
 import { TelegramService } from './telegram.service';
+import { TelegramManagementModule } from '../telegram-admin/telegram-management.module';
 
 /**
  * Kênh bán hàng qua bot Telegram — xem docs/BOT-TELEGRAM.md.
@@ -19,6 +20,7 @@ import { TelegramService } from './telegram.service';
  */
 @Module({
   imports: [
+    TelegramManagementModule,
     AuthModule,
     AuditModule,
     BalanceModule,

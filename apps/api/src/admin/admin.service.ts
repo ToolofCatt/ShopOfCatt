@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type User } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import {
   DISPLAY_CURRENCIES,
   LOW_STOCK_THRESHOLD,
@@ -27,6 +27,7 @@ import {
 } from '@webcatt/shared';
 import { diffChanges } from '../audit/audit-diff';
 import { AuditService } from '../audit/audit.service';
+import type { AdminActor } from '../audit/admin-actor';
 import { slugify } from '../common/slugify';
 import { FulfillmentService } from '../orders/fulfillment.service';
 import { toOrderDetailDto, toOrderSummaryDto } from '../orders/order.mapper';
@@ -339,7 +340,7 @@ export class AdminService {
   }
 
   /** Tạo sản phẩm kèm loại mặc định giữ mức giá được nhập. */
-  async createProduct(actor: User, dto: CreateProductDto): Promise<ProductDto> {
+  async createProduct(actor: AdminActor, dto: CreateProductDto): Promise<ProductDto> {
     const name = dto.name.trim();
     const slug = dto.slug?.trim() ? slugify(dto.slug) : slugify(name);
     if (!slug) {
@@ -394,7 +395,7 @@ export class AdminService {
   }
 
   async updateProduct(
-    actor: User,
+    actor: AdminActor,
     id: string,
     dto: UpdateProductDto,
   ): Promise<ProductDto> {
@@ -473,7 +474,7 @@ export class AdminService {
     return this.loadProduct(id);
   }
 
-  async deleteProduct(actor: User, id: string): Promise<{ success: boolean }> {
+  async deleteProduct(actor: AdminActor, id: string): Promise<{ success: boolean }> {
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: { _count: { select: { orderItems: true } } },
@@ -504,7 +505,7 @@ export class AdminService {
    * base64 trong CSDL và đi theo cả 14 bản sao lưu.
    */
   async addProductImage(
-    actor: User,
+    actor: AdminActor,
     productId: string,
     dto: AddProductImageDto,
   ): Promise<ProductDto> {
@@ -551,7 +552,7 @@ export class AdminService {
     return this.loadProduct(productId);
   }
 
-  async deleteProductImage(actor: User, imageId: string): Promise<ProductDto> {
+  async deleteProductImage(actor: AdminActor, imageId: string): Promise<ProductDto> {
     const image = await this.prisma.productImage.findUnique({
       where: { id: imageId },
       select: { productId: true, product: { select: { name: true } } },
@@ -577,7 +578,7 @@ export class AdminService {
    * hiện khi mở trang khách. Thà trả lỗi.
    */
   async reorderProductImages(
-    actor: User,
+    actor: AdminActor,
     productId: string,
     dto: ReorderProductImagesDto,
   ): Promise<ProductDto> {
@@ -615,7 +616,7 @@ export class AdminService {
   // ---------- Loại sản phẩm ----------
 
   async createVariant(
-    actor: User,
+    actor: AdminActor,
     productId: string,
     dto: CreateVariantDto,
   ): Promise<ProductVariantDto> {
@@ -682,7 +683,7 @@ export class AdminService {
   }
 
   async updateVariant(
-    actor: User,
+    actor: AdminActor,
     id: string,
     dto: UpdateVariantDto,
   ): Promise<ProductVariantDto> {
@@ -756,7 +757,7 @@ export class AdminService {
     );
   }
 
-  async deleteVariant(actor: User, id: string): Promise<{ success: boolean }> {
+  async deleteVariant(actor: AdminActor, id: string): Promise<{ success: boolean }> {
     const variant = await this.prisma.productVariant.findUnique({
       where: { id },
       include: {
@@ -789,11 +790,13 @@ export class AdminService {
   // ---------- Kho hàng (theo loại) ----------
 
   async addStock(
-    actor: User,
+    actor: AdminActor,
     variantId: string,
     dto: AddStockDto,
+    transaction?: Prisma.TransactionClient,
   ): Promise<AddStockResponse> {
-    const variant = await this.prisma.productVariant.findUnique({
+    const db = transaction ?? this.prisma;
+    const variant = await db.productVariant.findUnique({
       where: { id: variantId },
       select: {
         id: true,
@@ -820,7 +823,7 @@ export class AdminService {
     const dedupe = dto.dedupe ?? true;
     let toInsert: string[];
     if (dedupe) {
-      const existing = await this.prisma.stockItem.findMany({
+      const existing = await db.stockItem.findMany({
         where: {
           variantId,
           status: { in: ['AVAILABLE', 'RESERVED'] },
@@ -838,7 +841,7 @@ export class AdminService {
       toInsert = lines;
     }
 
-    const total = await this.prisma.$transaction(async (tx) => {
+    const insert = async (tx: Prisma.TransactionClient) => {
       if (toInsert.length > 0) {
         await tx.stockItem.createMany({
           data: toInsert.map((content) => ({ variantId, content })),
@@ -896,8 +899,10 @@ export class AdminService {
         }
       }
       return available;
-    });
-    await this.audit.log(
+    };
+    // Bot ghi kết quả chống lặp cùng transaction nhập kho; web giữ đường cũ.
+    const total = transaction ? await insert(transaction) : await this.prisma.$transaction(insert);
+    if (!transaction) await this.audit.log(
       actor,
       'stock.add',
       { type: 'variant', id: variantId },
@@ -928,11 +933,13 @@ export class AdminService {
    * chính xác mình đang giữ những gì trong tay.
    */
   async withdrawStock(
-    actor: User,
+    actor: AdminActor,
     variantId: string,
     dto: WithdrawStockDto,
+    transaction?: Prisma.TransactionClient,
   ): Promise<WithdrawStockResponse> {
-    const variant = await this.prisma.productVariant.findUnique({
+    const db = transaction ?? this.prisma;
+    const variant = await db.productVariant.findUnique({
       where: { id: variantId },
       select: { id: true, name: true, product: { select: { name: true } } },
     });
@@ -940,7 +947,7 @@ export class AdminService {
       throw new NotFoundException(K.variantNotFound);
     }
 
-    const lines = await this.prisma.$transaction(async (tx) => {
+    const withdraw = async (tx: Prisma.TransactionClient) => {
       const ids = await this.fulfillment.lockAvailableStock(
         tx,
         variantId,
@@ -959,18 +966,19 @@ export class AdminService {
       // Giữ đúng thứ tự đã rút — `findMany` không bảo đảm thứ tự của mảng `in`.
       const theoId = new Map(rows.map((row) => [row.id, row.content]));
       return ids.map((id) => ({ id, content: theoId.get(id) as string }));
-    });
+    };
+    const lines = transaction ? await withdraw(transaction) : await this.prisma.$transaction(withdraw);
 
     if (lines.length === 0) {
       throw new BadRequestException(K.adminWithdrawNoStock);
     }
 
-    const remaining = await this.prisma.stockItem.count({
+    const remaining = await db.stockItem.count({
       where: { variantId, status: 'AVAILABLE' },
     });
     // Nhật ký ghi SỐ LƯỢNG, không ghi nội dung key: nhật ký lưu vĩnh viễn và
     // hiện ở /admin/audit — nhét key vào đó là rò hàng ra một chỗ thứ hai.
-    await this.audit.log(
+    if (!transaction) await this.audit.log(
       actor,
       'stock.withdraw',
       { type: 'variant', id: variantId },
@@ -987,8 +995,9 @@ export class AdminService {
   }
 
   /** Trả một dòng đã rút về lại kho — để một cú bấm lỡ tay không thành vĩnh viễn. */
-  async restoreStock(actor: User, stockId: string): Promise<StockItemDto> {
-    const item = await this.prisma.stockItem.findUnique({
+  async restoreStock(actor: AdminActor, stockId: string, transaction?: Prisma.TransactionClient): Promise<StockItemDto> {
+    const db = transaction ?? this.prisma;
+    const item = await db.stockItem.findUnique({
       where: { id: stockId },
       select: {
         id: true,
@@ -1009,7 +1018,7 @@ export class AdminService {
      * bấm đồng thời thì lần thứ hai khớp 0 dòng thay vì ghi đè trạng thái mà
      * lần đầu đã đổi.
      */
-    const { count } = await this.prisma.stockItem.updateMany({
+    const { count } = await db.stockItem.updateMany({
       where: { id: stockId, status: 'WITHDRAWN' },
       data: { status: 'AVAILABLE', withdrawnAt: null },
     });
@@ -1017,7 +1026,7 @@ export class AdminService {
       throw new BadRequestException(K.adminStockNotWithdrawn);
     }
 
-    await this.audit.log(
+    if (!transaction) await this.audit.log(
       actor,
       'stock.restore',
       { type: 'variant', id: item.variantId },
@@ -1027,7 +1036,7 @@ export class AdminService {
       },
     );
 
-    const sau = await this.prisma.stockItem.findUniqueOrThrow({
+    const sau = await db.stockItem.findUniqueOrThrow({
       where: { id: stockId },
       include: { orderItem: { select: { order: { select: { code: true } } } } },
     });
@@ -1090,8 +1099,9 @@ export class AdminService {
     return { items, total };
   }
 
-  async deleteStockItem(actor: User, id: string): Promise<{ success: boolean }> {
-    const item = await this.prisma.stockItem.findUnique({
+  async deleteStockItem(actor: AdminActor, id: string, transaction?: Prisma.TransactionClient): Promise<{ success: boolean }> {
+    const db = transaction ?? this.prisma;
+    const item = await db.stockItem.findUnique({
       where: { id },
       include: {
         variant: {
@@ -1105,13 +1115,15 @@ export class AdminService {
     if (item.status !== 'AVAILABLE') {
       throw new BadRequestException(K.adminStockOnlyAvailableDeletable);
     }
-    await this.prisma.stockItem.delete({ where: { id } });
-    await this.audit.log(
+    // Lượt mua có thể giữ kho sau lần đọc trên; chỉ xóa khi vẫn AVAILABLE.
+    const removed = await db.stockItem.deleteMany({ where: { id, status: 'AVAILABLE' } });
+    if (!removed.count) throw new BadRequestException(K.adminStockOnlyAvailableDeletable);
+    if (!transaction) await this.audit.log(
       actor,
       'stock.delete',
       { type: 'stock', id },
       {
-        name: item.content,
+        stockId: item.id,
         variantName: item.variant.name,
         productName: item.variant.product.name,
       },
@@ -1126,7 +1138,7 @@ export class AdminService {
   }
 
   /** Dịch ngay (có chờ) và trả về sản phẩm kèm bản dịch mới. */
-  async translateProduct(actor: User, id: string): Promise<ProductDto> {
+  async translateProduct(actor: AdminActor, id: string): Promise<ProductDto> {
     await this.translation.translateProduct(id);
     const product = await this.loadProduct(id);
     await this.audit.log(
@@ -1259,7 +1271,7 @@ export class AdminService {
   }
 
   /** Giao bù cho đơn PAID bị thiếu kho lúc thanh toán. */
-  async redeliverOrder(actor: User, code: string): Promise<AdminOrderDetailDto> {
+  async redeliverOrder(actor: AdminActor, code: string): Promise<AdminOrderDetailDto> {
     const order = await this.prisma.order.findUnique({
       where: { code },
       select: { id: true, status: true },
@@ -1293,7 +1305,7 @@ export class AdminService {
    * khách đặt lại chứ không hồi sinh.
    */
   async markOrderPaid(
-    actor: User,
+    actor: AdminActor,
     code: string,
     note?: string,
   ): Promise<AdminOrderDetailDto> {
@@ -1326,7 +1338,7 @@ export class AdminService {
   }
 
   /** Hủy đơn PENDING thay khách: nhả kho giữ chỗ, payment → FAILED. */
-  async cancelOrder(actor: User, code: string): Promise<AdminOrderDetailDto> {
+  async cancelOrder(actor: AdminActor, code: string): Promise<AdminOrderDetailDto> {
     const order = await this.prisma.order.findUnique({
       where: { code },
       select: { id: true, status: true },

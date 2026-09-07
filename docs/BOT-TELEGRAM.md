@@ -1,5 +1,7 @@
 # Bot Telegram bán hàng — thiết kế và lộ trình
 
+Quản trị qua `/admin`, danh sách User ID độc lập và phân quyền: xem [TELEGRAM-ADMIN.md](TELEGRAM-ADMIN.md).
+
 > Trạng thái: **Bot bán hàng, thanh toán, ví và giao key tự động đã chạy.** Bố cục
 > hiện tại theo phong cách Panda Shop tối giản: `/start` của khách cũ có tối đa
 > một thông báo Admin và một tin chào gắn menu cố định; hub inline chỉ còn Mua

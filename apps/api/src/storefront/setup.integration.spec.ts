@@ -66,7 +66,8 @@ describe('Setup inventory rollback diagnostic (tích hợp)', () => {
     const legacy = client(LEGACY_DB);
     try {
       await applyMigrations(legacy, '20260901143000_digital_store_commercial');
-      await legacy.storeSetting.create({ data: { id: 'main' } });
+      // Prisma mới còn chèn default cột mới; fixture lịch sử phải dùng SQL cũ.
+      await legacy.$executeRaw`INSERT INTO "StoreSetting" ("id", "updatedAt") VALUES ('main', NOW())`;
       const migration = resolve(__dirname, '..', '..', 'prisma', 'migrations', '20260901143000_digital_store_commercial', 'migration.sql');
       const statements = readFileSync(migration, 'utf8').split(/\r?\n/).filter((line) => !line.trim().startsWith('--')).join('\n').split(';').map((entry) => entry.trim()).filter(Boolean);
       for (const statement of statements) await legacy.$executeRawUnsafe(statement);

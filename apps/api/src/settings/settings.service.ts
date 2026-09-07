@@ -1,6 +1,6 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Prisma, type StoreSetting, type User } from '@prisma/client';
+import { Prisma, type StoreSetting } from '@prisma/client';
 import {
   AI_PROVIDERS,
   SUPPORT_CHANNELS_MAX,
@@ -14,6 +14,7 @@ import {
 } from '@webcatt/shared';
 import { diffChanges } from '../audit/audit-diff';
 import { AuditService } from '../audit/audit.service';
+import type { AdminActor } from '../audit/admin-actor';
 import { K } from '../i18n/messages';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
@@ -262,7 +263,7 @@ export class SettingsService {
    * ghi đè cấu hình tab khác bằng snapshot cũ.
    */
   async updateSection(
-    actor: User,
+    actor: AdminActor,
     patch: Partial<UpdateSettingsDto>,
   ): Promise<AdminStoreSettingDto> {
     const current = await this.getAdmin();
@@ -299,7 +300,7 @@ export class SettingsService {
    * để không phải echo lại cấu hình thanh toán (hai tab admin ghi đè nhau).
    * Cùng quy tắc fail-closed và cùng nhật ký với update() đầy đủ.
    */
-  async updateTelegram(actor: User, dto: UpdateTelegramSettingsDto): Promise<AdminStoreSettingDto> {
+  async updateTelegram(actor: AdminActor, dto: UpdateTelegramSettingsDto): Promise<AdminStoreSettingDto> {
     const before = await this.getSetting();
 
     const token = dto.telegramBotToken?.trim();
@@ -435,7 +436,7 @@ export class SettingsService {
   }
 
   /** Cập nhật cấu hình + ghi nhật ký `settings.update` kèm diff thay đổi. */
-  async update(actor: User, dto: UpdateSettingsDto): Promise<AdminStoreSettingDto> {
+  async update(actor: AdminActor, dto: UpdateSettingsDto): Promise<AdminStoreSettingDto> {
     // Đọc sớm: vài phép kiểm bên dưới cần biết giá trị CŨ, vì trang quản trị
     // chỉ gửi lên những trường nó thực sự đổi.
     const before0 = await this.getSetting();

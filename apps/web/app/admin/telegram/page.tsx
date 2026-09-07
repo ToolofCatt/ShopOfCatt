@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { BellRing, RefreshCw, Send } from 'lucide-react';
 import {
   TELEGRAM_GREETING_MAX_LENGTH,
+  telegramAdminText,
   type AdminStoreSettingDto,
   type TelegramStatusDto,
 } from '@webcatt/shared';
@@ -16,10 +17,15 @@ import { PageHeader } from '@/components/admin/page-header';
 import { TelegramSimulator } from '@/components/admin/telegram-simulator';
 import { ToggleRow } from '@/components/admin/toggle-row';
 import { TEXTAREA_CLASSES } from '@/components/admin/helpers';
+import { TelegramAccessSettings } from '@/components/admin/telegram-access';
+import { TelegramManagementPreview } from '@/components/admin/telegram-management-preview';
+import { Tabs } from '@/components/admin/tabs';
 
 export default function AdminTelegramPage() {
   const { token } = useAuth();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const [tab, setTab] = useState<'bot' | 'access'>('bot');
+  const [previewMode, setPreviewMode] = useState<'customer' | 'admin'>('customer');
 
   const [settings, setSettings] = useState<AdminStoreSettingDto | null>(null);
   const [status, setStatus] = useState<TelegramStatusDto | null>(null);
@@ -180,7 +186,9 @@ export default function AdminTelegramPage() {
   return (
     <div className="mx-auto min-w-0 max-w-5xl">
       <PageHeader title={t.admin.navTelegram} description={t.admin.telegramPageHint} />
-
+      <Tabs className="mb-6" value={tab} onChange={setTab} items={[{value:'bot',label:t.admin.navTelegram},{value:'access',label:telegramAdminText(locale,'access')}]} />
+      <div hidden={tab !== 'access'}><TelegramAccessSettings /></div>
+      <div hidden={tab !== 'bot'}>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:items-start">
         {/* ------------------------------ Cấu hình ------------------------------ */}
         <Card className="min-w-0 space-y-5 p-4 sm:p-6">
@@ -460,8 +468,10 @@ export default function AdminTelegramPage() {
             </h2>
             <p className="mt-0.5 text-sm text-neutral-500">{t.admin.telegramPreviewHint}</p>
           </div>
-          <TelegramSimulator botName={status?.botUsername ?? null} refreshKey={simKey} />
+          <Tabs value={previewMode} onChange={setPreviewMode} items={[{value:'customer',label:telegramAdminText(locale,'customerMode')},{value:'admin',label:telegramAdminText(locale,'adminMode')}]} />
+          {previewMode === 'admin' ? <TelegramManagementPreview /> : <TelegramSimulator botName={status?.botUsername ?? null} refreshKey={simKey} />}
         </Card>
+      </div>
       </div>
     </div>
   );

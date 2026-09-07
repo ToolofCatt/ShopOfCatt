@@ -178,6 +178,9 @@ model AuditLog {
   /// Ảnh chụp — vẫn đọc được nếu tài khoản bị xóa
   actorEmail String
   actorCode  Int
+  actorSource String @default("WEB")
+  telegramUserId String?
+  telegramName String?
   /// Khoá hành động, ví dụ "product.update", "customer.lock"
   action     String
   entityType String?
@@ -644,6 +647,7 @@ model StoreSetting {
   /// Bật kênh bán qua bot. Fail-closed: bật mà thiếu token thì bot không chạy
   /// và getReadiness phải báo, không âm thầm im lặng.
   telegramBotEnabled Boolean @default(false)
+  telegramAdminEnabled Boolean @default(false)
   /// Token bot từ @BotFather.
   ///
   /// Là BÍ MẬT: không nằm trong AdminStoreSettingDto, không vào nhật ký (chỉ
@@ -674,6 +678,43 @@ model StoreSetting {
   /// Lời nhắn tùy chỉnh ở khối "Quên mật khẩu"; rỗng = dùng câu mặc định.
   supportNote String   @default("")
   updatedAt   DateTime @updatedAt
+}
+
+enum TelegramAdminPermission {
+  VIEWER
+  OPERATOR
+  FULL
+}
+
+model TelegramAdmin {
+  id String @id @default(cuid())
+  telegramUserId String @unique
+  name String
+  permission TelegramAdminPermission @default(OPERATOR)
+  enabled Boolean @default(true)
+  version Int @default(1)
+  inAdminMode Boolean @default(false)
+  lastSeenAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Không lưu payload nhập kho/bí mật; chỉ lưu hash và kết quả không nhạy cảm.
+model TelegramAdminAction {
+  id String @id
+  telegramUserId String
+  adminVersion Int
+  kind String
+  targetId String
+  payloadHash String
+  status String @default("PENDING")
+  result Json?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([telegramUserId, status])
+  @@index([expiresAt])
 }
 
 /// Trạng thái cài đặt của deployment một-cửa-hàng. Tách khỏi StoreSetting để

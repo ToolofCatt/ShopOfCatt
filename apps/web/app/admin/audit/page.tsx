@@ -242,9 +242,9 @@ export default function AdminAuditPage() {
                       {formatDate(log.createdAt)}
                     </td>
                     <td className="max-w-[220px] px-4 py-3">
-                      <span className="block truncate text-neutral-950">{log.actorEmail}</span>
+                      <span className="block truncate text-neutral-950">{log.actorSource === 'TELEGRAM' ? log.telegramName || 'Telegram' : log.actorEmail}</span>
                       <span className="block font-mono text-xs tabular-nums text-neutral-400">
-                        {formatUserCode(log.actorCode)}
+                        {log.actorSource === 'TELEGRAM' ? `Telegram ID: ${log.telegramUserId}` : formatUserCode(log.actorCode)}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">

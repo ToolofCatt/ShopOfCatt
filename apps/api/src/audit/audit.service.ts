@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma, type User } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import type { AuditAction, AuditLogDto, Paginated } from '@webcatt/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AuditQueryDto } from './dto/audit-query.dto';
+import type { AdminActor } from './admin-actor';
 
 const DEFAULT_AUDIT_PAGE_SIZE = 50;
 
@@ -23,7 +24,7 @@ export class AuditService {
   constructor(private readonly prisma: PrismaService) {}
 
   async log(
-    actor: User,
+    actor: AdminActor,
     action: AuditAction,
     entity?: AuditEntity,
     details?: Record<string, unknown>,
@@ -32,6 +33,9 @@ export class AuditService {
       await this.prisma.auditLog.create({
         data: {
           actorId: actor.id,
+          actorSource: actor.telegramUserId ? 'TELEGRAM' : 'WEB',
+          telegramUserId: actor.telegramUserId ?? null,
+          telegramName: actor.telegramName ?? null,
           // Actor là admin đăng nhập web nên luôn có email; `?? ''` chỉ để
           // thoả cột snapshot NOT NULL từ khi cột email cho phép null.
           actorEmail: actor.email ?? '',
@@ -74,6 +78,9 @@ export class AuditService {
     const items: AuditLogDto[] = rows.map((row) => ({
       id: row.id,
       actorEmail: row.actorEmail,
+      actorSource: row.actorSource,
+      telegramUserId: row.telegramUserId,
+      telegramName: row.telegramName,
       actorCode: row.actorCode,
       action: row.action as AuditAction,
       entityType: row.entityType,

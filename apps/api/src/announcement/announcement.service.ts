@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import type {
   Announcement,
   AnnouncementTranslation,
-  User,
 } from '@prisma/client';
 import {
   TRANSLATABLE_LOCALES,
@@ -12,6 +11,7 @@ import {
 } from '@webcatt/shared';
 import { diffChanges } from '../audit/audit-diff';
 import { AuditService } from '../audit/audit.service';
+import type { AdminActor } from '../audit/admin-actor';
 import type { Locale } from '../i18n/locale';
 import { PrismaService } from '../prisma/prisma.service';
 import { TranslationService } from '../translation/translation.service';
@@ -69,7 +69,7 @@ export class AnnouncementService {
   }
 
   async update(
-    actor: User,
+    actor: AdminActor,
     dto: UpdateAnnouncementDto,
   ): Promise<AdminAnnouncementDto> {
     const before = await this.prisma.announcement.findUnique({
@@ -120,7 +120,7 @@ export class AnnouncementService {
   }
 
   /** Dịch vi → en + zh rồi lưu lại (await, lỗi trả về cho quản trị viên). */
-  async translate(actor: User): Promise<AdminAnnouncementDto> {
+  async translate(actor: AdminActor): Promise<AdminAnnouncementDto> {
     await this.translation.translateAnnouncement();
     await this.audit.log(actor, 'announcement.translate', {
       type: 'announcement',

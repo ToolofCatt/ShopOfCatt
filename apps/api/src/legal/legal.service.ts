@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { LegalPage, User } from '@prisma/client';
+import type { LegalPage } from '@prisma/client';
 import {
   LEGAL_PAGE_SLUGS,
   isLegalPageSlug,
@@ -8,6 +8,7 @@ import {
 } from '@webcatt/shared';
 import { sanitizeAnnouncementHtml } from '../announcement/sanitize-announcement';
 import { AuditService } from '../audit/audit.service';
+import type { AdminActor } from '../audit/admin-actor';
 import { K } from '../i18n/messages';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateLegalPageDto } from './dto/update-legal-page.dto';
@@ -44,7 +45,7 @@ export class LegalService {
   }
 
   async update(
-    actor: User,
+    actor: AdminActor,
     slug: string,
     dto: UpdateLegalPageDto,
   ): Promise<LegalPageDto> {

@@ -1,6 +1,9 @@
 // ===== Shared types & constants between @webcatt/api and @webcatt/web =====
 
 export * from './storefront';
+export * from './telegram-admin';
+export * from './telegram-admin-copy';
+export * from './stock-import';
 
 export type Role = 'USER' | 'ADMIN' | 'SUPERADMIN';
 
@@ -801,6 +804,9 @@ export const AUDIT_ACTIONS = [
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
 export interface AuditLogDto {
+  actorSource?: string;
+  telegramUserId?: string | null;
+  telegramName?: string | null;
   id: string;
   actorEmail: string;
   actorCode: number;

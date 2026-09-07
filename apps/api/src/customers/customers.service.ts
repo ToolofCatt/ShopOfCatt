@@ -14,6 +14,7 @@ import {
 import * as bcrypt from 'bcryptjs';
 import { randomInt } from 'node:crypto';
 import { AuditService } from '../audit/audit.service';
+import type { AdminActor } from '../audit/admin-actor';
 import { PrismaService } from '../prisma/prisma.service';
 import { K } from '../i18n/messages';
 import { CustomersQueryDto } from './dto/customers-query.dto';
@@ -98,7 +99,7 @@ export class CustomersService {
   }
 
   /** Khóa tài khoản khách — không tự khóa mình, không khóa admin. */
-  async lock(actor: User, id: string): Promise<AdminCustomerDto> {
+  async lock(actor: AdminActor, id: string): Promise<AdminCustomerDto> {
     const target = await this.loadUser(id);
     if (target.id === actor.id) {
       throw new BadRequestException(K.cannotLockSelf);
@@ -120,7 +121,7 @@ export class CustomersService {
     return this.getOne(id);
   }
 
-  async unlock(actor: User, id: string): Promise<AdminCustomerDto> {
+  async unlock(actor: AdminActor, id: string): Promise<AdminCustomerDto> {
     const target = await this.loadUser(id);
     await this.prisma.user.update({
       where: { id },
@@ -141,7 +142,7 @@ export class CustomersService {
    * Mọi phiên đăng nhập cũ của tài khoản đó mất hiệu lực ngay lập tức.
    */
   async resetPassword(
-    actor: User,
+    actor: AdminActor,
     id: string,
   ): Promise<AdminResetPasswordDto> {
     const target = await this.loadUser(id);
@@ -172,7 +173,7 @@ export class CustomersService {
   }
 
   /** Cấp quyền quản trị (chỉ SUPERADMIN gọi được — SuperAdminGuard). */
-  async grantAdmin(actor: User, id: string): Promise<AdminCustomerDto> {
+  async grantAdmin(actor: AdminActor, id: string): Promise<AdminCustomerDto> {
     const target = await this.loadUser(id);
     if (target.role === 'SUPERADMIN') {
       throw new BadRequestException(K.cannotModifySuperadmin);
@@ -197,7 +198,7 @@ export class CustomersService {
   }
 
   /** Thu hồi quyền quản trị (chỉ SUPERADMIN gọi được — SuperAdminGuard). */
-  async revokeAdmin(actor: User, id: string): Promise<AdminCustomerDto> {
+  async revokeAdmin(actor: AdminActor, id: string): Promise<AdminCustomerDto> {
     const target = await this.loadUser(id);
     if (target.role === 'SUPERADMIN') {
       throw new BadRequestException(K.cannotModifySuperadmin);

@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, type Coupon, type User } from '@prisma/client';
+import { Prisma, type Coupon } from '@prisma/client';
 import {
   calcDiscount,
   type AdminCouponDto,
@@ -13,6 +13,7 @@ import {
 } from '@webcatt/shared';
 import { diffChanges } from '../audit/audit-diff';
 import { AuditService } from '../audit/audit.service';
+import type { AdminActor } from '../audit/admin-actor';
 import { K } from '../i18n/messages';
 import { PrismaService } from '../prisma/prisma.service';
 import type { CreateOrderItemDto } from '../orders/dto/create-order.dto';
@@ -165,7 +166,7 @@ export class CouponsService {
     return coupons.map(toAdminDto);
   }
 
-  async create(actor: User, dto: CreateCouponDto): Promise<AdminCouponDto> {
+  async create(actor: AdminActor, dto: CreateCouponDto): Promise<AdminCouponDto> {
     const code = CouponsService.normalize(dto.code);
     if (!CODE_RE.test(code)) {
       throw new BadRequestException(K.couponCodeInvalid);
@@ -200,7 +201,7 @@ export class CouponsService {
   }
 
   async update(
-    actor: User,
+    actor: AdminActor,
     id: string,
     dto: UpdateCouponDto,
   ): Promise<AdminCouponDto> {
@@ -244,7 +245,7 @@ export class CouponsService {
    * Xóa mã. Đơn đã dùng vẫn giữ `couponCode` (ảnh chụp) nhờ `onDelete: SetNull`
    * ở khóa ngoại, nên lịch sử đơn hàng không mất thông tin.
    */
-  async remove(actor: User, id: string): Promise<{ success: boolean }> {
+  async remove(actor: AdminActor, id: string): Promise<{ success: boolean }> {
     const coupon = await this.prisma.coupon.findUnique({ where: { id } });
     if (!coupon) {
       throw new NotFoundException(K.couponNotFoundAdmin);

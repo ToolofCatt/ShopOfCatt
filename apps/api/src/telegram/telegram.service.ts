@@ -2,6 +2,7 @@ import {
   BadRequestException,
   Injectable,
   Logger,
+  Optional,
   ServiceUnavailableException,
   type OnModuleDestroy,
   type OnModuleInit,
@@ -44,6 +45,7 @@ import {
   type BotView,
 } from './order-view';
 import { TelegramUsersService } from './telegram-users.service';
+import { TelegramAdminBotService } from '../telegram-admin/bot.service';
 import {
   mainMenuKeyboard,
   matchMenuAction,
@@ -185,6 +187,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly balance: BalanceService,
     private readonly prisma: PrismaService,
     private readonly storefront: StorefrontService,
+    @Optional() private readonly management?: TelegramAdminBotService,
   ) {}
 
   onModuleInit(): void {
@@ -599,6 +602,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     message: TgMessage | undefined,
     stop: AbortSignal,
   ): Promise<void> {
+    if (message && await this.management?.message(token, message, stop)) return;
     if (!message?.text || message.from?.is_bot) return;
     const rawText = message.text.trim();
     // Lệnh vận hành duy nhất được trả trong nhóm: giúp lấy đúng chat ID rồi
@@ -724,6 +728,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     cb: TgCallbackQuery,
     stop: AbortSignal,
   ): Promise<void> {
+    if (await this.management?.callback(token, cb, stop)) return;
     // LUÔN answerCallbackQuery kể cả khi bỏ qua — không answer là client treo
     // spinner trên nút tới ~30 giây, trông như bot chết.
     const answer = async (payload: Record<string, unknown> = {}) => {
