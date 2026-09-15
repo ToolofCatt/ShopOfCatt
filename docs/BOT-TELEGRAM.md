@@ -1,10 +1,20 @@
 # Bot Telegram bán hàng — thiết kế và lộ trình
 
 Thông báo mua hàng chỉ gửi sau khi đơn PAID/DELIVERED có paidAt và payment SUCCESS
-(không áp dụng MOCK). Tin ghi “Đã có khách hàng mua thành công”, khách hiển thị
-`xxx`, không có email, tên, username hoặc mã đơn. Thời gian dùng paidAt.
+(không áp dụng MOCK). Tin ghi “Đã có khách hàng mua thành công”. Email giữ tối đa
+5 ký tự đầu trước @; toàn bộ phần còn lại (kể cả miền) thay bằng `x`, giữ độ dài.
+Username Telegram giữ @ và tối đa 3 ký tự đầu; còn lại thay bằng `x`, không dùng
+tên thật. Không có username hợp lệ thì dùng `xxx`. Username ngắn vẫn che ít nhất
+một ký tự. Nhãn nằm trong `<code>` để không tạo mention tới một người khác.
+Không gửi mã đơn; thời gian dùng paidAt.
 Chỉ gửi tới Chat ID đã cấu hình; cảnh báo đơn chờ và kho thấp chỉ được gửi vào
 chat riêng, không gửi nhóm/kênh. Tin cũ trong Telegram không tự đổi theo bản code mới.
+
+Tin hết hàng dùng tiêu đề “THÔNG BÁO HẾT HÀNG”, tên sản phẩm (loại) và liên hệ hỗ
+trợ từ cấu hình shop; ẩn loại “Mặc định” và dòng ngưỡng. Tin sắp hết vẫn hiện số
+còn lại. Chỉ hứa thông báo khi có lại hàng nếu công tắc báo hàng mới đang bật.
+Ngưỡng vẫn được dùng nội bộ để quyết định lúc gửi, không đổi nơi nhận hoặc gửi
+hàng loạt cho khách. Simulator có mẫu mua thành công và mẫu hết hàng dùng cùng renderer.
 
 Quản trị qua `/admin`, danh sách User ID độc lập và phân quyền: xem [TELEGRAM-ADMIN.md](TELEGRAM-ADMIN.md).
 

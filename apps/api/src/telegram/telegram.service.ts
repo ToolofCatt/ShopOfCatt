@@ -1693,6 +1693,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           id: true,
           totalAmount: true,
           paidAt: true,
+          user: { select: { email: true, telegramName: true } },
           items: {
             select: {
               productName: true,
@@ -1708,6 +1709,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       for (const order of orders) {
         if (!order.paidAt) continue;
         const text = renderSuccessfulPurchaseAlert({
+          customerIdentity: order.user,
           items: order.items.map((item) => ({
             name: item.variantName
               ? `${item.productName} · ${item.variantName}`
@@ -1830,13 +1832,15 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       });
     }
 
-    for (const variant of variants
+    const pending = variants
       .filter(
         (row) =>
           row._count.stockItems <= cfg.ownerLowStockThreshold &&
           row.telegramOwnerLowStockNotifiedAt === null,
       )
-      .slice(0, OWNER_ALERT_BATCH)) {
+      .slice(0, OWNER_ALERT_BATCH);
+    const support = pending.length ? await this.settings.getSupportInfo() : null;
+    for (const variant of pending) {
       await this.sendHtml(
         token,
         chatId,
@@ -1845,6 +1849,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           variantName: variant.name,
           available: variant._count.stockItems,
           threshold: cfg.ownerLowStockThreshold,
+          supportChannels: support?.supportChannels,
+          restockNotificationsEnabled: cfg.stockAlertsEnabled,
         }),
         null,
         this.stopController.signal,

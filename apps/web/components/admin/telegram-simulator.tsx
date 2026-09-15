@@ -209,13 +209,13 @@ export function TelegramSimulator({
     }
   };
 
-  const showOwnerAlert = async () => {
+  const showOwnerAlert = async (screen = 'owner-alert') => {
     if (!token) return;
     setError(null);
     setTyping(true);
     try {
       const data = await fetchPreview(lang, 1);
-      if (!data.screens['owner-alert']) {
+      if (!data.screens[screen]) {
         setError(t.admin.telegramSimBuyNote);
         return;
       }
@@ -226,7 +226,7 @@ export function TelegramSimulator({
           from: 'bot',
           kind: 'screens',
           data,
-          view: 'owner-alert',
+          view: screen,
           time: gioBayGio(),
         },
       ]);
@@ -273,6 +273,14 @@ export function TelegramSimulator({
           >
             <BellRing strokeWidth={1.75} className="h-3.5 w-3.5" />
             {t.admin.telegramOwnerAlertsPreview}
+          </button>
+          <button
+            type="button"
+            onClick={() => void showOwnerAlert('out-of-stock-alert')}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition hover:border-neutral-950"
+          >
+            <BellRing strokeWidth={1.75} className="h-3.5 w-3.5" />
+            {t.admin.telegramOutOfStockPreview}
           </button>
           <button
             type="button"

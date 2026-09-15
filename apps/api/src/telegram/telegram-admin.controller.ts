@@ -55,7 +55,7 @@ import {
 import { botDict } from './messages';
 import { TelegramService } from './telegram.service';
 import { renderStockAlert } from './stock-alert-view';
-import { renderSuccessfulPurchaseAlert } from './owner-alert-view';
+import { renderSuccessfulPurchaseAlert, renderOwnerLowStockAlert } from './owner-alert-view';
 import type { TgInlineKeyboard } from './telegram-api';
 import {
   DEPOSIT_VND_OPTIONS,
@@ -317,6 +317,7 @@ export class TelegramAdminController {
     }
     dua('owner-alert', {
       text: renderSuccessfulPurchaseAlert({
+        customerIdentity: { email: 'cattab@example.test', telegramName: '' },
         items: [
           {
             name:
@@ -328,6 +329,17 @@ export class TelegramAdminController {
         ],
         total: '100.000 ₫',
         paidAt: new Date(),
+      }),
+      keyboard: [],
+    });
+    dua('out-of-stock-alert', {
+      text: renderOwnerLowStockAlert({
+        productName: stockProduct?.name ?? 'ChatGPT Plus',
+        variantName: stockVariant?.name ?? 'Mặc định',
+        available: 0,
+        threshold: cfg.ownerLowStockThreshold,
+        supportChannels: support.supportChannels,
+        restockNotificationsEnabled: cfg.stockAlertsEnabled,
       }),
       keyboard: [],
     });

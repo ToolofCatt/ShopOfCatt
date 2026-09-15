@@ -99,6 +99,7 @@ beforeAll(async () => {
 
   const settings = {
     getTelegramConfig: async () => config,
+    getSupportInfo: async () => ({ supportChannels: [{label:'Telegram',value:'@fixture_support'}], supportNote:'' }),
   } as unknown as SettingsService;
   service = new TelegramService(
     settings,
@@ -230,6 +231,7 @@ describe('Telegram owner alerts (PostgreSQL thật)', () => {
     expect(payloads).toHaveLength(1);
     expect(String(payloads[0].text)).toContain('Đã có khách hàng mua thành công');
     expect(String(payloads[0].text)).toContain('xxx');
+    expect(String(payloads[0].text)).toContain('priva' + 'x'.repeat('private-customer@example.test'.length - 5));
     for(const privateValue of ['private-customer','@private_customer','Private Customer','DH-NEW001'])expect(String(payloads[0].text)).not.toContain(privateValue);
     expect(
       payloads.every((payload) => payload.chat_id === -1001234567890),
@@ -255,6 +257,10 @@ describe('Telegram owner alerts (PostgreSQL thật)', () => {
     expect(payloads.every(p=>p.chat_id===123456789)).toBe(true);
     expect(payloads.some(p=>String(p.text).includes('ĐƠN CHỜ QUÁ LÂU'))).toBe(true);
     expect(payloads.some(p=>String(p.text).includes('HẾT HÀNG'))).toBe(true);
+    const emptyStock = String(payloads.find(p=>String(p.text).includes('HẾT HÀNG'))?.text);
+    expect(emptyStock).toContain('ChatGPT Test (30 ngày)');
+    expect(emptyStock).toContain('@fixture_support');
+    expect(emptyStock).not.toContain('Ngưỡng');
     config.ownerStuckAlertsEnabled=false;
     config.ownerLowStockAlertsEnabled=false;
   }, 30_000);
@@ -274,12 +280,16 @@ describe('Telegram owner alerts (PostgreSQL thật)', () => {
   it('PAID bằng số dư được báo một lần; lỗi gửi vẫn giữ marker cho lượt retry',async ctx=>{
     if(!reachable)return ctx.skip();
     const order=await makeOrder('DH-BALANCE',new Date(),false,{status:'PAID',paidAt:new Date(),paymentStatus:'SUCCESS',mode:'BALANCE'});
+    await prisma.user.update({where:{id:order.userId},data:{email:null}});
     const fetch=vi.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValue(new Response(JSON.stringify({ok:true,result:{message_id:3}})));
     vi.stubGlobal('fetch',fetch);
     const run=()=> (service as unknown as { notifyOwnerAlerts(token: string): Promise<void> }).notifyOwnerAlerts('token-test');
     await expect(run()).rejects.toThrow('network');
     expect((await prisma.order.findUniqueOrThrow({where:{id:order.id}})).telegramOwnerNewOrderNotifiedAt).toBeNull();
     await run();await run();expect(fetch).toHaveBeenCalledTimes(2);
+    const sent = String(JSON.parse(fetch.mock.calls[1]?.[1]?.body ?? '{}').text);
+    expect(sent).toContain('<code>@pri' + 'x'.repeat('private_customer'.length - 3) + '</code>');
+    expect(sent).not.toContain('Private Customer');
     expect((await prisma.order.findUniqueOrThrow({where:{id:order.id}})).telegramOwnerNewOrderNotifiedAt).not.toBeNull();
   });
 });
