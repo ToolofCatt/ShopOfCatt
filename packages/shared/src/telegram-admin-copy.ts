@@ -73,9 +73,9 @@ export const TELEGRAM_ADMIN_COPY = {
     '提醒接收 Chat ID',
   ],
   telegramOwnerOrderAlertsEnabled: [
-    'Báo đơn mới',
-    'New order alerts',
-    '新订单提醒',
+    'Báo thanh toán thành công (ẩn danh)',
+    'Successful payment alerts (anonymous)',
+    '支付成功提醒（匿名）',
   ],
   telegramOwnerStuckAlertsEnabled: [
     'Báo đơn chờ lâu',

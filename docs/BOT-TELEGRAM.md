@@ -1,5 +1,11 @@
 # Bot Telegram bán hàng — thiết kế và lộ trình
 
+Thông báo mua hàng chỉ gửi sau khi đơn PAID/DELIVERED có paidAt và payment SUCCESS
+(không áp dụng MOCK). Tin ghi “Đã có khách hàng mua thành công”, khách hiển thị
+`xxx`, không có email, tên, username hoặc mã đơn. Thời gian dùng paidAt.
+Chỉ gửi tới Chat ID đã cấu hình; cảnh báo đơn chờ và kho thấp chỉ được gửi vào
+chat riêng, không gửi nhóm/kênh. Tin cũ trong Telegram không tự đổi theo bản code mới.
+
 Quản trị qua `/admin`, danh sách User ID độc lập và phân quyền: xem [TELEGRAM-ADMIN.md](TELEGRAM-ADMIN.md).
 
 > Trạng thái: **Bot bán hàng, thanh toán, ví và giao key tự động đã chạy.** Bố cục
@@ -71,7 +77,7 @@ Quản trị qua `/admin`, danh sách User ID độc lập và phân quyền: xe
 > Worker gửi theo lô, đúng ngôn ngữ và giá hiển thị của khách, kèm logo dịch vụ
 > động + nút mua thẳng sản phẩm. Dòng trùng, loại đã tắt, sản phẩm đã tắt và
 > khách bị khoá không được phát tin. Công tắc và preview nằm ở `/admin/telegram`.
-> **GĐ5 đã xong**: chat vận hành riêng nhận đơn mới, đơn PENDING vượt ngưỡng và
+> **GĐ5 đã xong**: chat vận hành riêng nhận thanh toán thành công, đơn PENDING vượt ngưỡng và
 > kho thấp/hết hàng. Chat đích, từng công tắc, số phút và ngưỡng kho chỉnh ngay
 > ở `/admin/telegram`, có nút gửi thử và preview. Callback tạo đơn/mã nạp có
 > khóa idempotency trong PostgreSQL nên Telegram phát lại update không giữ
@@ -185,7 +191,7 @@ mới sang giai đoạn sau.
   buộc chạy thử thật cả ba phương thức.**
 - **GĐ 4 — Giao key.** Vòng quét gửi key (mục 4), thẻ spoiler, gửi lại khi
   khách yêu cầu, lịch sử đơn của chat.
-- **GĐ 5 — Tuỳ chọn.** Báo chủ shop (đơn mới/kẹt/kho cạn) vào chat riêng; lệnh
+- **GĐ 5 — Tuỳ chọn.** Báo chủ shop (thanh toán thành công/kẹt/kho cạn) vào chat riêng; lệnh
   quản trị. Tách riêng vì đối tượng nhận khác (chủ shop ≠ khách).
 
 ## Chuỗi file phải sửa cùng nhau (theo checklist thêm-tính-năng)

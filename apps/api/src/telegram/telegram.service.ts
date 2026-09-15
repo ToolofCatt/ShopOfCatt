@@ -63,7 +63,7 @@ import { botDict, botLang, type BotLang } from './messages';
 import { renderStockAlert } from './stock-alert-view';
 import {
   renderOwnerLowStockAlert,
-  renderOwnerNewOrderAlert,
+  renderSuccessfulPurchaseAlert,
   renderOwnerStuckOrderAlert,
   renderOwnerTestAlert,
 } from './owner-alert-view';
@@ -1678,20 +1678,21 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       // Tắt cảnh báo đơn = bỏ những sự kiện cũ; bật lại chỉ nhận đơn phát sinh
       // sau đó, không dội lịch sử nhiều tháng vào chat.
       await this.prisma.order.updateMany({
-        where: { telegramOwnerNewOrderNotifiedAt: null },
+        where: { telegramOwnerNewOrderNotifiedAt: null, status: { in: ['PAID', 'DELIVERED'] } },
         data: { telegramOwnerNewOrderNotifiedAt: new Date() },
       });
     } else {
       const orders = await this.prisma.order.findMany({
-        where: { telegramOwnerNewOrderNotifiedAt: null },
+        where: {
+          telegramOwnerNewOrderNotifiedAt: null,
+          status: { in: ['PAID', 'DELIVERED'] },
+          paidAt: { not: null },
+          payment: { is: { status: 'SUCCESS', mode: { not: 'MOCK' } } },
+        },
         select: {
           id: true,
-          code: true,
           totalAmount: true,
-          createdAt: true,
-          user: {
-            select: { email: true, telegramName: true, code: true },
-          },
+          paidAt: true,
           items: {
             select: {
               productName: true,
@@ -1701,16 +1702,12 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           },
           payment: { select: { vndAmount: true } },
         },
-        orderBy: { createdAt: 'asc' },
+        orderBy: { paidAt: 'asc' },
         take: OWNER_ALERT_BATCH,
       });
-      const stuckCutoff = new Date(Date.now() - cfg.ownerStuckMinutes * 60_000);
       for (const order of orders) {
-        const text = renderOwnerNewOrderAlert({
-          code: order.code,
-          customer:
-            order.user.email ??
-            (order.user.telegramName.trim() || `#${order.user.code}`),
+        if (!order.paidAt) continue;
+        const text = renderSuccessfulPurchaseAlert({
           items: order.items.map((item) => ({
             name: item.variantName
               ? `${item.productName} · ${item.variantName}`
@@ -1721,7 +1718,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
             order.payment?.vndAmount != null
               ? formatMoney(Number(order.payment.vndAmount), 'VND')
               : formatUsdt(Number(order.totalAmount)),
-          createdAt: order.createdAt,
+          paidAt: order.paidAt,
         });
         await this.sendHtml(
           token,
@@ -1734,23 +1731,20 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           where: { id: order.id, telegramOwnerNewOrderNotifiedAt: null },
           data: {
             telegramOwnerNewOrderNotifiedAt: new Date(),
-            // Nếu worker từng tắt lâu, tin "đơn mới" đã mang giờ tạo; đừng
-            // gửi thêm ngay một tin "kẹt" cho cùng đơn trong lượt kế tiếp.
-            ...(order.createdAt <= stuckCutoff
-              ? { telegramOwnerStuckNotifiedAt: new Date() }
-              : {}),
           },
         });
       }
     }
 
+    // Nhóm/kênh chỉ được nhận tin mua thành công đã ẩn danh; cảnh báo vận hành
+    // không phải tin công khai. Chat ID âm là nhóm, supergroup hoặc channel.
+    if (chatId < 0) return;
     if (cfg.ownerStuckAlertsEnabled) {
       const cutoff = new Date(Date.now() - cfg.ownerStuckMinutes * 60_000);
       const stuck = await this.prisma.order.findMany({
         where: {
           status: 'PENDING',
           createdAt: { lte: cutoff },
-          telegramOwnerNewOrderNotifiedAt: { not: null },
           telegramOwnerStuckNotifiedAt: null,
         },
         select: {

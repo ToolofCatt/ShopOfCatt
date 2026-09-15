@@ -55,7 +55,7 @@ import {
 import { botDict } from './messages';
 import { TelegramService } from './telegram.service';
 import { renderStockAlert } from './stock-alert-view';
-import { renderOwnerNewOrderAlert } from './owner-alert-view';
+import { renderSuccessfulPurchaseAlert } from './owner-alert-view';
 import type { TgInlineKeyboard } from './telegram-api';
 import {
   DEPOSIT_VND_OPTIONS,
@@ -316,9 +316,7 @@ export class TelegramAdminController {
       );
     }
     dua('owner-alert', {
-      text: renderOwnerNewOrderAlert({
-        code: 'DH-XEMTRUOC',
-        customer: 'Khách Telegram #94000963',
+      text: renderSuccessfulPurchaseAlert({
         items: [
           {
             name:
@@ -329,7 +327,7 @@ export class TelegramAdminController {
           },
         ],
         total: '100.000 ₫',
-        createdAt: new Date(),
+        paidAt: new Date(),
       }),
       keyboard: [],
     });

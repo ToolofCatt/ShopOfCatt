@@ -16,6 +16,13 @@ export interface OwnerLowStockAlertInput {
   threshold: number;
 }
 
+/** Không nhận danh tính hoặc mã đơn: tin thanh toán không thể làm lộ khách. */
+export interface SuccessfulPurchaseAlertInput {
+  items: readonly { name: string; quantity: number }[];
+  total: string;
+  paidAt: Date;
+}
+
 const formatter = new Intl.DateTimeFormat('vi-VN', {
   timeZone: 'Asia/Ho_Chi_Minh',
   hour: '2-digit',
@@ -26,8 +33,8 @@ const formatter = new Intl.DateTimeFormat('vi-VN', {
   hour12: false,
 });
 
-function orderLines(order: OwnerOrderAlertInput): string[] {
-  const items = order.items.map((item) => {
+function itemLines(items: SuccessfulPurchaseAlertInput['items']): string[] {
+  return items.map((item) => {
     const trimmedName = item.name.trim();
     // Tên do chủ shop tự đặt icon ở đầu phải được tôn trọng; chỉ dùng hộp hàng
     // làm fallback khi không nhận ra logo hãng và tên cũng chưa có icon riêng.
@@ -37,18 +44,26 @@ function orderLines(order: OwnerOrderAlertInput): string[] {
     const icon = brandEmojiHtml(trimmedName) || (hasLeadingEmoji ? '' : '📦 ');
     return `${icon}<b>${escapeHtml(trimmedName)}</b> × <b>${item.quantity}</b>`;
   });
+}
+
+function orderLines(order: OwnerOrderAlertInput): string[] {
   return [
-    ...items,
+    ...itemLines(order.items),
     `💰 <b>Tổng tiền:</b> ${escapeHtml(order.total)}`,
-    `👤 <b>Khách hàng:</b> ${escapeHtml(order.customer)}`,
-    `🧾 <b>Mã đơn:</b> <code>${escapeHtml(order.code)}</code>`,
+    '👤 <b>Khách hàng:</b> xxx',
     `⏰ <b>Thời gian:</b> ${escapeHtml(formatter.format(order.createdAt))}`,
   ];
 }
 
-/** Tin chủ shop: không có callback, không thể vô tình tạo/chốt đơn từ chat. */
-export function renderOwnerNewOrderAlert(order: OwnerOrderAlertInput): string {
-  return ['🛒 <b>CÓ ĐƠN HÀNG MỚI</b>', '', ...orderLines(order)].join('\n');
+/** Chỉ gọi cho đơn đã được xác nhận thanh toán, không dùng createdAt làm thời gian mua. */
+export function renderSuccessfulPurchaseAlert(order: SuccessfulPurchaseAlertInput): string {
+  return [
+    '✅ <b>Đã có khách hàng mua thành công</b>', '',
+    ...itemLines(order.items),
+    `💰 <b>Tổng tiền:</b> ${escapeHtml(order.total)}`,
+    '👤 <b>Khách hàng:</b> xxx',
+    `⏰ <b>Thời gian:</b> ${escapeHtml(formatter.format(order.paidAt))}`,
+  ].join('\n');
 }
 
 export function renderOwnerStuckOrderAlert(
@@ -81,6 +96,6 @@ export function renderOwnerTestAlert(): string {
   return [
     '✅ <b>KẾT NỐI CẢNH BÁO THÀNH CÔNG</b>',
     '',
-    'Bot sẽ gửi vào chat này khi có đơn mới, đơn chờ quá lâu hoặc kho xuống thấp.',
+    'Bot chỉ báo mua thành công sau khi xác nhận thanh toán, thông tin khách được ẩn. Cảnh báo vận hành chỉ gửi vào chat riêng.',
   ].join('\n');
 }

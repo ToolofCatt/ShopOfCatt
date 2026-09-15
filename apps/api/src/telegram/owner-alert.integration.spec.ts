@@ -1,6 +1,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient, type Order, type OrderStatus, type PaymentStatus } from '@prisma/client';
+import { FulfillmentService } from '../orders/fulfillment.service';
 import {
   afterAll,
   afterEach,
@@ -63,6 +64,14 @@ let service: TelegramService;
 let variantId = '';
 let newOrderId = '';
 let stuckOrderId = '';
+const config = {
+  enabled: true, token: 'token-test', sendAnnouncement: true, stockAlertsEnabled: true,
+  greeting: '', ownerChatId: '-1001234567890', ownerOrderAlertsEnabled: true,
+  ownerStuckAlertsEnabled: true, ownerStuckMinutes: 5,
+  ownerLowStockAlertsEnabled: true, ownerLowStockThreshold: 3,
+};
+let makeOrder: (code: string, createdAt: Date, isStuck: boolean,
+  overrides?: { status?: OrderStatus; paidAt?: Date; paymentStatus?: PaymentStatus; mode?: string }) => Promise<Order>;
 
 beforeAll(async () => {
   const probe = newClient('postgres');
@@ -89,19 +98,7 @@ beforeAll(async () => {
   await applyMigrations(prisma);
 
   const settings = {
-    getTelegramConfig: async () => ({
-      enabled: true,
-      token: 'token-test',
-      sendAnnouncement: true,
-      stockAlertsEnabled: true,
-      greeting: '',
-      ownerChatId: '-1001234567890',
-      ownerOrderAlertsEnabled: true,
-      ownerStuckAlertsEnabled: true,
-      ownerStuckMinutes: 5,
-      ownerLowStockAlertsEnabled: true,
-      ownerLowStockThreshold: 3,
-    }),
+    getTelegramConfig: async () => config,
   } as unknown as SettingsService;
   service = new TelegramService(
     settings,
@@ -118,9 +115,9 @@ beforeAll(async () => {
   const user = await prisma.user.create({
     data: {
       code: 810001,
-      email: null,
+      email: 'private-customer@example.test',
       passwordHash: 'x',
-      telegramName: 'Khách test',
+      telegramName: 'Private Customer (@private_customer)',
       telegramChatId: '810001',
     },
   });
@@ -142,12 +139,13 @@ beforeAll(async () => {
     data: { variantId, content: 'KEY-LOW-STOCK', status: 'AVAILABLE' },
   });
 
-  const makeOrder = async (code: string, createdAt: Date, isStuck: boolean) => {
+  makeOrder = async (code, createdAt, isStuck, overrides = {}) => {
     return prisma.order.create({
       data: {
         code,
         userId: user.id,
-        status: 'PENDING',
+        status: overrides.status ?? 'PENDING',
+        paidAt: overrides.paidAt,
         subtotalAmount: new Prisma.Decimal(4),
         totalAmount: new Prisma.Decimal(4),
         createdAt,
@@ -166,8 +164,8 @@ beforeAll(async () => {
           create: {
             merchantTradeNo: `MT-${code}`,
             amount: new Prisma.Decimal(4),
-            mode: 'SEPAY',
-            status: 'PENDING',
+            mode: overrides.mode ?? 'SEPAY',
+            status: overrides.paymentStatus ?? 'PENDING',
             vndAmount: new Prisma.Decimal(100_000),
           },
         },
@@ -198,7 +196,7 @@ afterAll(async () => {
 }, 60_000);
 
 describe('Telegram owner alerts (PostgreSQL thật)', () => {
-  it('gửi đơn mới, đơn kẹt và kho thấp đúng một lần', async (ctx) => {
+  it('không báo đơn chờ; chỉ gửi tin ẩn danh sau thanh toán và không lộ vận hành vào nhóm', async (ctx) => {
     if (!reachable) {
       ctx.skip();
       return;
@@ -224,13 +222,15 @@ describe('Telegram owner alerts (PostgreSQL thật)', () => {
       service as unknown as { notifyOwnerAlerts(token: string): Promise<void> }
     ).notifyOwnerAlerts('token-test');
 
-    expect(payloads).toHaveLength(3);
-    const messages = payloads.map((payload) => String(payload.text));
-    expect(messages.some((text) => text.includes('ĐƠN HÀNG MỚI'))).toBe(true);
-    expect(messages.some((text) => text.includes('ĐƠN CHỜ QUÁ LÂU'))).toBe(
-      true,
-    );
-    expect(messages.some((text) => text.includes('KHO SẮP HẾT'))).toBe(true);
+    expect(payloads).toHaveLength(0);
+    expect((await prisma.order.findUniqueOrThrow({where:{id:newOrderId}})).telegramOwnerNewOrderNotifiedAt).toBeNull();
+    const fulfillment = new FulfillmentService(prisma as unknown as PrismaService);
+    await fulfillment.markPaidAndDeliver({orderId:newOrderId});
+    await (service as unknown as { notifyOwnerAlerts(token: string): Promise<void> }).notifyOwnerAlerts('token-test');
+    expect(payloads).toHaveLength(1);
+    expect(String(payloads[0].text)).toContain('Đã có khách hàng mua thành công');
+    expect(String(payloads[0].text)).toContain('xxx');
+    for(const privateValue of ['private-customer','@private_customer','Private Customer','DH-NEW001'])expect(String(payloads[0].text)).not.toContain(privateValue);
     expect(
       payloads.every((payload) => payload.chat_id === -1001234567890),
     ).toBe(true);
@@ -241,13 +241,45 @@ describe('Telegram owner alerts (PostgreSQL thật)', () => {
       prisma.productVariant.findUniqueOrThrow({ where: { id: variantId } }),
     ]);
     expect(newOrder.telegramOwnerNewOrderNotifiedAt).not.toBeNull();
-    expect(stuckOrder.telegramOwnerStuckNotifiedAt).not.toBeNull();
-    expect(variant.telegramOwnerLowStockNotifiedAt).not.toBeNull();
+    expect(stuckOrder.telegramOwnerStuckNotifiedAt).toBeNull();
+    expect(variant.telegramOwnerLowStockNotifiedAt).toBeNull();
 
     payloads.length = 0;
     await (
       service as unknown as { notifyOwnerAlerts(token: string): Promise<void> }
     ).notifyOwnerAlerts('token-test');
     expect(payloads).toHaveLength(0);
+    config.ownerChatId='123456789';
+    await (service as unknown as { notifyOwnerAlerts(token: string): Promise<void> }).notifyOwnerAlerts('token-test');
+    expect(payloads).toHaveLength(2);
+    expect(payloads.every(p=>p.chat_id===123456789)).toBe(true);
+    expect(payloads.some(p=>String(p.text).includes('ĐƠN CHỜ QUÁ LÂU'))).toBe(true);
+    expect(payloads.some(p=>String(p.text).includes('HẾT HÀNG'))).toBe(true);
+    config.ownerStuckAlertsEnabled=false;
+    config.ownerLowStockAlertsEnabled=false;
   }, 30_000);
+
+  it('bỏ qua PENDING, EXPIRED, CANCELLED, mock, payment chưa SUCCESS và thiếu paidAt',async ctx=>{
+    if(!reachable)return ctx.skip();
+    const now=new Date();
+    for(const status of ['PENDING','EXPIRED','CANCELLED'] as const)await makeOrder(`DH-${status}`,now,false,{status,paymentStatus:'SUCCESS',paidAt:now});
+    await makeOrder('DH-MOCK',now,false,{status:'DELIVERED',paidAt:now,paymentStatus:'SUCCESS',mode:'MOCK'});
+    await makeOrder('DH-NOPAY',now,false,{status:'PAID',paidAt:now});
+    await makeOrder('DH-NOTIME',now,false,{status:'DELIVERED',paymentStatus:'SUCCESS'});
+    const fetch=vi.fn();vi.stubGlobal('fetch',fetch);
+    await (service as unknown as { notifyOwnerAlerts(token: string): Promise<void> }).notifyOwnerAlerts('token-test');
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('PAID bằng số dư được báo một lần; lỗi gửi vẫn giữ marker cho lượt retry',async ctx=>{
+    if(!reachable)return ctx.skip();
+    const order=await makeOrder('DH-BALANCE',new Date(),false,{status:'PAID',paidAt:new Date(),paymentStatus:'SUCCESS',mode:'BALANCE'});
+    const fetch=vi.fn().mockRejectedValueOnce(new Error('network')).mockResolvedValue(new Response(JSON.stringify({ok:true,result:{message_id:3}})));
+    vi.stubGlobal('fetch',fetch);
+    const run=()=> (service as unknown as { notifyOwnerAlerts(token: string): Promise<void> }).notifyOwnerAlerts('token-test');
+    await expect(run()).rejects.toThrow('network');
+    expect((await prisma.order.findUniqueOrThrow({where:{id:order.id}})).telegramOwnerNewOrderNotifiedAt).toBeNull();
+    await run();await run();expect(fetch).toHaveBeenCalledTimes(2);
+    expect((await prisma.order.findUniqueOrThrow({where:{id:order.id}})).telegramOwnerNewOrderNotifiedAt).not.toBeNull();
+  });
 });
