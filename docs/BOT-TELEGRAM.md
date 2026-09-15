@@ -1,5 +1,30 @@
 # Bot Telegram bán hàng — thiết kế và lộ trình
 
+## Bắt buộc tham gia kênh
+
+Trong `/admin/telegram`, nhập ID kênh (ID rút gọn, `-100…` hoặc `@username`)
+và link tham gia `https://t.me/...`. Bấm **Kiểm tra kênh** để xác minh bot có
+quyền quản trị; kênh public tự điền link khi để trống. Kênh riêng cần link mời
+đúng kênh, còn hiệu lực, do chủ shop cung cấp. Sau đó bật **Bắt buộc tham gia kênh**
+và Lưu. Mặc định tắt cả khi cài mới lẫn nâng cấp.
+
+`/start` và mọi thao tác khách mua đều kiểm `getChatMember`: chưa vào kênh thấy
+nút mở kênh + **Tôi đã tham gia**. Nút xác nhận kiểm lại Telegram thật; nhấp link
+hoặc gửi yêu cầu gia nhập đang chờ duyệt chưa được tính là thành viên. Sau khi
+xác nhận, khách mới chọn VI/EN/ZH; khách cũ trở lại menu theo ngôn ngữ đã lưu.
+Kết quả thành viên không cache: khách rời kênh sẽ bị chặn ở thao tác tiếp theo.
+
+Lỗi mạng hoặc bot mất quyền kiểm tra sẽ giữ chặn và báo thử lại. Chủ shop vẫn
+quản trị qua `/admin` với phân quyền riêng và có thể tắt công tắc trên web.
+Outbox giao key/cộng ví cho giao dịch đã hoàn tất vẫn hoạt động. Cổng tham gia
+không ảnh hưởng luồng mua trên website, không đổi tiền hoặc giữ kho.
+
+Simulator dùng cùng renderer, mở link thật nhưng nút xác nhận chỉ mô phỏng
+đã tham gia; không gửi tin Telegram, tạo tài khoản hay ghi quyền truy cập thật.
+
+Theo [Telegram Bot API](https://core.telegram.org/bots/api#getchatmember), bot
+phải là quản trị viên để việc kiểm tra thành viên khác được đảm bảo hoạt động.
+
 Thông báo mua hàng chỉ gửi sau khi đơn PAID/DELIVERED có paidAt và payment SUCCESS
 (không áp dụng MOCK). Tin ghi “Đã có khách hàng mua thành công”. Email giữ tối đa
 5 ký tự đầu trước @; toàn bộ phần còn lại (kể cả miền) thay bằng `x`, giữ độ dài.

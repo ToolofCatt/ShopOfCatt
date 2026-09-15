@@ -43,11 +43,10 @@ export interface TgUpdate {
   callback_query?: TgCallbackQuery;
 }
 
-export interface TgInlineKeyboardButton {
-  text: string;
-  /** Tối đa 64 BYTE theo Bot API — xem encodeCallback ở catalog-view.ts. */
-  callback_data: string;
-}
+export type TgInlineKeyboardButton = { text: string } & (
+  | { callback_data: string; url?: never }
+  | { url: string; callback_data?: never }
+);
 
 /** Mảng hàng nút — mỗi hàng một mảng nút. */
 export type TgInlineKeyboard = TgInlineKeyboardButton[][];

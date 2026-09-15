@@ -18,6 +18,8 @@ import { ProductsService } from '../products/products.service';
 import { SettingsService } from '../settings/settings.service';
 import { StorefrontService } from '../storefront/storefront.service';
 import { animateEmoji } from './animated-emoji';
+import { checkChannelMembership } from './membership-access';
+import { membershipText, renderMembershipGate } from './membership-view';
 import {
   encodeCallback,
   parseCallback,
@@ -632,6 +634,14 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const dict = botDict(lang);
     const text = rawText;
     try {
+      const cfg = await this.settings.getTelegramConfig();
+      const membership = await checkChannelMembership(token, cfg, message.from?.id ?? 0, stop);
+      if (membership !== 'allowed') {
+        const view = renderMembershipGate(lang, cfg.membershipJoinUrl);
+        if (membership === 'unavailable') view.text += '\n\n' + membershipText(lang).error;
+        await this.sendHtml(token, chatId, view.text, view.keyboard, stop);
+        return;
+      }
       // Nút menu cố định gửi TEXT của nó — so với nhãn của cả ba ngôn ngữ.
       const menu: MenuAction | null = text.startsWith('/orders')
         ? 'orders'
@@ -800,6 +810,16 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     };
 
     try {
+      const cfg = await this.settings.getTelegramConfig();
+      const membership = await checkChannelMembership(token, cfg, cb.from.id, stop);
+      if (membership !== 'allowed') {
+        const t = membershipText(lang);
+        await answer({ text: membership === 'join' ? t.pending : t.error, show_alert: true });
+        const view = renderMembershipGate(lang, cfg.membershipJoinUrl);
+        if (membership === 'unavailable') view.text += '\n\n' + t.error;
+        await edit(view);
+        return;
+      }
       await this.runCallback(token, parsed, {
         callbackId: cb.id,
         chatId,
@@ -935,6 +955,17 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     const dict = botDict(lang);
 
     switch (parsed.kind) {
+      case 'membershipCheck': {
+        await answer();
+        const user = await this.users.findByChat(chatId);
+        if (!user?.telegramLangChosen) {
+          await edit(renderLanguageMenu(lang));
+        } else {
+          await edit({ text: membershipText(lang).success, keyboard: [] });
+          await this.sendStartMessages(token, chatId, ctx.from, lang, true, stop);
+        }
+        return;
+      }
       case 'hub': {
         const hub = await this.hubFor(chatId, ctx.from, lang);
         await answer();

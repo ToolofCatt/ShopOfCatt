@@ -134,7 +134,7 @@ describe('renderQuantityPicker', () => {
     const item = variant({ availableStock: 5 });
     const view = renderQuantityPicker(product(item), item, 'vi', RATES, 2);
     const buttons = view.keyboard.flat();
-    expect(buttons.filter((button) => button.callback_data.startsWith('q:')).map((button) => button.callback_data))
+    expect(buttons.filter((button) => button.callback_data?.startsWith('q:')).map((button) => button.callback_data))
       .toEqual(['q:v1:1', 'q:v1:2', 'q:v1:3', 'q:v1:4', 'q:v1:5']);
     expect(buttons.find((button) => button.callback_data === 'q:v1:4')?.text)
       .toBe('4 sản phẩm • 400k');
@@ -146,7 +146,7 @@ describe('renderQuantityPicker', () => {
     const item = variant({ availableStock: 20 });
     const view = renderQuantityPicker(product(item), item, 'vi', RATES, 1);
     const data = view.keyboard.flat().map((button) => button.callback_data);
-    expect(data.filter((value) => value.startsWith('q:'))).toHaveLength(10);
+    expect(data.filter((value) => value?.startsWith('q:'))).toHaveLength(10);
     expect(data).toContain('q:v1:10');
     expect(data).not.toContain('q:v1:11');
     expect(data).toContain('s');
@@ -155,7 +155,7 @@ describe('renderQuantityPicker', () => {
   it('tồn 0 không có nút tạo đơn', () => {
     const item = variant({ availableStock: 0 });
     const view = renderQuantityPicker(product(item), item, 'vi', RATES, 1);
-    expect(view.keyboard.flat().some((button) => button.callback_data.startsWith('q:')))
+    expect(view.keyboard.flat().some((button) => button.callback_data?.startsWith('q:')))
       .toBe(false);
   });
 });

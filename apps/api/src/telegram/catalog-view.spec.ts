@@ -230,8 +230,8 @@ describe('renderStorefront — màn cửa hàng', () => {
     const view = renderStorefront(nhieu, 'vi', RATES);
     // 3 sản phẩm / 3 danh mục vẫn ra danh sách phẳng — học Piggy/sahasa.
     const data = view.keyboard.flat().map((b) => b.callback_data);
-    expect(data.filter((v) => v.startsWith('p:'))).toHaveLength(3);
-    expect(data.filter((v) => v.startsWith('ct:'))).toHaveLength(0);
+    expect(data.filter((v) => v?.startsWith('p:'))).toHaveLength(3);
+    expect(data.filter((v) => v?.startsWith('ct:'))).toHaveLength(0);
   });
 
   it('NHIỀU hàng + nhiều danh mục → 3 CỘT chữ HOA không đếm (kiểu Panda)', () => {
@@ -249,7 +249,7 @@ describe('renderStorefront — màn cửa hàng', () => {
     // 3 cột: hàng đầu phải có 3 nút danh mục
     expect(view.keyboard[0]).toHaveLength(3);
     const data = view.keyboard.flat().map((b) => b.callback_data);
-    expect(data.filter((v) => v.startsWith('ct:'))).toHaveLength(3);
+    expect(data.filter((v) => v?.startsWith('ct:'))).toHaveLength(3);
   });
 
   it('danh sách rỗng → câu báo trống + nút về hub', () => {
@@ -346,7 +346,7 @@ describe('renderProductDetail', () => {
     // Nút Mua: CHỈ loại còn hàng (Retail) — OEM hết hàng không chào nút hỏng.
     const data = keyboard.flat().map((b) => b.callback_data);
     expect(data).toContain('b:v1:ckqq1234567890abcdefghijk:3');
-    expect(data.filter((d) => d.startsWith('b:'))).toHaveLength(1);
+    expect(data.filter((d) => d?.startsWith('b:'))).toHaveLength(1);
     // Nút quay lại luôn ở hàng cuối.
     expect(keyboard[keyboard.length - 1][0].callback_data).toBe('c:3');
   });
@@ -361,7 +361,7 @@ describe('renderProductDetail', () => {
     expect(text.length).toBeLessThan(4096);
     expect(text).toContain('…');
     expect(text).toContain('&lt;chi tiết&gt;');
-    expect(keyboard.flat().some((b) => b.callback_data.startsWith('pd:'))).toBe(true);
+    expect(keyboard.flat().some((b) => b.callback_data?.startsWith('pd:'))).toBe(true);
 
     const full = renderProductDescription(p, 'vi', 1);
     expect(full.text.length).toBeLessThan(4096);
@@ -376,7 +376,7 @@ describe('renderProductDetail', () => {
     });
     const detail = renderProductDetail(p, 'vi', RATES, [], 1);
     expect(detail.text.length).toBeLessThan(4096);
-    expect(detail.keyboard.flat().some((button) => button.callback_data.startsWith('pd:'))).toBe(
+    expect(detail.keyboard.flat().some((button) => button.callback_data?.startsWith('pd:'))).toBe(
       true,
     );
     expect(renderProductDescription(p, 'vi', 1).text.length).toBeLessThan(4096);
@@ -398,7 +398,7 @@ describe('renderProductDetail', () => {
     const { text, keyboard } = renderProductDetail(p, 'vi', RATES, [], 1);
     expect(text).toContain('Sản phẩm hiện đang hết hàng');
     expect(text).not.toContain('Chọn loại muốn mua');
-    expect(keyboard.flat().some((button) => button.callback_data.startsWith('b:'))).toBe(false);
+    expect(keyboard.flat().some((button) => button.callback_data?.startsWith('b:'))).toBe(false);
     expect(keyboard.flat().some((button) => button.callback_data === 's')).toBe(true);
   });
 });

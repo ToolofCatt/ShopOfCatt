@@ -36,6 +36,11 @@ export default function AdminTelegramPage() {
   const [tokenInput, setTokenInput] = useState('');
   const [sendAnnouncement, setSendAnnouncement] = useState(true);
   const [stockAlertsEnabled, setStockAlertsEnabled] = useState(true);
+  const [membershipRequired, setMembershipRequired] = useState(false);
+  const [membershipChatId, setMembershipChatId] = useState('');
+  const [membershipJoinUrl, setMembershipJoinUrl] = useState('');
+  const [checkingMembership, setCheckingMembership] = useState(false);
+  const [membershipResult, setMembershipResult] = useState<string | null>(null);
   const [ownerChatId, setOwnerChatId] = useState('');
   const [ownerOrderAlerts, setOwnerOrderAlerts] = useState(true);
   const [ownerStuckAlerts, setOwnerStuckAlerts] = useState(true);
@@ -57,6 +62,10 @@ export default function AdminTelegramPage() {
     setEnabled(next.telegramBotEnabled);
     setSendAnnouncement(next.telegramSendAnnouncement);
     setStockAlertsEnabled(next.telegramStockAlertsEnabled);
+    setMembershipRequired(next.telegramMembershipRequired);
+    setMembershipChatId(next.telegramMembershipChatId);
+    setMembershipJoinUrl(next.telegramMembershipJoinUrl);
+    setMembershipResult(null);
     setOwnerChatId(next.telegramOwnerChatId);
     setOwnerOrderAlerts(next.telegramOwnerOrderAlertsEnabled);
     setOwnerStuckAlerts(next.telegramOwnerStuckAlertsEnabled);
@@ -114,6 +123,9 @@ export default function AdminTelegramPage() {
           telegramBotEnabled: enabled,
           telegramSendAnnouncement: sendAnnouncement,
           telegramStockAlertsEnabled: stockAlertsEnabled,
+          telegramMembershipRequired: membershipRequired,
+          telegramMembershipChatId: membershipChatId.trim(),
+          telegramMembershipJoinUrl: membershipJoinUrl.trim(),
           telegramOwnerChatId: ownerChatId.trim(),
           telegramOwnerOrderAlertsEnabled: ownerOrderAlerts,
           telegramOwnerStuckAlertsEnabled: ownerStuckAlerts,
@@ -154,6 +166,31 @@ export default function AdminTelegramPage() {
       setFormError(apiErrorMessage(err, t.common.connectionError));
     } finally {
       setTestingOwner(false);
+    }
+  };
+
+  const checkMembership = async () => {
+    if (!token || checkingMembership) return;
+    setCheckingMembership(true);
+    setMembershipResult(null);
+    setFormError(null);
+    try {
+      const result = await apiFetch<{ chatId: string; joinUrl: string; title: string }>('/admin/telegram/membership-check', {
+        method: 'POST', token,
+        body: {
+          telegramMembershipChatId: membershipChatId.trim(),
+          telegramMembershipJoinUrl: membershipJoinUrl.trim(),
+          ...(tokenInput.trim() ? { telegramBotToken: tokenInput.trim() } : {}),
+        },
+      });
+      setMembershipChatId(result.chatId);
+      setMembershipJoinUrl(result.joinUrl);
+      setMembershipResult(t.admin.telegramMembershipVerified + ' ' + result.title);
+      setSaved(false);
+    } catch (err) {
+      setFormError(apiErrorMessage(err, t.common.connectionError));
+    } finally {
+      setCheckingMembership(false);
     }
   };
 
@@ -293,6 +330,31 @@ export default function AdminTelegramPage() {
             label={t.admin.telegramSendAnnouncementLabel}
             hint={t.admin.telegramSendAnnouncementHint}
           />
+
+          <div className="space-y-4 border-t border-neutral-200 pt-5">
+            <ToggleRow
+              id="telegram-membership-required"
+              checked={membershipRequired}
+              onChange={(checked) => { setMembershipRequired(checked); setSaved(false); }}
+              label={t.admin.telegramMembershipTitle}
+              hint={t.admin.telegramMembershipHint}
+            />
+            <Field htmlFor="telegram-membership-chat" label={t.admin.telegramMembershipChatLabel} hint={t.admin.telegramMembershipChatHint}>
+              <Input id="telegram-membership-chat" value={membershipChatId} maxLength={40} autoComplete="off"
+                placeholder="-1001234567890"
+                onChange={(event) => { setMembershipChatId(event.target.value); setMembershipResult(null); setSaved(false); }} />
+            </Field>
+            <Field htmlFor="telegram-membership-link" label={t.admin.telegramMembershipLinkLabel} hint={t.admin.telegramMembershipLinkHint}>
+              <Input id="telegram-membership-link" value={membershipJoinUrl} maxLength={200} autoComplete="off"
+                placeholder="https://t.me/your_channel"
+                onChange={(event) => { setMembershipJoinUrl(event.target.value); setMembershipResult(null); setSaved(false); }} />
+            </Field>
+            <Button type="button" variant="outline" disabled={checkingMembership || !membershipChatId.trim()}
+              onClick={() => void checkMembership()}>
+              {checkingMembership ? t.admin.telegramMembershipChecking : t.admin.telegramMembershipCheck}
+            </Button>
+            {membershipResult && <p role="status" className="text-sm text-emerald-700">{membershipResult}</p>}
+          </div>
 
           <ToggleRow
             id="telegram-stock-alerts"

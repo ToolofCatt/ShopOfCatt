@@ -121,6 +121,7 @@ function fitEscaped(raw: string, budget: number): string {
 // ---------------------------------------------------------------- callback
 
 export type BotCallback =
+  | { kind: 'membershipCheck' }
   | { kind: 'hub' }
   | { kind: 'searchPrompt' }
   | { kind: 'catalog'; page: number }
@@ -167,6 +168,8 @@ const SHORT_TO_METHOD: Record<string, PaymentMethod> = Object.fromEntries(
 
 export function encodeCallback(cb: BotCallback): string {
   switch (cb.kind) {
+    case 'membershipCheck':
+      return 'membership:check';
     case 'hub':
       return 'h';
     case 'searchPrompt':
@@ -229,6 +232,7 @@ const ID_RE = '([A-Za-z0-9_-]{1,48})';
  * chỉ có thể là callback tự chế.
  */
 export function parseCallback(data: string | undefined): BotCallback | null {
+  if (data === 'membership:check') return { kind: 'membershipCheck' };
   if (!data || Buffer.byteLength(data, 'utf8') > CALLBACK_MAX_BYTES) return null;
   let m: RegExpExecArray | null;
   if (data === 'h') return { kind: 'hub' };

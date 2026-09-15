@@ -349,6 +349,9 @@ export interface AdminStoreSettingDto {
   telegramOwnerLowStockThreshold: number;
   /** Lời chào tuỳ chỉnh của bot; rỗng = câu mặc định theo ngôn ngữ khách. */
   telegramGreeting: string;
+  telegramMembershipRequired: boolean;
+  telegramMembershipChatId: string;
+  telegramMembershipJoinUrl: string;
   /** Các kênh liên hệ hiển thị ở khối "Quên mật khẩu". */
   supportChannels: SupportChannelDto[];
   /** Lời nhắn tùy chỉnh; rỗng = dùng câu mặc định theo ngôn ngữ. */
@@ -368,6 +371,7 @@ export const TELEGRAM_OWNER_LOW_STOCK_MAX = 10_000;
 export interface TelegramPreviewButton {
   text: string;
   callbackData: string;
+  url?: string;
 }
 
 /** Một tin bot đã dựng sẵn: text là HTML Telegram đã escape từ dữ liệu CSDL. */

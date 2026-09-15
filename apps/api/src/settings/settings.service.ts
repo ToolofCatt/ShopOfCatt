@@ -19,6 +19,7 @@ import { K } from '../i18n/messages';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
 import { UpdateTelegramSettingsDto } from './dto/update-telegram-settings.dto';
+import { inspectMembershipChannel, normalizeChannelId, validJoinUrl } from '../telegram/membership-access';
 
 /** Bản ghi cấu hình duy nhất. */
 const SETTING_ID = 'main';
@@ -241,6 +242,9 @@ export class SettingsService {
     ownerStuckMinutes: number;
     ownerLowStockAlertsEnabled: boolean;
     ownerLowStockThreshold: number;
+    membershipRequired: boolean;
+    membershipChatId: string;
+    membershipJoinUrl: string;
   }> {
     const setting = await this.getSetting();
     return {
@@ -255,6 +259,9 @@ export class SettingsService {
       ownerStuckMinutes: setting.telegramOwnerStuckMinutes,
       ownerLowStockAlertsEnabled: setting.telegramOwnerLowStockAlertsEnabled,
       ownerLowStockThreshold: setting.telegramOwnerLowStockThreshold,
+      membershipRequired: setting.telegramMembershipRequired,
+      membershipChatId: setting.telegramMembershipChatId,
+      membershipJoinUrl: setting.telegramMembershipJoinUrl,
     };
   }
 
@@ -310,10 +317,37 @@ export class SettingsService {
       throw new BadRequestException(K.adminTelegramTokenRequired);
     }
 
+    const membershipRequired = dto.telegramMembershipRequired ?? before.telegramMembershipRequired;
+    let membershipChatId = dto.telegramMembershipChatId?.trim() ?? before.telegramMembershipChatId;
+    let membershipJoinUrl = dto.telegramMembershipJoinUrl?.trim() ?? before.telegramMembershipJoinUrl;
+    try {
+      if (membershipChatId) membershipChatId = normalizeChannelId(membershipChatId);
+      if (membershipJoinUrl && !validJoinUrl(membershipJoinUrl)) throw new Error('INVALID_URL');
+    } catch {
+      throw new BadRequestException(K.adminTelegramMembershipInvalid);
+    }
+    // Chỉ kiểm kết nối khi bật hoặc đổi cấu hình liên quan. Tắt luôn thực hiện
+    // được dù Telegram đang lỗi, để chủ shop có đường mở lại bot cho khách.
+    if (membershipRequired && (!before.telegramMembershipRequired
+      || membershipChatId !== before.telegramMembershipChatId
+      || membershipJoinUrl !== before.telegramMembershipJoinUrl
+      || tokenSauKhiLuu !== before.telegramBotToken)) {
+      try {
+        const channel = await inspectMembershipChannel(tokenSauKhiLuu, membershipChatId, membershipJoinUrl);
+        membershipChatId = channel.chatId;
+        membershipJoinUrl = channel.joinUrl;
+      } catch {
+        throw new BadRequestException(K.adminTelegramMembershipUnavailable);
+      }
+    }
+
     const updated = await this.prisma.storeSetting.update({
       where: { id: SETTING_ID },
       data: {
         telegramBotEnabled: enabledNext,
+        telegramMembershipRequired: membershipRequired,
+        telegramMembershipChatId: membershipChatId,
+        telegramMembershipJoinUrl: membershipJoinUrl,
         // Không gửi = giữ token cũ — trang quản trị không bao giờ nhận được
         // token nên nó KHÔNG THỂ gửi ngược lên.
         telegramBotToken: token === undefined ? before.telegramBotToken : token,
@@ -358,6 +392,19 @@ export class SettingsService {
     );
 
     return toAdminDto(updated);
+  }
+
+  async checkTelegramMembership(dto: UpdateTelegramSettingsDto) {
+    const setting = await this.getSetting();
+    try {
+      return await inspectMembershipChannel(
+        dto.telegramBotToken?.trim() || setting.telegramBotToken,
+        dto.telegramMembershipChatId?.trim() ?? setting.telegramMembershipChatId,
+        dto.telegramMembershipJoinUrl?.trim() ?? setting.telegramMembershipJoinUrl,
+      );
+    } catch {
+      throw new BadRequestException(K.adminTelegramMembershipUnavailable);
+    }
   }
 
   /**
@@ -624,6 +671,9 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
     telegramOwnerLowStockAlertsEnabled: setting.telegramOwnerLowStockAlertsEnabled,
     telegramOwnerLowStockThreshold: setting.telegramOwnerLowStockThreshold,
     telegramGreeting: setting.telegramGreeting,
+    telegramMembershipRequired: setting.telegramMembershipRequired,
+    telegramMembershipChatId: setting.telegramMembershipChatId,
+    telegramMembershipJoinUrl: setting.telegramMembershipJoinUrl,
     aiProvider: normalizeProvider(setting.aiProvider),
     aiBaseUrl: setting.aiBaseUrl,
     aiModel: setting.aiModel,
@@ -667,6 +717,9 @@ function toSnapshot(setting: StoreSetting): Record<string, unknown> {
     telegramOwnerLowStockAlertsEnabled: setting.telegramOwnerLowStockAlertsEnabled,
     telegramOwnerLowStockThreshold: setting.telegramOwnerLowStockThreshold,
     telegramGreeting: setting.telegramGreeting,
+    telegramMembershipRequired: setting.telegramMembershipRequired,
+    telegramMembershipChatId: setting.telegramMembershipChatId,
+    telegramMembershipJoinUrl: setting.telegramMembershipJoinUrl,
     aiProvider: setting.aiProvider,
     aiBaseUrl: setting.aiBaseUrl,
     aiModel: setting.aiModel,

@@ -87,12 +87,14 @@ export function TelegramSimulator({
   const [error, setError] = useState<string | null>(null);
 
   const nextId = useRef(1);
+  const membershipPassed = useRef(false);
+  useEffect(() => { membershipPassed.current = false; }, [refreshKey]);
   const scroller = useRef<HTMLDivElement | null>(null);
 
   const fetchPreview = useCallback(
     async (previewLang: PreviewLang, page: number, text?: string): Promise<TelegramPreviewDto> => {
       return apiFetch<TelegramPreviewDto>(
-        `/admin/telegram/preview?lang=${previewLang}&page=${page}${text ? `&text=${encodeURIComponent(text)}` : ''}`,
+        `/admin/telegram/preview?lang=${previewLang}&page=${page}${text ? `&text=${encodeURIComponent(text)}` : ''}${membershipPassed.current ? '&membershipPassed=1' : ''}`,
         { token },
       );
     },
@@ -163,9 +165,13 @@ export function TelegramSimulator({
     const message = messages.find((m) => m.id === messageId);
     if (!message || message.from !== 'bot' || message.kind !== 'screens') return;
 
+    if (callbackData === 'membership:check') membershipPassed.current = true;
+
     const language = /^lg:(vi|en|zh)$/.exec(callbackData);
     if (language) {
-      setLang(language[1] as PreviewLang);
+      const selected = language[1] as PreviewLang;
+      if (selected === lang) void sendCustomer('/start', selected);
+      else setLang(selected);
       return;
     }
 
@@ -285,6 +291,7 @@ export function TelegramSimulator({
           <button
             type="button"
             onClick={() => {
+              membershipPassed.current = false;
               setMessages([]);
               void sendCustomer('/start', lang);
             }}
@@ -341,7 +348,12 @@ export function TelegramSimulator({
                   <div className="space-y-1">
                     {noiDung.keyboard.map((row, rowIndex) => (
                       <div key={rowIndex} className="flex gap-1">
-                        {row.map((button) => (
+                        {row.map((button) => button.url ? (
+                          <a key={button.url} href={button.url} target="_blank" rel="noopener noreferrer"
+                            className="min-w-0 flex-1 rounded-lg bg-white/10 px-3 py-1.5 text-center text-[12.5px] font-medium text-white/90 hover:bg-white/20">
+                            {button.text} ↗
+                          </a>
+                        ) : (
                           <button
                             key={button.callbackData}
                             type="button"

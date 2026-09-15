@@ -26,6 +26,20 @@ import { K } from '../../i18n/messages';
 export class UpdateTelegramSettingsDto {
   @IsOptional()
   @IsBoolean({ message: K.adminSettingsFlagInvalid })
+  telegramMembershipRequired?: boolean;
+
+  @IsOptional()
+  @IsString({ message: K.adminTelegramMembershipInvalid })
+  @MaxLength(40, { message: K.adminTelegramMembershipInvalid })
+  telegramMembershipChatId?: string;
+
+  @IsOptional()
+  @IsString({ message: K.adminTelegramMembershipInvalid })
+  @MaxLength(200, { message: K.adminTelegramMembershipInvalid })
+  telegramMembershipJoinUrl?: string;
+
+  @IsOptional()
+  @IsBoolean({ message: K.adminSettingsFlagInvalid })
   telegramBotEnabled?: boolean;
 
   /** Ba trạng thái như khoá AI: không gửi = giữ nguyên, rỗng = xoá, chuỗi = đặt mới. */

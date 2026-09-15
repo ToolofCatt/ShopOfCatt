@@ -671,6 +671,10 @@ model StoreSetting {
   /// Lời chào tuỳ chỉnh của bot. Rỗng = câu mặc định theo ngôn ngữ khách;
   /// có nội dung thì dùng NGUYÊN VĂN cho mọi ngôn ngữ (chủ shop tự cân nhắc).
   telegramGreeting String @default("")
+  /// Chặn chức năng bán hàng trước khi khách tham gia kênh; không chặn outbox giao key.
+  telegramMembershipRequired Boolean @default(false)
+  telegramMembershipChatId String @default("")
+  telegramMembershipJoinUrl String @default("")
 
   /// Danh sách kênh liên hệ hỗ trợ — mảng {label, value, url?}, admin tự sửa.
   /// Hiện ở khối "Quên mật khẩu" trang đăng nhập.

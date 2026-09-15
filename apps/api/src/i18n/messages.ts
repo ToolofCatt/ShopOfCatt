@@ -8,6 +8,8 @@ type Template = string | ((params: MessageParams) => string);
  * người dùng (theo header Accept-Language) trước khi trả về.
  */
 export const K = {
+  adminTelegramMembershipInvalid: 'admin.telegram_membership_invalid',
+  adminTelegramMembershipUnavailable: 'admin.telegram_membership_unavailable',
   // --- auth ---
   emailInvalid: 'auth.email_invalid',
   passwordInvalid: 'auth.password_invalid',
@@ -236,6 +238,16 @@ export const K = {
 } as const;
 
 const MESSAGES: Record<string, Record<Locale, Template>> = {
+  [K.adminTelegramMembershipInvalid]: {
+    vi: 'Nhập ID kênh hợp lệ và link https://t.me/ dẫn tới đúng kênh.',
+    en: 'Enter a valid channel ID and an https://t.me/ link to that channel.',
+    zh: '请输入有效的频道 ID 和该频道的 https://t.me/ 链接。',
+  },
+  [K.adminTelegramMembershipUnavailable]: {
+    vi: 'Chưa xác minh được kênh. Thêm bot làm quản trị viên, kiểm tra ID/link rồi thử lại.',
+    en: 'Could not verify the channel. Add the bot as an administrator, check the ID/link and retry.',
+    zh: '无法验证频道。请将机器人设为管理员，检查 ID 和链接后重试。',
+  },
   // --- auth ---
   [K.emailInvalid]: {
     vi: 'Email không hợp lệ',

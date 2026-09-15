@@ -54,6 +54,7 @@ import {
 } from './order-view';
 import { botDict } from './messages';
 import { TelegramService } from './telegram.service';
+import { renderMembershipGate, JOIN_CALLBACK } from './membership-view';
 import { renderStockAlert } from './stock-alert-view';
 import { renderSuccessfulPurchaseAlert, renderOwnerLowStockAlert } from './owner-alert-view';
 import type { TgInlineKeyboard } from './telegram-api';
@@ -71,6 +72,10 @@ import {
 } from './wallet-view';
 
 class TelegramPreviewQueryDto {
+  /** Chỉ dành cho simulator, không cấp quyền hay ghi trạng thái khách thật. */
+  @IsOptional()
+  @IsIn(['1'])
+  membershipPassed?: string;
   @IsOptional()
   @IsIn(LOCALES)
   lang?: Locale;
@@ -92,7 +97,8 @@ function toPreviewKeyboard(keyboard: TgInlineKeyboard) {
   return keyboard.map((row) =>
     row.map((button) => ({
       text: button.text,
-      callbackData: button.callback_data,
+      callbackData: button.callback_data ?? '',
+      ...(button.url ? { url: button.url } : {}),
     })),
   );
 }
@@ -224,6 +230,12 @@ export class TelegramAdminController {
     };
   }
 
+  @Post('membership-check')
+  @RateLimit({ limit: 6, windowMs: 60_000, name: 'admin:telegram-membership-check' })
+  checkMembership(@Body() dto: UpdateTelegramSettingsDto) {
+    return this.settings.checkTelegramMembership(dto);
+  }
+
   /** Cập nhật riêng cấu hình bot — xem chú thích ở UpdateTelegramSettingsDto. */
   @Put('settings')
   updateSettings(
@@ -274,6 +286,8 @@ export class TelegramAdminController {
 
     const storefront = await this.storefront.getPublic();
     const hub = renderHub('Khách', 0, lang, rates, cfg.greeting, storefront.document.brand.name);
+    dua('membership', renderMembershipGate(lang, cfg.membershipJoinUrl));
+    dua(JOIN_CALLBACK, renderLanguageMenu(lang));
     dua('h', hub);
     dua('start', { text: hub.text, keyboard: [] });
     dua('f', {
@@ -548,11 +562,12 @@ export class TelegramAdminController {
       }
     }
 
+    const gated = cfg.membershipRequired && query.membershipPassed !== '1';
     return {
-      announcement: cfg.sendAnnouncement ? renderAnnouncement(announcement, lang) : null,
-      entry,
+      announcement: cfg.sendAnnouncement && !gated ? renderAnnouncement(announcement, lang) : null,
+      entry: gated ? 'membership' : entry,
       screens,
-      replyKeyboard: mainMenuKeyboard(lang).keyboard.map((row) =>
+      replyKeyboard: gated ? [] : mainMenuKeyboard(lang).keyboard.map((row) =>
         row.map((button) => button.text),
       ),
     };
