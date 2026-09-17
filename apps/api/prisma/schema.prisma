@@ -136,6 +136,8 @@ model Deposit {
   /// Địa chỉ ví / Binance ID đã báo khách — đổi cấu hình sau đó thì mã đang
   /// chờ vẫn trỏ đúng chỗ đã báo.
   cryptoAddress String?
+  sepayBank String?
+  sepayAccountHolder String?
   /// TxID on-chain / mã giao dịch Pay đã khớp. @unique cùng vai trò sepayRef.
   cryptoTxId String? @unique
   createdAt DateTime  @default(now())
@@ -146,6 +148,7 @@ model Deposit {
   /// Khoá idempotency từ callback_query.id. Telegram có thể phát lại update
   /// sau khi API restart; cùng một cú bấm không được tạo hai mã nạp.
   telegramCallbackId String?       @unique
+  incomingTransfer IncomingTransfer?
 
   @@index([status, expiresAt])
   @@index([userId, createdAt])
@@ -361,7 +364,7 @@ model ProductVariantTranslation {
 model StockItem {
   id          String         @id @default(cuid())
   variantId   String
-  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  variant     ProductVariant @relation(fields: [variantId], references: [id], onDelete: Restrict)
   content     String
   status      StockStatus    @default(AVAILABLE)
   orderItemId String?
@@ -492,7 +495,7 @@ model OrderItem {
   productId   String
   product     Product         @relation(fields: [productId], references: [id])
   variantId   String?
-  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  variant     ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Restrict)
   /// Ảnh chụp tại thời điểm đặt hàng — không đổi khi sản phẩm bị sửa/xóa
   productName String
   variantName String          @default("")
@@ -511,7 +514,8 @@ model Payment {
   orderId         String        @unique
   order           Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   provider        String        @default("BINANCE_PAY")
-  mode            String        @default("MOCK")
+  mode            String        @default("INITIALIZING")
+  sessionVersion  Int           @default(0)
   merchantTradeNo String        @unique
   prepayId        String?
   amount          Decimal       @db.Decimal(18, 6)
@@ -548,12 +552,64 @@ model Payment {
   /// @unique là hàng rào CHỐNG DÙNG LẠI: một khoản tiền chỉ trả được cho MỘT
   /// đơn, kể cả khi nhiều request cùng khai một mã trong cùng một khoảnh khắc.
   cryptoTxId String?  @unique
+  incomingTransfer IncomingTransfer?
+  merchantSessions MerchantPaymentSession[]
+  instructions PaymentInstruction[]
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   /// Bộ quét đối soát lọc theo (mode, status) mỗi 60 giây
   @@index([mode, status])
+}
+
+/// Một khoản tiền chỉ thuộc một đơn HOẶC một mã nạp, không phụ thuộc worker nào nhận trước.
+model IncomingTransfer {
+  id String @id @default(cuid())
+  source String
+  reference String
+  amount Decimal @db.Decimal(18, 6)
+  currency String
+  network String?
+  receiver String?
+  receivedAt DateTime?
+  status String @default("OBSERVED")
+  reviewReason String?
+  paymentId String? @unique
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  depositId String? @unique
+  deposit Deposit? @relation(fields: [depositId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([source, reference])
+  @@index([status, createdAt])
+}
+
+/// Chỉ dẫn đã đưa cho khách không được biến mất khỏi tập đối soát khi đổi phương thức.
+model PaymentInstruction {
+  id String @id @default(cuid())
+  paymentId String
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  sessionVersion Int
+  mode String
+  amount Decimal @db.Decimal(18, 6)
+  network String?
+  receiver String?
+  createdAt DateTime @default(now())
+
+  @@unique([paymentId, sessionVersion])
+  @@index([mode, createdAt])
+}
+
+/// Giữ tham chiếu tới phiên cũ: khách vẫn có thể trả trong cửa sổ checkout đã mở.
+model MerchantPaymentSession {
+  merchantTradeNo String @id
+  paymentId String
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@index([paymentId])
 }
 
 /// Cấu hình cửa hàng — bản ghi duy nhất id = "main". Địa chỉ ví KHÔNG bí mật

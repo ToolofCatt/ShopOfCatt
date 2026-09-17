@@ -16,6 +16,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { pickUniqueUsdt } from './unique-amount';
 import { WalletCreditService } from './wallet-credit.service';
+import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/financial-lock';
 
 /** Chặn dưới/trên một lần nạp (VND) — dưới 10k phí chuyển ăn hết ý nghĩa,
  *  trên 100tr thì chắc chắn là gõ nhầm. */
@@ -99,10 +100,10 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
     if (this.expiring) return;
     this.expiring = true;
     try {
-      await this.prisma.deposit.updateMany({
-        where: { status: 'PENDING', expiresAt: { lt: new Date() } },
-        data: { status: 'EXPIRED' },
-      });
+      await this.prisma.$transaction(async (tx) => {
+        await lockFinancialArbitration(tx);
+        await tx.deposit.updateMany({ where: { status: 'PENDING', expiresAt: { lt: new Date() } }, data: { status: 'EXPIRED' } });
+      }, FINANCIAL_TRANSACTION);
     } catch (err) {
       this.logger.warn(
         `Quét mã nạp quá hạn trượt: ${err instanceof Error ? err.message : String(err)}`,
@@ -191,6 +192,9 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
               mode: 'SEPAY',
               amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
               vndAmount: new Prisma.Decimal(vndAmount),
+              cryptoAddress: cfg.accountNumber,
+              sepayBank: cfg.bank,
+              sepayAccountHolder: cfg.accountHolder,
               expiresAt: new Date(Date.now() + DEPOSIT_EXPIRE_MINUTES * 60_000),
               telegramCallbackId: callbackId,
             },
@@ -316,21 +320,20 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
       throw new NotFoundException(K.orderNotFound);
     }
     if (deposit.mode !== 'SEPAY') return { deposit, bank: null };
-    const cfg = await this.settings.getSepayConfig();
-    return {
-      deposit,
-      bank: {
-        accountNumber: cfg.accountNumber,
-        bank: cfg.bank,
-        accountHolder: cfg.accountHolder,
-      },
-    };
+    // Replay dùng đúng nơi nhận đã công bố, không dựng QR sang tài khoản mới sau khi đổi cấu hình.
+    if (!deposit.cryptoAddress || !deposit.sepayBank) throw new BadRequestException(K.paymentReviewRequired);
+    return { deposit, bank: {
+      accountNumber: deposit.cryptoAddress,
+      bank: deposit.sepayBank,
+      accountHolder: deposit.sepayAccountHolder ?? '',
+    } };
   }
 
   private async lockDepositAllocation(
     tx: Prisma.TransactionClient,
   ): Promise<void> {
-    // Hàm PostgreSQL trả kiểu void; ép text vì Prisma không giải mã cột void.
+    await lockFinancialArbitration(tx);
+    // Allocation luôn sau arbitration để không đảo khóa với order/settlement.
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(${DEPOSIT_ALLOCATION_LOCK})::text AS "locked"`;
   }
 
@@ -409,12 +412,17 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
     orderCode: string,
   ): Promise<{ delivered: boolean }> {
     const orderId = await this.prisma.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
       const order = await tx.order.findFirst({
         where: { code: orderCode, userId },
         select: { id: true, totalAmount: true },
       });
       if (!order) throw new NotFoundException(K.orderNotFound);
 
+      await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${order.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "Payment" WHERE "orderId" = ${order.id} FOR UPDATE`;
+      const payment = await tx.payment.findUnique({ where: { orderId: order.id } });
+      if (!payment || payment.status === 'SUCCESS' || payment.cryptoTxId || payment.sepayRef) throw new BadRequestException(K.balanceOrderNotPending);
       // Chốt trạng thái TRƯỚC — bấm đúp thì lần hai trượt ngay tại đây,
       // không bao giờ trừ ví hai lần cho một đơn.
       const gate = await tx.order.updateMany({
@@ -454,7 +462,7 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
         data: { status: 'SUCCESS', mode: 'BALANCE' },
       });
       return order.id;
-    });
+    }, FINANCIAL_TRANSACTION);
 
     // Giao hàng NGOÀI transaction ví — deliverOrder tự khoá Order → StockItem
     // và idempotent; thất bại giữa chừng thì DeliverySweeper cứu (đơn PAID).
@@ -469,11 +477,11 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
 
   /** Huỷ mã nạp đang chờ — guard trạng thái, bấm đúp vô hại. */
   async cancelDeposit(userId: string, code: string): Promise<boolean> {
-    const gate = await this.prisma.deposit.updateMany({
-      where: { code, userId, status: 'PENDING' },
-      data: { status: 'CANCELLED' },
-    });
-    return gate.count > 0;
+    return this.prisma.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      const gate = await tx.deposit.updateMany({ where: { code, userId, status: 'PENDING' }, data: { status: 'CANCELLED' } });
+      return gate.count > 0;
+    }, FINANCIAL_TRANSACTION);
   }
 
   /** Mã nạp đã cộng nhưng bot chưa báo — cho vòng đẩy của Telegram. */

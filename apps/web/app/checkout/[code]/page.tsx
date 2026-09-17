@@ -20,7 +20,6 @@ import {
 import {
   type CheckPaymentDto,
   type OrderDetailDto,
-  type PaymentInfoDto,
   type PaymentMethod,
   type PaymentMethodDto,
 } from '@webcatt/shared';
@@ -29,26 +28,19 @@ import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import { usePendingOrderReminder } from '@/lib/pending-order-reminder';
 import { usePrices } from '@/lib/prices';
+import { createPaymentCheckGate, getPaymentUi, PAYMENT_POLL_INTERVAL_MS } from '@/lib/payment-ui';
 import { PaymentMethodTabs } from '@/components/payment-method-tabs';
 import { formatCryptoAmount } from '@/lib/format';
 import { cn } from '@/lib/cn';
 import { Badge, Button, Card, EmptyState, Input, Label, Spinner, buttonVariants } from '@/components/ui';
+import { SupportPanel } from '@/components/support-panel';
+import { useStorefront } from '@/lib/storefront';
 
 function formatCountdown(remainingMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
-
-/** Phương thức tương ứng với phiên thanh toán hiện tại của đơn. */
-function methodOfPayment(payment: PaymentInfoDto | null): PaymentMethod | null {
-  if (!payment) return null;
-  if (payment.mode === 'MOCK') return 'mock';
-  if (payment.mode === 'BINANCE') return 'binance_pay';
-  if (payment.mode === 'BINANCE_ID') return 'binance_id';
-  if (payment.mode === 'SEPAY') return 'sepay';
-  return payment.cryptoNetwork === 'TRC20' ? 'crypto_trc20' : 'crypto_bep20';
 }
 
 async function copyToClipboard(text: string): Promise<boolean> {
@@ -136,7 +128,9 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   const { code } = use(params);
   const router = useRouter();
   const { token, loading: authLoading } = useAuth();
-  const { t } = useI18n();
+  const { t, formatDate } = useI18n();
+  const store = useStorefront();
+  const readOnly = !store.published || store.maintenanceMode;
   const { orderMoney, priceUsdt } = usePrices();
 
   const [order, setOrder] = useState<OrderDetailDto | null>(null);
@@ -144,12 +138,14 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   const [missing, setMissing] = useState(false);
   const [checking, setChecking] = useState(false);
   const [cancelling, setCancelling] = useState(false);
-  const [claiming, setClaiming] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const [checkMessage, setCheckMessage] = useState<string | null>(null);
+  const [updateError, setUpdateError] = useState(false);
   const [now, setNow] = useState(() => Date.now());
   const redirectingRef = useRef(false);
+  const [paymentCheckGate] = useState(createPaymentCheckGate);
 
-  // Phương thức thanh toán đang bật (chooser chỉ hiện khi có nhiều hơn 1).
+  // Khi chưa có phiên, vẫn cho chọn lại dù chỉ một phương thức đang bật.
   const [methods, setMethods] = useState<PaymentMethodDto[] | null>(null);
   const [switching, setSwitching] = useState(false);
   const [switchError, setSwitchError] = useState<string | null>(null);
@@ -161,10 +157,10 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
     hết hạn): React đòi số lần gọi hook giống nhau ở mọi lần render, đặt sau một
     `return` là app nổ ngay khi trạng thái đổi.
   */
-  usePendingOrderReminder(order?.status === 'PENDING', {
-    tabTitle: t.checkout.reminderTab(order?.code ?? ''),
-    notifyTitle: t.checkout.reminderTitle,
-    notifyBody: t.checkout.reminderBody(order?.code ?? ''),
+  usePendingOrderReminder(order?.status === 'PENDING' && !readOnly && (!order.expiresAt || new Date(order.expiresAt).getTime() > now), {
+    tabTitle: `${order?.code ?? ''} — ${t.customerUx.pendingTitle}`,
+    notifyTitle: t.customerUx.pendingTitle,
+    notifyBody: t.customerUx.pendingHint,
   });
 
   // Xác nhận thủ công bằng TxID (chỉ với thanh toán CRYPTO).
@@ -189,6 +185,7 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
           return;
         }
         setOrder(data);
+        setLastUpdated(new Date().toISOString());
       })
       .catch((err: unknown) => {
         if (!active) return;
@@ -226,42 +223,61 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   const remainingMs = expiresAtMs !== null ? expiresAtMs - now : null;
   const expired = remainingMs !== null && remainingMs <= 0;
 
+  const paymentUi = getPaymentUi(order?.payment ?? null, methods, code);
+  const selectedMethod = paymentUi.method;
+  const canCheckPayment = paymentUi.canCheckPayment && !readOnly;
+  const pending = order?.status === 'PENDING';
+
   const checkPayment = useCallback(
     async (manual: boolean) => {
-      if (!token || redirectingRef.current) return;
-      if (manual) setChecking(true);
+      if (!token || !pending || switching || redirectingRef.current) return;
       try {
-        const result = await apiFetch<CheckPaymentDto>(`/orders/${code}/check-payment`, {
-          method: 'POST',
-          token,
+        const ran = await paymentCheckGate.run(async (isCurrent) => {
+          if (manual) setChecking(true);
+          try {
+            // Chưa có phiên thì chỉ đọc lại đơn, không POST xác nhận hay giả lập.
+            const result = canCheckPayment && !expired
+              ? await apiFetch<CheckPaymentDto>(`/orders/${code}/check-payment`, { method: 'POST', token })
+              : await apiFetch<OrderDetailDto>(`/orders/${code}`, { token });
+            if (!isCurrent() || redirectingRef.current) return;
+            setLastUpdated(new Date().toISOString());
+            setUpdateError(false);
+            if (manual) setCheckMessage(t.customerUx.manualPending);
+            if (result.status === 'PAID' || result.status === 'DELIVERED') {
+              redirectingRef.current = true;
+              router.push(`/orders/${code}?paid=1`);
+            } else if (result.status !== 'PENDING') {
+              redirectingRef.current = true;
+              router.replace(`/orders/${code}`);
+            } else if ('payment' in result) {
+              setOrder(result);
+            }
+          } finally {
+            if (manual) setChecking(false);
+          }
         });
-        if (result.status === 'PAID' || result.status === 'DELIVERED') {
-          redirectingRef.current = true;
-          router.push(`/orders/${code}?paid=1`);
-        }
+        if (!ran && manual) setCheckMessage(t.customerUx.cooldown);
       } catch {
-        // polling errors are transient — ignore silently
-      } finally {
-        if (manual) setChecking(false);
+        setUpdateError(true);
+        if (manual) setCheckMessage(null);
       }
     },
-    [token, code, router],
+    [token, code, router, pending, expired, switching, canCheckPayment, paymentCheckGate, t.customerUx],
   );
 
-  // Poll every 4 seconds while the order is payable.
-  useEffect(() => {
-    if (!order || expired) return;
-    const id = window.setInterval(() => {
-      void checkPayment(false);
-    }, 3000);
-    return () => window.clearInterval(id);
-  }, [order, expired, checkPayment]);
+  useEffect(() => () => paymentCheckGate.invalidate(), [code, token, paymentCheckGate]);
 
-  const selectedMethod = methodOfPayment(order?.payment ?? null);
+  // Phụ thuộc trạng thái thay vì cả đơn: đọc lại phiên không đặt lại nhịp polling.
+  useEffect(() => {
+    if (!pending || switching) return;
+    const id = window.setInterval(() => { void checkPayment(false); }, PAYMENT_POLL_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [pending, expired, switching, checkPayment]);
 
   /** Đổi phương thức: API cấu hình lại phiên thanh toán rồi trả về đơn mới. */
   const handleSelectMethod = async (method: PaymentMethod) => {
-    if (!token || switching || redirectingRef.current || method === selectedMethod) return;
+    if (readOnly || !token || !pending || expired || switching || redirectingRef.current || method === selectedMethod || paymentUi.kind === 'BALANCE' || !methods?.some((entry) => entry.method === method)) return;
+    paymentCheckGate.invalidate();
     setSwitching(true);
     setSwitchError(null);
     setTxError(null);
@@ -282,7 +298,7 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   const handleSubmitTx = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmed = txId.trim();
-    if (!token || !trimmed || txSubmitting || redirectingRef.current) return;
+    if (readOnly || !token || !trimmed || txSubmitting || switching || expired || !pending || paymentUi.kind !== 'CRYPTO' || redirectingRef.current) return;
     setTxSubmitting(true);
     setTxError(null);
     try {
@@ -303,7 +319,7 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
   };
 
   const handleCancel = async () => {
-    if (!token || cancelling) return;
+    if (readOnly || !token || cancelling) return;
     if (!window.confirm(t.checkout.cancelConfirm)) return;
     setCancelling(true);
     try {
@@ -358,7 +374,7 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
     );
   }
 
-  if (expired) {
+  if (expired || readOnly) {
     return (
       <div className="mx-auto w-full max-w-md px-4 py-12">
         <Card className="space-y-4 p-8 text-center">
@@ -366,18 +382,23 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
             <Clock className="h-6 w-6 text-neutral-500" strokeWidth={1.75} />
           </span>
           <div className="space-y-1">
-            <h1 className="text-lg font-semibold tracking-tight">{t.checkout.expiredTitle}</h1>
-            <p className="text-sm text-neutral-500">{t.checkout.expiredHint(order.code)}</p>
+            <h1 className="text-lg font-semibold tracking-tight">{expired ? t.checkout.expiredTitle : t.customerUx.maintenanceTitle}</h1>
+            <p className="break-all font-mono text-sm">{order.code}</p>
+            <p className="text-sm text-neutral-600">{expired ? t.customerUx.expiredHint(order.code) : t.customerUx.maintenanceCheckout}</p>
           </div>
-          <div className="flex justify-center gap-2">
-            <Link href="/" className={buttonVariants({})}>
-              {t.checkout.backHome}
-            </Link>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button variant="outline" loading={checking} onClick={() => void checkPayment(true)}>{t.customerUx.refreshOrder}</Button>
             <Link href={`/orders/${order.code}`} className={buttonVariants({ variant: 'outline' })}>
               {t.checkout.viewOrder}
             </Link>
           </div>
+          <div aria-live="polite" className="space-y-1 text-sm text-neutral-600">
+            {lastUpdated && <p>{t.customerUx.lastUpdated}: <time dateTime={lastUpdated}>{formatDate(lastUpdated)}</time></p>}
+            {checkMessage && <p>{checkMessage}</p>}
+            {updateError && <p role="alert">{t.customerUx.checkError}</p>}
+          </div>
         </Card>
+        <div className="mt-4"><SupportPanel reference={order.code} hint={t.customerUx.sentPaymentHint} /></div>
       </div>
     );
   }
@@ -388,19 +409,9 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
     khớp — ₫ làm tròn lên nên quy riêng từng số là lệch 1 đồng.
   */
   const tien = orderMoney(order.subtotalAmount, order.discountAmount, order.totalAmount);
-  const mockPayUrl = payment?.mockPayUrl || `/mock-pay/${order.code}`;
   const cryptoAmountText =
     payment?.cryptoAmount !== undefined ? formatCryptoAmount(payment.cryptoAmount) : '';
-
-  /*
-   * Mã QR của phương thức đang chọn, gom về một biến để đưa sang CỘT PHẢI.
-   * `cryptoQr` là QR địa chỉ ví do máy chủ dựng; `qrcodeLink` là QR do Binance
-   * Pay merchant trả về. Không có QR thì trang tự thu lại còn một cột.
-   */
-  const binanceQr =
-    payment?.mode === 'BINANCE_ID'
-      ? (methods?.find((m) => m.method === 'binance_id')?.qr ?? null)
-      : null;
+  const qrSrc = switching ? null : paymentUi.qrSrc;
 
   /*
     Tên chủ tài khoản đọc từ CẤU HÌNH HIỆN TẠI, không chụp vào đơn như số tài
@@ -412,9 +423,6 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
     payment?.mode === 'SEPAY'
       ? (methods?.find((m) => m.method === 'sepay')?.accountHolder ?? null)
       : null;
-  const qrSrc =
-    payment?.cryptoQr ?? binanceQr ?? payment?.sepayQrUrl ?? payment?.qrcodeLink ?? null;
-
   /** Số VND đã chốt trong đơn, định dạng theo ngôn ngữ đang xem. */
   const vndText =
     payment?.vndAmount !== undefined
@@ -494,37 +502,47 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
           ))}
         </ul>
 
-        {methods !== null && methods.length > 1 && (
+        {methods !== null && methods.length > 0 && paymentUi.kind !== 'BALANCE' && (methods.length > 1 || !selectedMethod) && (
           <div className="space-y-2">
             <p className="text-center text-xs font-medium uppercase tracking-wide text-neutral-500">
               {t.checkout.methodTitle}
             </p>
-            <PaymentMethodTabs
-              methods={methods.map((m) => m.method)}
-              labels={t.checkout.methodsShort}
-              value={selectedMethod ?? methods[0].method}
-              onChange={(method) => void handleSelectMethod(method)}
-              disabled={switching}
-            />
-            {switchError && <p className="text-center text-sm text-red-600">{switchError}</p>}
+            {selectedMethod ? (
+              <PaymentMethodTabs
+                methods={methods.map((m) => m.method)}
+                labels={t.checkout.methodsShort}
+                value={selectedMethod}
+                onChange={(method) => void handleSelectMethod(method)}
+                disabled={switching}
+              />
+            ) : (
+              <div className="flex flex-wrap justify-center gap-2">
+                {methods.map(({ method }) => (
+                  <Button key={method} variant="outline" size="sm" disabled={switching} onClick={() => void handleSelectMethod(method)}>
+                    {t.checkout.methods[method]}
+                  </Button>
+                ))}
+              </div>
+            )}
+            {switchError && <p role="alert" className="text-center text-sm text-red-600">{switchError}</p>}
           </div>
         )}
 
-        <div className={cn(switching && 'pointer-events-none opacity-50')}>
+        <div inert={switching} className={cn(switching && 'pointer-events-none opacity-50')}>
           {switching && (
             <div className="mb-3 flex justify-center">
               <Spinner className="h-5 w-5 text-neutral-400" />
             </div>
           )}
 
-          {payment?.mode === 'MOCK' ? (
+          {paymentUi.mockPayUrl ? (
             <div className="space-y-3 rounded-lg border border-dashed border-neutral-300 p-4">
               <p className="flex items-center gap-2 text-sm font-medium">
                 <FlaskConical className="h-4 w-4 shrink-0" strokeWidth={1.75} />
                 {t.checkout.mockBadge}
               </p>
               <p className="text-sm text-neutral-500">{t.checkout.mockDescription}</p>
-              <Link href={mockPayUrl} className={buttonVariants({ className: 'w-full' })}>
+              <Link href={paymentUi.mockPayUrl} className={buttonVariants({ className: 'w-full' })}>
                 {t.checkout.openMock}
                 <ArrowRight className="h-4 w-4" strokeWidth={1.75} />
               </Link>
@@ -678,7 +696,7 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 </p>
               </div>
             </div>
-          ) : payment?.mode === 'CRYPTO' ? (
+          ) : payment?.mode === 'CRYPTO' && paymentUi.kind === 'CRYPTO' ? (
             <div className="space-y-3 rounded-lg border border-neutral-200 p-3.5">
               <div className="flex items-center justify-between gap-2">
                 <p className="flex items-center gap-2 text-sm font-medium">
@@ -748,11 +766,11 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 <p className="text-xs text-neutral-500">{t.checkout.cryptoTxHint}</p>
               </form>
             </div>
-          ) : (
+          ) : paymentUi.kind === 'BINANCE' ? (
             <div className="space-y-3 text-center">
-              {payment?.checkoutUrl && (
+              {paymentUi.checkoutUrl && (
                 <a
-                  href={payment.checkoutUrl}
+                  href={paymentUi.checkoutUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   className={buttonVariants({ className: 'w-full' })}
@@ -762,9 +780,29 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 </a>
               )}
             </div>
+          ) : (
+            <div role="status" className="space-y-2 rounded-lg border border-neutral-200 p-3.5">
+              <p className="flex items-center gap-2 text-sm font-medium">
+                {paymentUi.kind === 'BALANCE' ? <Wallet className="h-4 w-4 shrink-0" strokeWidth={1.75} /> : <Clock className="h-4 w-4 shrink-0" strokeWidth={1.75} />}
+                {paymentUi.kind === 'BALANCE' ? t.paymentMode.BALANCE : paymentUi.kind === 'INITIALIZING' ? t.checkout.initializingTitle : t.checkout.unavailableTitle}
+              </p>
+              <p className="text-sm text-neutral-500">
+                {paymentUi.kind === 'BALANCE' ? t.checkout.balancePendingHint : t.checkout.initializingHint}
+              </p>
+              {paymentUi.kind !== 'BALANCE' && methods?.length === 0 && (
+                <p className="text-sm text-neutral-500">{t.product.noPaymentMethod}</p>
+              )}
+            </div>
           )}
         </div>
 
+        <div aria-live="polite" className="space-y-1 text-sm text-neutral-600">
+          <p className="font-medium text-neutral-950">{t.customerUx.pendingTitle}</p>
+          <p>{t.customerUx.pendingHint}</p>
+          {lastUpdated && <p>{t.customerUx.lastUpdated}: <time dateTime={lastUpdated}>{formatDate(lastUpdated)}</time></p>}
+          {checkMessage && <p>{checkMessage}</p>}
+          {updateError && <p role="alert">{t.customerUx.checkError}</p>}
+        </div>
         {error && <p className="text-center text-sm text-red-600">{error}</p>}
 
         {/*
@@ -777,18 +815,21 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-neutral-400 opacity-75" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-neutral-500" />
             </span>
-            {t.checkout.autoChecking}
+            {canCheckPayment ? t.checkout.autoChecking : t.checkout.autoRefreshing}
           </span>
           <span className="ml-auto flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              loading={checking}
-              onClick={() => void checkPayment(true)}
-            >
-              {!checking && <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.75} />}
-              {t.checkout.checkNow}
-            </Button>
+            {canCheckPayment && (
+              <Button
+                variant="ghost"
+                size="sm"
+                loading={checking}
+                disabled={switching}
+                onClick={() => void checkPayment(true)}
+              >
+                {!checking && <RefreshCw className="h-3.5 w-3.5" strokeWidth={1.75} />}
+                {t.checkout.checkNow}
+              </Button>
+            )}
             <Button
               variant="danger"
               size="sm"
@@ -843,6 +884,10 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
           )}
         </div>
       </Card>
+      <details className="mt-4 rounded-lg border border-neutral-200 p-4">
+        <summary className="min-h-11 cursor-pointer font-medium">{t.customerUx.sentPaymentHelp}</summary>
+        <SupportPanel reference={order.code} hint={t.customerUx.sentPaymentHint} />
+      </details>
     </div>
   );
 }

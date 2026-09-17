@@ -20,7 +20,7 @@ export type StockStatus = 'AVAILABLE' | 'RESERVED' | 'SOLD' | 'WITHDRAWN';
  * chỉ cần khoá đọc là đối soát được, khác hẳn merchant.
  */
 /** BALANCE = trả bằng số dư ví (bot Telegram) — không có phiên cổng ngoài nào. */
-export type PaymentMode = 'MOCK' | 'BINANCE' | 'BINANCE_ID' | 'CRYPTO' | 'SEPAY' | 'BALANCE';
+export type PaymentMode = 'INITIALIZING' | 'MOCK' | 'BINANCE' | 'BINANCE_ID' | 'CRYPTO' | 'SEPAY' | 'BALANCE';
 
 /** Phương thức thanh toán khách chọn ở trang thanh toán. */
 export type PaymentMethod =
@@ -38,6 +38,32 @@ export type CryptoNetwork = 'BEP20' | 'TRC20';
 /** Kiểu giảm giá: theo phần trăm hoặc số tiền cố định. */
 export type DiscountType = 'PERCENT' | 'FIXED';
 
+
+export interface IncomingTransferDto {
+  id: string;
+  source: string;
+  reference: string;
+  amount: string;
+  currency: string;
+  receiver: string | null;
+  status: string;
+  reviewReason: string | null;
+  createdAt: string;
+}
+
+export interface ReconciliationTransferDto extends IncomingTransferDto {
+  network: string | null;
+  receivedAt: string | null;
+  orderCode: string | null;
+  depositCode: string | null;
+  /** Chỉ được đề nghị đối soát, không thay thế kiểm tra backend khi xác nhận. */
+  resolvable: boolean;
+}
+
+export interface ReconciliationSummaryDto {
+  unresolved: number;
+  conflicts: number;
+}
 
 export interface PaymentMethodDto {
   method: PaymentMethod;

@@ -21,7 +21,7 @@ import {
   type ProductVariantDto,
   type StoreRatesDto,
 } from '@webcatt/shared';
-import { brandEmojiHtml } from './animated-emoji';
+import { animateEmoji, brandEmojiHtml } from './animated-emoji';
 import {
   CURRENCY_BY_LANG,
   compactMoney,
@@ -59,6 +59,8 @@ export interface BotView {
   keyboard: TgInlineKeyboard;
   /** Ảnh gửi KÈM (sendPhoto riêng, không nút) — hiện chỉ QR SePay dùng. */
   photo?: string | null;
+  /** Giao key dài qua transport document, không cắt nội dung để vừa tin chat. */
+  documents?: { name: string; text: string }[];
 }
 
 /**
@@ -72,6 +74,11 @@ export function orderMoney(
 ): string {
   const doi = convertFromUsdt(usdt, CURRENCY_BY_LANG[lang], rates);
   return doi === null ? formatUsdt(usdt) : formatMoney(doi, CURRENCY_BY_LANG[lang]);
+}
+
+/** Số khách sao chép để chuyển tiền không dùng formatter hiển thị hai số lẻ. */
+export function exactUsdtHtml(amount: number): string {
+  return `<code>${amount.toFixed(6)}</code> USDT`;
 }
 
 // ---------------------------------------------------------------- chọn số lượng
@@ -215,6 +222,10 @@ export function renderPaymentInstructions(
   };
 
   switch (payment?.mode) {
+    case 'INITIALIZING': {
+      lines.push(escapeHtml(dict.paymentInitializing));
+      break;
+    }
     case 'MOCK': {
       lines.push(escapeHtml(dict.payMockHint));
       keyboard.push([
@@ -245,7 +256,7 @@ export function renderPaymentInstructions(
       lines.push(
         escapeHtml(dict.payBinanceIdLabel),
         `<code>${escapeHtml(payment.binanceId ?? '')}</code>`,
-        escapeHtml(dict.payAmount(formatUsdt(payment.cryptoAmount ?? order.totalAmount))),
+        exactUsdtHtml(payment.cryptoAmount ?? order.totalAmount),
         '',
         `<b>${escapeHtml(dict.payMemoBinance(order.code))}</b>`,
       );
@@ -257,7 +268,7 @@ export function renderPaymentInstructions(
         escapeHtml(dict.payCryptoNetwork(payment.cryptoNetwork ?? '')),
         escapeHtml(dict.payAddressLabel),
         `<code>${escapeHtml(payment.cryptoAddress ?? '')}</code>`,
-        escapeHtml(dict.payAmount(formatUsdt(payment.cryptoAmount ?? order.totalAmount))),
+        exactUsdtHtml(payment.cryptoAmount ?? order.totalAmount),
         '',
         `<b>${escapeHtml(dict.payExactAmount)}</b>`,
       );
@@ -313,9 +324,19 @@ export function renderOrderDelivered(order: OrderDetailDto, lang: BotLang): BotV
     }
   }
   lines.push('', escapeHtml(dict.deliveredKeepSafe));
+  const html = lines.join('\n');
+  // Đo sau animate để giới hạn bảo thủ cả HTML; cắt chuỗi sẽ làm mất key/thẻ.
+  const needsDocument = animateEmoji(html).length > 4096;
+  const document = [order.code, ...order.items.flatMap(item => [
+    '', `${item.productName}${item.variantName ? ` – ${item.variantName}` : ''} ×${item.quantity}`,
+    ...(item.deliveredLines ?? []),
+  ])].join('\n');
 
   return {
-    text: lines.join('\n'),
+    text: needsDocument
+      ? [`<b>${escapeHtml(dict.deliveredTitle(order.code))}</b>`, escapeHtml(dict.deliveredAsDocument), escapeHtml(dict.deliveredKeepSafe)].join('\n')
+      : html,
+    ...(needsDocument ? { documents: deliveryDocuments(order.code, document) } : {}),
     keyboard: [
       [
         { text: dict.btnMyOrders, callback_data: encodeCallback({ kind: 'orders' }) },
@@ -326,6 +347,23 @@ export function renderOrderDelivered(order: OrderDetailDto, lang: BotLang): BotV
       ],
     ],
   };
+}
+
+/** Transport document hiện giới hạn 10 MB; chia tại ranh giới UTF-8, không cắt key. */
+function deliveryDocuments(code: string, text: string): { name: string; text: string }[] {
+  const bytes = new TextEncoder().encode(text);
+  const chunks: string[] = [];
+  for (let start = 0; start < bytes.length;) {
+    let end = Math.min(start + 10_000_000, bytes.length);
+    // Byte continuation không thể mở đầu file: lùi về đầu codepoint cuối.
+    while (end < bytes.length && (bytes[end] & 0xc0) === 0x80) end--;
+    chunks.push(new TextDecoder('utf-8', { fatal: true }).decode(bytes.subarray(start, end)));
+    start = end;
+  }
+  return chunks.map((chunk, index) => ({
+    name: chunks.length === 1 ? `${code}.txt` : `${code}-${index + 1}-of-${chunks.length}.txt`,
+    text: chunk,
+  }));
 }
 
 // ---------------------------------------------------------------- xem một đơn

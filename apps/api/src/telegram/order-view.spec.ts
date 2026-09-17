@@ -8,6 +8,9 @@ import type {
   StoreRatesDto,
 } from '@webcatt/shared';
 import { encodeCallback, parseCallback, type BotCallback } from './catalog-view';
+import { matchDeposits } from '../binance-exchange/deposit-matcher';
+import { matchPayTransfers } from '../binance-exchange/pay-matcher';
+import { renderDepositInstructions } from './wallet-view';
 import {
   orderMoney,
   renderMethodChooser,
@@ -161,6 +164,34 @@ describe('renderQuantityPicker', () => {
 });
 
 describe('renderPaymentInstructions', () => {
+  it.each(['vi', 'en', 'zh'] as const)('copyable amount matches production matchers in %s for orders and wallet', lang => {
+    for (const mode of ['CRYPTO', 'BINANCE_ID'] as const) {
+      const detail = order({ totalAmount: 3.846153 }, {
+        mode, cryptoAmount: 3.846153, cryptoNetwork: 'BEP20', cryptoAddress: '0xfixture', binanceId: '123456',
+      });
+      const views = [
+        renderPaymentInstructions(detail, lang, RATES, 15),
+        renderDepositInstructions({ code: 'NAP-FIXTURE', vndAmount: 100_000, amountUsdt: 3.846153, mode, cryptoNetwork: 'BEP20', cryptoAddress: '0xfixture' }, null, lang, 15),
+      ];
+      for (const view of views) {
+        const copy = /<code>([0-9]+\.[0-9]{6})<\/code> USDT/.exec(view.text)?.[1];
+        expect(copy).toBe('3.846153');
+        const amount = Number(copy);
+        const matches = mode === 'CRYPTO'
+          ? matchDeposits([{ orderId: 'o1', network: 'BEP20', expected: 3.846153, createdAtMs: 1000 }], [{ txId: 'fixture', network: 'BSC', amount, insertTimeMs: 2000, status: 1 }], new Set())
+          : matchPayTransfers([{ orderId: 'o1', code: 'DH-ABC123', expected: 3.846153, createdAtMs: 1000 }], [{ transactionId: 'fixture', amount, currency: 'USDT', transactionTimeMs: 2000, note: 'DH-ABC123' }], new Set());
+        expect(matches).toHaveLength(1);
+        expect(matches[0].orderId).toBe('o1');
+      }
+    }
+  });
+
+  it.each(['vi', 'en', 'zh'] as const)('INITIALIZING does not offer mock confirmation or payment details in %s', lang => {
+    const view = renderPaymentInstructions(order({}, { mode: 'INITIALIZING' as PaymentInfoDto['mode'] }), lang, RATES, null);
+    expect(view.keyboard.flat().some(b => b.callback_data === 'z:DH-ABC123')).toBe(false);
+    expect(view.text).not.toContain('<code>');
+    expect(view.text).toMatch(/khởi tạo|initializ|初始化/i);
+  });
   it('CRYPTO: địa chỉ trong <code>, số tiền DUY NHẤT, cảnh báo chuyển đúng', () => {
     const view = renderPaymentInstructions(
       order({}, {
@@ -174,7 +205,7 @@ describe('renderPaymentInstructions', () => {
       12,
     );
     expect(view.text).toContain('<code>0xabc</code>');
-    expect(view.text).toContain('5.00 USDT');
+    expect(view.text).toContain('<code>5.000123</code> USDT');
     expect(view.text).toContain('12 phút');
     expect(view.text).toContain('⏳ Đang chờ hệ thống ghi nhận thanh toán.');
     expect(view.photo ?? null).toBeNull();
@@ -215,6 +246,16 @@ describe('renderPaymentInstructions', () => {
 });
 
 describe('renderOrderDelivered', () => {
+  it('splits documents above the transport byte limit without losing multibyte key content', () => {
+    const key = '🔑'.repeat(2_600_001) + '\nEND-OF-KEY';
+    const detail = order({ status: 'DELIVERED' });
+    detail.items[0].deliveredLines = [key, 'SECOND'];
+    const view = renderOrderDelivered(detail, 'vi');
+    expect(view.documents!.length).toBeGreaterThan(1);
+    for (const file of view.documents!) expect(Buffer.byteLength(file.text)).toBeLessThanOrEqual(10_000_000);
+    expect(view.documents!.map(file => file.text).join('')).toBe('DH-ABC123\n\nKey <bản quyền> – Retail ×1\n' + key + '\nSECOND');
+  });
+
   it('key nằm trong spoiler + code, tên sản phẩm được escape', () => {
     const view = renderOrderDelivered(
       order({

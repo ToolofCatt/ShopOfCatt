@@ -136,25 +136,50 @@ export class CouponsService {
   }
 
   /**
-   * GIỮ CHỖ một lượt dùng, nguyên tử: `updateMany` chỉ tăng khi `usedCount`
-   * còn dưới hạn mức, nên hai đơn đặt cùng lúc không thể vượt `maxUses`.
-   * Lượt này được trả lại nếu đơn bị hủy/hết hạn.
+   * Caller giữ arbitration và gọi trước Variant/Stock. Coupon FOR UPDATE giữ
+   * việc đếm theo user cùng reservation tới lúc tạo Order commit: hai preview
+   * cùng thấy còn lượt không được cùng vượt perUserLimit.
    */
   async reserve(
     tx: Prisma.TransactionClient,
     coupon: Coupon,
+    userId?: string,
   ): Promise<void> {
-    const where: Prisma.CouponWhereInput =
-      coupon.maxUses === null
-        ? { id: coupon.id, active: true }
-        : { id: coupon.id, active: true, usedCount: { lt: coupon.maxUses } };
-    const taken = await tx.coupon.updateMany({
-      where,
-      data: { usedCount: { increment: 1 } },
-    });
-    if (taken.count === 0) {
+    const [current] = await tx.$queryRaw<Coupon[]>`
+      SELECT * FROM "Coupon" WHERE "id" = ${coupon.id} FOR UPDATE
+    `;
+    if (!current) throw new BadRequestException(K.couponNotFound);
+    if (!current.active) throw new BadRequestException(K.couponInactive);
+    const now = new Date();
+    if (current.startsAt && now < current.startsAt) {
+      throw new BadRequestException(K.couponNotStarted);
+    }
+    if (current.expiresAt && now > current.expiresAt) {
+      throw new BadRequestException(K.couponExpired);
+    }
+    if (current.maxUses !== null && current.usedCount >= current.maxUses) {
       throw new BadRequestException(K.couponExhausted);
     }
+    if (current.perUserLimit !== null) {
+      // Giữ tương thích caller cũ nhưng không cho thiếu danh tính bỏ qua hạn mức.
+      if (!userId) throw new BadRequestException(K.couponUserLimit);
+      const used = await tx.order.count({
+        where: { userId, couponId: current.id, status: COUNTED_STATUSES },
+      });
+      if (used >= current.perUserLimit) {
+        throw new BadRequestException(K.couponUserLimit);
+      }
+    }
+
+    const taken = await tx.coupon.updateMany({
+      where: {
+        id: current.id,
+        active: true,
+        ...(current.maxUses !== null ? { usedCount: { lt: current.maxUses } } : {}),
+      },
+      data: { usedCount: { increment: 1 } },
+    });
+    if (taken.count === 0) throw new BadRequestException(K.couponExhausted);
   }
 
   // ---------- Quản trị ----------

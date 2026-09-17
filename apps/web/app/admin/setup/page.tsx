@@ -11,6 +11,7 @@ import { useAuth } from '@/lib/auth';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useI18n } from '@/lib/i18n/client';
 import { cn } from '@/lib/cn';
+import { canRunSetup } from '@/lib/settings-drafts';
 
 const STEPS: Array<{ id: SetupStepId; vi: string; en: string; zh: string; icon: ComponentType<{ className?: string }> }> = [
   { id: 'system', vi: 'Hệ thống & cửa hàng', en: 'System & store', zh: '系统与商店', icon: Database },
@@ -28,6 +29,7 @@ export default function SetupPage() {
 function SetupContent() {
   const { token, user } = useAuth();
   const { locale, t } = useI18n();
+  const canManageSetup = canRunSetup(user?.role);
   const router = useRouter();
   const params = useSearchParams();
   const requested = params.get('step');
@@ -63,7 +65,7 @@ function SetupContent() {
   };
 
   const run = async (scope: SetupStepId | 'all') => {
-    if (!token) return;
+    if (!token || !canManageSetup || running) return;
     setRunning(scope);
     try {
       setStatus(await apiFetch<SetupStatusDto>(`/admin/setup/check/${scope}`, { method: 'POST', token, locale }));
@@ -73,7 +75,7 @@ function SetupContent() {
   };
 
   const publish = async () => {
-    if (!token) return;
+    if (!token || !canManageSetup || running) return;
     setRunning('publish');
     try {
       await apiFetch('/admin/setup/publish', { method: 'POST', token, locale });
@@ -100,6 +102,7 @@ function SetupContent() {
         actions={<Badge variant={status.published ? 'success' : 'outline'}>{status.published ? labels.published : labels.maintenance}</Badge>}
       />
 
+      {!canManageSetup && <p id="setup-permission-note" role="status" className="mb-5 border-l-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">{t.settingsUx.setupRestricted}</p>}
       <div className="mb-8 overflow-x-auto border-b border-neutral-200 [scrollbar-width:none]">
         <div role="tablist" aria-label={labels.title} className="flex min-w-max">
           {STEPS.map((step, index) => {
@@ -121,7 +124,7 @@ function SetupContent() {
         <section id={`setup-panel-${active}`} role="tabpanel" aria-labelledby={`setup-tab-${active}`}>
           <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
             <div><p className="text-xs font-medium uppercase text-neutral-400">{completed}/6 {labels.stepsComplete}</p><h2 className="mt-1 text-xl font-semibold">{current[locale]}</h2></div>
-            <Button variant="outline" loading={running === active} onClick={() => void run(active)}>{labels.checkStep}</Button>
+            <Button variant="outline" loading={running === active} disabled={!canManageSetup || running !== null} aria-describedby={!canManageSetup ? 'setup-permission-note' : undefined} onClick={() => void run(active)}>{labels.checkStep}</Button>
           </div>
           <div className="divide-y divide-neutral-200 border-y border-neutral-200 bg-white">
             {checks.map((check) => <CheckRow key={check.id} check={check} locale={locale} />)}
@@ -141,8 +144,8 @@ function SetupContent() {
           <p className="hidden text-sm text-neutral-500 sm:block">{status.canPublish ? labels.ready : labels.notReady}</p>
           <div className="ml-auto flex gap-2">
             {next && <Button variant="outline" onClick={() => void selectStep(next.id)}>{labels.next}<ChevronRight className="h-4 w-4" /></Button>}
-            {active === 'review' && <Button variant="outline" loading={running === 'all'} onClick={() => void run('all')}>{labels.runAll}</Button>}
-            {active === 'review' && <Button loading={running === 'publish'} disabled={!status.canPublish} onClick={() => void publish()}><Rocket className="h-4 w-4" />{labels.publish}</Button>}
+            {active === 'review' && <Button variant="outline" loading={running === 'all'} disabled={!canManageSetup || running !== null} aria-describedby={!canManageSetup ? 'setup-permission-note' : undefined} onClick={() => void run('all')}>{labels.runAll}</Button>}
+            {active === 'review' && <Button loading={running === 'publish'} disabled={!canManageSetup || !status.canPublish || running !== null} aria-describedby={!canManageSetup ? 'setup-permission-note' : undefined} onClick={() => void publish()}><Rocket className="h-4 w-4" />{labels.publish}</Button>}
           </div>
         </div>
       </div>

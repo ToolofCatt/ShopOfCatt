@@ -287,7 +287,7 @@ export function RevenueChart() {
   }
 
   return (
-    <Card className="p-6">
+    <Card className="min-w-0 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           {/* Nói rõ "N ngày qua" để không lẫn với ô "Tổng doanh thu" phía trên. */}
@@ -295,7 +295,7 @@ export function RevenueChart() {
             {t.admin.revenueTitleDays(Number(days))}
           </h2>
           {/* Con số chính của bảng điều khiển + so sánh với kỳ liền trước. */}
-          <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-neutral-950">
+          <p className="mt-1 break-words text-3xl font-semibold tabular-nums tracking-tight text-neutral-950">
             {data === null ? '—' : formatUsdt(periodTotal)}
           </p>
           {data !== null && (
@@ -328,7 +328,7 @@ export function RevenueChart() {
             </p>
           )}
         </div>
-        <Tabs items={dayTabs} value={days} onChange={setDays} />
+        <Tabs items={dayTabs} value={days} onChange={setDays} className="min-w-0 max-w-full" />
       </div>
       {body}
     </Card>

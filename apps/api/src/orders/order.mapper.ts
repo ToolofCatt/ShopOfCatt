@@ -34,7 +34,9 @@ export function toPaymentInfoDto(
           ? 'CRYPTO'
           : payment.mode === 'SEPAY'
             ? 'SEPAY'
-            : 'MOCK';
+            : payment.mode === 'BALANCE'
+              ? 'BALANCE'
+              : payment.mode === 'MOCK' ? 'MOCK' : 'INITIALIZING';
   const dto: PaymentInfoDto = {
     mode,
     status: payment.status,

@@ -24,12 +24,10 @@ interface Boi {
 function build(options: { markup?: number; rateAuto?: boolean } = {}): Boi {
   const update = vi.fn().mockResolvedValue({});
   const executeRaw = vi.fn().mockResolvedValue(0);
-  /*
-    Ghi tỉ giá và tính lại giá đã neo đi CÙNG một `$transaction`, nên bản giả phải
-    có cả `$transaction` và `$executeRaw`. `$transaction` chỉ cần chờ hết mảng —
-    đủ để `update` được gọi thật và các assert bên dưới soi được đối số.
-  */
-  const transaction = vi.fn(async (ops: unknown[]) => Promise.all(ops));
+  // Unit chỉ kiểm adapter nguồn; atomicity/SQL thật được kiểm bằng PostgreSQL.
+  const transaction = vi.fn(async (run: (tx: unknown) => Promise<unknown>) => run({
+    storeSetting: { update }, $executeRaw: executeRaw,
+  }));
   const prisma = {
     storeSetting: { update },
     $executeRaw: executeRaw,

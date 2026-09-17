@@ -1,10 +1,11 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { FileText } from 'lucide-react';
+import { FileText, ServerCrash } from 'lucide-react';
+import { hasPolicyText } from '@/lib/settings-drafts';
 import { isLegalPageSlug, type LegalPageDto } from '@webcatt/shared';
 import { apiFetch } from '@/lib/api';
 import { getServerDictionary } from '@/lib/i18n/server';
-import { EmptyState } from '@/components/ui';
+import { EmptyState, buttonVariants } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +47,7 @@ export default async function LegalPage({
   const { slug } = await params;
   if (!isLegalPageSlug(slug)) notFound();
 
-  const { t } = await getServerDictionary();
+  const { t, locale } = await getServerDictionary();
   const fallbackTitle = await pageTitle(slug);
 
   let page: LegalPageDto | null = null;
@@ -60,7 +61,7 @@ export default async function LegalPage({
   // Nội dung là HTML đã được MÁY CHỦ lọc theo allowlist khi lưu
   // (src/announcement/sanitize-announcement.ts).
   const body = page?.body ?? '';
-  const hasBody = body.replace(/<[^>]*>/g, '').trim() !== '';
+  const hasBody = hasPolicyText(body);
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
@@ -68,7 +69,11 @@ export default async function LegalPage({
         {title}
       </h1>
 
-      {hasBody ? (
+      {page === null ? (
+        <div className="mt-6" role="alert">
+          <EmptyState icon={ServerCrash} title={t.settingsUx.legalFetchError} hint={t.settingsUx.legalFetchHint} action={<a href={`/legal/${slug}`} className={buttonVariants({ variant: 'outline' })}>{t.common.retry}</a>} />
+        </div>
+      ) : hasBody ? (
         <>
           <div
             className="wc-prose mt-6 leading-relaxed text-neutral-700"
@@ -77,7 +82,7 @@ export default async function LegalPage({
           {page?.updatedAt && page.updatedAt !== new Date(0).toISOString() && (
             <p className="mt-8 border-t border-neutral-100 pt-4 text-xs text-neutral-400">
               {t.legal.updatedAt}{' '}
-              {new Date(page.updatedAt).toLocaleDateString('vi-VN')}
+              {new Date(page.updatedAt).toLocaleDateString(locale === 'vi' ? 'vi-VN' : locale === 'zh' ? 'zh-CN' : 'en-US')}
             </p>
           )}
         </>

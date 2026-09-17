@@ -69,7 +69,7 @@ export function renderDescription(description: string): ReactNode[] {
   });
 }
 
-export function ProductDetail({ product }: { product: ProductDto }) {
+export function ProductDetail({ product, preview = false }: { product: ProductDto; preview?: boolean }) {
   const { t } = useI18n();
 
   /*
@@ -303,7 +303,7 @@ export function ProductDetail({ product }: { product: ProductDto }) {
           còn hộp mua hàng vẫn cao như cũ.
         */}
         <div className="@3xl:col-start-2 @3xl:row-start-1 @3xl:row-span-2 @3xl:sticky @3xl:top-24">
-          <BuyBox product={product} />
+          <BuyBox product={product} preview={preview} />
         </div>
 
         <section className="space-y-5 border-t border-neutral-200 pt-8 @3xl:col-start-1 @3xl:row-start-2">

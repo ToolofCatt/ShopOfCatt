@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, use, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Suspense, use, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ArrowLeft,
   ArrowRight,
@@ -22,7 +22,7 @@ import {
   type PaymentInfoDto,
   type PublicUser,
 } from '@webcatt/shared';
-import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
+import { ApiError, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import { usePrices } from '@/lib/prices';
@@ -32,6 +32,10 @@ import { cn } from '@/lib/cn';
 import { Badge, Button, Card, EmptyState, Spinner, buttonVariants } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/order-status-badge';
 import { wordmarkText } from '@/components/wordmark';
+import { SupportPanel } from '@/components/support-panel';
+import { useStorefront } from '@/lib/storefront';
+import { getCustomerDelivery } from '@/lib/customer-order-state';
+import { createPaymentCheckGate, PAYMENT_POLL_INTERVAL_MS } from '@/lib/payment-ui';
 
 /* ---------- clipboard / download helpers ---------- */
 
@@ -77,6 +81,8 @@ function paymentMethodName(payment: PaymentInfoDto, t: Dictionary): string {
   if (payment.mode === 'BINANCE') return t.product.payBinancePay;
   if (payment.mode === 'BINANCE_ID') return t.product.payBinanceId;
   if (payment.mode === 'SEPAY') return t.product.paySepay;
+  if (payment.mode === 'BALANCE') return t.paymentMode.BALANCE;
+  if (payment.mode === 'INITIALIZING') return t.checkout.initializingTitle;
   return t.product.payMock;
 }
 
@@ -240,38 +246,60 @@ export default function OrderDetailPage({ params }: { params: Promise<{ code: st
 
 function OrderDetailContent({ code }: { code: string }) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const justPaid = searchParams.get('paid') === '1';
+  const store = useStorefront();
+  const readOnly = !store.published || store.maintenanceMode;
   const { user, token, loading: authLoading } = useAuth();
   const { t, formatDate } = useI18n();
   const { orderMoney, priceUsdt } = usePrices();
 
   const [order, setOrder] = useState<OrderDetailDto | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState(false);
   const [missing, setMissing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const refreshGate = useMemo(createPaymentCheckGate, [code, token]);
+  const refresh = useCallback(async () => {
+    if (!token || authLoading) return;
+    await refreshGate.run(async (isCurrent) => {
+      setRefreshing(true);
+      try {
+        const data = await apiFetch<OrderDetailDto>(`/orders/${code}`, { token });
+        if (!isCurrent()) return;
+        setOrder(data);
+        setError(false);
+        setMissing(false);
+        setLastUpdated(new Date().toISOString());
+      } catch (err) {
+        if (!isCurrent()) return;
+        // Giữ nguyên key đã tải khi refresh lỗi; không thay bằng màn hình lỗi trắng.
+        setMissing(err instanceof ApiError && err.status === 404);
+        setError(true);
+      } finally { if (isCurrent()) setRefreshing(false); }
+    });
+  }, [authLoading, token, code, refreshGate]);
 
   useEffect(() => {
     if (authLoading) return;
     if (!token) {
+      setOrder(null);
       router.replace(`/login?next=${encodeURIComponent(`/orders/${code}`)}`);
       return;
     }
-    let active = true;
-    apiFetch<OrderDetailDto>(`/orders/${code}`, { token })
-      .then((data) => {
-        if (active) setOrder(data);
-      })
-      .catch((err: unknown) => {
-        if (!active) return;
-        if (err instanceof ApiError && err.status === 404) setMissing(true);
-        else setError(apiErrorMessage(err, t.common.connectionError));
-      });
-    return () => {
-      active = false;
-    };
-  }, [authLoading, token, code, router, t]);
+    setOrder(null);
+    setError(false);
+    setMissing(false);
+    setLastUpdated(null);
+    void refresh();
+    return () => refreshGate.invalidate();
+  }, [authLoading, token, code, router, refresh, refreshGate]);
 
-  if (missing) {
+  useEffect(() => {
+    if (!token || authLoading || (order && order.status !== 'PAID')) return;
+    const id = window.setInterval(() => void refresh(), PAYMENT_POLL_INTERVAL_MS);
+    return () => window.clearInterval(id);
+  }, [order?.status, token, authLoading, refresh]);
+
+  if (missing && !order) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-16">
         <EmptyState
@@ -288,15 +316,15 @@ function OrderDetailContent({ code }: { code: string }) {
     );
   }
 
-  if (error) {
+  if (error && !order) {
     return (
       <div className="mx-auto max-w-6xl px-4 py-16">
         <EmptyState
           icon={ServerCrash}
           title={t.common.serverDownTitle}
-          hint={error}
+          hint={t.customerUx.checkError}
           action={
-            <Button variant="outline" onClick={() => window.location.reload()}>
+            <Button variant="outline" loading={refreshing} onClick={() => void refresh()}>
               {t.common.retry}
             </Button>
           }
@@ -319,10 +347,8 @@ function OrderDetailContent({ code }: { code: string }) {
   */
   const tien = orderMoney(order.subtotalAmount, order.discountAmount, order.totalAmount);
 
-  const showPaidBanner = justPaid && (order.status === 'PAID' || order.status === 'DELIVERED');
-  const partiallyMissing =
-    order.status === 'PAID' &&
-    order.items.some((item) => (item.deliveredLines?.length ?? 0) < item.quantity);
+  const delivery = getCustomerDelivery(order);
+  const showPaidBanner = delivery.kind !== 'unconfirmed';
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -337,14 +363,14 @@ function OrderDetailContent({ code }: { code: string }) {
       {showPaidBanner && (
         <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-emerald-600/20 bg-emerald-50 p-4 text-sm font-medium text-emerald-700">
           <CheckCircle2 className="h-5 w-5 shrink-0" strokeWidth={1.75} />
-          {t.orderDetail.paidBanner}
+          {t.customerUx.paymentConfirmed}
         </div>
       )}
 
       <Card className="mt-4 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h1 className="font-mono text-xl font-semibold tracking-tight">{order.code}</h1>
+          <div className="flex min-w-0 flex-wrap items-center gap-3">
+            <h1 className="break-all font-mono text-xl font-semibold tracking-tight">{order.code}</h1>
             <OrderStatusBadge status={order.status} />
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -361,7 +387,7 @@ function OrderDetailContent({ code }: { code: string }) {
               <FileDown className="h-3.5 w-3.5" strokeWidth={1.75} />
               {t.orderDetail.downloadReceipt}
             </Button>
-            {order.status === 'PENDING' && (
+            {order.status === 'PENDING' && !readOnly && (
               <Link href={`/checkout/${order.code}`} className={buttonVariants({ size: 'sm' })}>
                 {t.orderDetail.continuePayment}
                 <ArrowRight className="h-3.5 w-3.5" strokeWidth={1.75} />
@@ -493,12 +519,20 @@ function OrderDetailContent({ code }: { code: string }) {
         )}
       </Card>
 
-      {partiallyMissing && (
-        <div className="mt-4 flex items-center gap-2.5 rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-600">
-          <Clock className="h-5 w-5 shrink-0 text-neutral-500" strokeWidth={1.75} />
-          {t.orderDetail.partialNotice}
+      <section aria-live="polite" className="mt-4 space-y-3 rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-600">
+        <div className="flex items-start gap-2.5">
+          <Clock className="mt-0.5 h-5 w-5 shrink-0" strokeWidth={1.75} />
+          <div>
+            <p className="font-semibold text-neutral-950">{delivery.kind === 'waiting' ? t.customerUx.waitingDelivery : delivery.kind === 'partial' ? t.customerUx.partialDelivery(delivery.delivered, delivery.total) : delivery.kind === 'available' ? t.customerUx.keysAvailable : delivery.kind === 'delivered' ? t.customerUx.delivered : t.orderStatus[order.status]}</p>
+            <p className="mt-1">{delivery.kind === 'waiting' ? t.customerUx.waitingDeliveryHint : delivery.kind === 'partial' ? t.customerUx.partialDeliveryHint : delivery.kind === 'available' ? t.customerUx.keysAvailableHint : delivery.kind === 'delivered' ? t.customerUx.deliveredHint : order.status === 'EXPIRED' ? t.customerUx.expiredHint(order.code) : t.customerUx.pendingHint}</p>
+          </div>
         </div>
-      )}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="outline" size="sm" className="min-h-11" loading={refreshing} onClick={() => void refresh()}>{t.customerUx.refreshOrder}</Button>
+          {lastUpdated && <p>{t.customerUx.lastUpdated}: <time dateTime={lastUpdated}>{formatDate(lastUpdated)}</time></p>}
+        </div>
+        {error && <p role="alert">{t.customerUx.checkError}</p>}
+      </section>
 
       <div className="mt-4 space-y-4">
         {order.items.map((item) => {
@@ -519,13 +553,13 @@ function OrderDetailContent({ code }: { code: string }) {
                   <p className="font-semibold tabular-nums">
                     {priceUsdt(item.unitPrice * item.quantity).primary}
                   </p>
-                  <Link
+                  {!readOnly && <Link
                     href={`/products/${item.productSlug}`}
                     className={buttonVariants({ variant: 'ghost', size: 'sm', className: '-mr-2' })}
                   >
                     <RotateCcw className="h-3.5 w-3.5" strokeWidth={1.75} />
                     {t.orderDetail.buyAgain}
-                  </Link>
+                  </Link>}
                 </div>
               </div>
 
@@ -567,6 +601,7 @@ function OrderDetailContent({ code }: { code: string }) {
           );
         })}
       </div>
+      <div className="mt-4"><SupportPanel reference={order.code} /></div>
     </div>
   );
 }

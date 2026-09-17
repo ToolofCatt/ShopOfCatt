@@ -143,12 +143,20 @@ describe('Telegram admin conversation', () => {
       });
       await f.bot.message('test', message('/admin'), f.signal);
       await f.click(f.button('Paid'));
+      await f.bot.message('test', message('synthetic-canonical-transfer-id'), f.signal);
+      expect(f.actions.prepare).not.toHaveBeenCalled();
       await f.bot.message('test', message('Bank verified'), f.signal);
       expect(f.actions.prepare).not.toHaveBeenCalled();
       await f.bot.message('test', message('WRONG'), f.signal);
       expect(f.actions.prepare).not.toHaveBeenCalled();
       await f.bot.message('test', message('Test'), f.signal);
       expect(f.actions.prepare).toHaveBeenCalledOnce();
+      expect(f.actions.prepare).toHaveBeenCalledWith(
+        expect.objectContaining({ permission: 'FULL' }),
+        'order.markPaid', 'DH-TEST',
+        { incomingTransferId: 'synthetic-canonical-transfer-id', note: 'Bank verified' },
+        'hash', 'Test',
+      );
     } finally {
       f.bot.onModuleDestroy();
     }

@@ -1,6 +1,17 @@
 import type { Dictionary } from './vi';
 
+import { customerUxZh } from './customer-ux';
+import { adminUxZh } from './admin-ux';
+import { settingsUxZh } from './settings-ux';
+import { builderUxZh } from './builder-ux';
+import { reconciliationUxZh } from './reconciliation-ux';
+
 export const zh: Dictionary = {
+  customerUx: customerUxZh,
+  adminUx: adminUxZh,
+  settingsUx: settingsUxZh,
+  builderUx: builderUxZh,
+  reconciliationUx: reconciliationUxZh,
   meta: {
     description: '数字商品商店 —— 正版密钥、礼品卡、激活码。全天候自动发货，支持使用 USDT 付款。',
   },
@@ -92,7 +103,12 @@ export const zh: Dictionary = {
     scanQr: '使用 Binance 应用扫描二维码付款',
     qrAlt: (code: string) => `订单 ${code} 的付款二维码`,
     openBinance: '打开 Binance Pay',
-    autoChecking: '每 3 秒自动查询付款状态',
+    autoChecking: '定期自动查询付款状态',
+    autoRefreshing: '自动更新订单状态',
+    initializingTitle: '正在等待创建付款会话',
+    unavailableTitle: '付款会话尚未就绪',
+    initializingHint: '尚无有效的付款信息。请等待更新，或选择已启用的付款方式重试创建会话。',
+    balancePendingHint: '此订单使用钱包余额。付款尚未确认；请等待订单状态更新，不要额外转账。',
     checkNow: '查询付款',
     cancelOrder: '取消订单',
     cancelConfirm: '确定要取消这笔订单吗？',
@@ -348,6 +364,7 @@ export const zh: Dictionary = {
   },
 
   paymentMode: {
+    INITIALIZING: '正在创建付款会话',
     MOCK: '测试模式（Mock）',
     BINANCE: 'Binance Pay（商户）',
     BINANCE_ID: 'Binance Pay · 转账至 ID',
@@ -778,7 +795,13 @@ export const zh: Dictionary = {
     cancelOrder: '取消订单',
     markPaidAction: '标记为已付款',
     markPaidPrompt:
-      '确认已经收到该订单的款项并立即发货。\n\n请记录款项来源以便日后对账（例如"银行转账 14:05"、"USDT 走错链，已人工核实"）：',
+      '仅在收到并核实该订单的正确款项后确认。请选择下方入账记录，核对金额、交易编号及收款账户，并填写人工对账原因。系统将在发货前再次校验；备注不能代替收款凭证。',
+    markPaidTransferLabel: '已收到的款项（必须选择）',
+    markPaidTransfersLoading: '正在加载尚未关联的入账记录…',
+    markPaidTransfersEmpty: '最新列表中没有可选的入账记录。不能仅凭备注确认付款。',
+    markPaidTransferReference: '交易编号',
+    markPaidTransferReceiver: '收款账户／钱包',
+    markPaidNoteLabel: '对账备注（必填，最多 300 个字符）',
     cancelOrderConfirm: (code: string) => `取消订单 ${code}？已锁定的库存将被释放。`,
 
     /* ===== v5 —— 付款设置 + Binance 状态 ===== */

@@ -1,6 +1,9 @@
 'use client';
 
 import { Wrench } from 'lucide-react';
+import Link from 'next/link';
+import { SupportPanel } from '@/components/support-panel';
+import { isCustomerAfterSalesPath } from '@/lib/customer-navigation';
 import { usePathname } from 'next/navigation';
 import type { ReactNode } from 'react';
 import type { StorefrontBlockType, StorefrontPageKind } from '@webcatt/shared';
@@ -12,12 +15,24 @@ import { StorefrontRenderer } from './storefront-renderer';
 export function StorefrontShell({ children, announcement }: { children: ReactNode; announcement: ReactNode }) {
   const pathname = usePathname();
   const store = useStorefront();
-  const exempt = pathname.startsWith('/admin') || pathname === '/login' || pathname.startsWith('/account/password') || pathname.startsWith('/mock-pay');
-  if ((!store.published || store.maintenanceMode) && !exempt) return <Maintenance />;
+  const { t } = useI18n();
+  const paused = !store.published || store.maintenanceMode;
+  const admin = pathname === '/admin' || pathname.startsWith('/admin/');
+  const afterSales = isCustomerAfterSalesPath(pathname);
   return (
     <div className="flex min-h-screen flex-col">
-      <Header />
-      <main className="flex-1"><AutoFrame pathname={pathname} announcement={announcement}>{children}</AutoFrame></main>
+      <a href="#main-content" className="sr-only z-50 rounded-lg bg-neutral-950 px-4 py-3 text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">{t.customerUx.skipToContent}</a>
+      {paused && !admin ? <header className="border-b border-neutral-200 px-4 py-3">
+        <nav aria-label={t.customerUx.maintenanceTitle} className="mx-auto flex max-w-6xl flex-wrap gap-x-5">
+          <Link className="inline-flex min-h-11 items-center font-medium underline underline-offset-4" href="/orders">{t.nav.myOrders}</Link>
+          <Link className="inline-flex min-h-11 items-center font-medium underline underline-offset-4" href="/account">{t.account.title}</Link>
+          <Link className="inline-flex min-h-11 items-center font-medium underline underline-offset-4" href="/login">{t.auth.loginTitle}</Link>
+        </nav>
+        {afterSales && <p className="mx-auto max-w-6xl text-sm text-neutral-600">{t.customerUx.maintenanceHint}</p>}
+      </header> : <Header />}
+      <main id="main-content" tabIndex={-1} className="min-w-0 flex-1">
+        {paused && !admin ? (afterSales ? children : <Maintenance />) : <AutoFrame pathname={pathname} announcement={announcement}>{children}</AutoFrame>}
+      </main>
     </div>
   );
 }
@@ -31,20 +46,16 @@ function AutoFrame({ pathname, children, announcement }: { pathname: string; chi
 }
 
 function Maintenance() {
-  const { locale } = useI18n();
+  const { t } = useI18n();
   const store = useStorefront();
-  const title = locale === 'vi' ? 'Cửa hàng đang được thiết lập' : locale === 'zh' ? '商店正在设置中' : 'Store setup in progress';
-  const detail = locale === 'vi' ? 'Vui lòng quay lại sau khi chủ cửa hàng hoàn tất cấu hình và xuất bản.' : locale === 'zh' ? '店主完成设置并发布后，请稍后再来。' : 'Please return after the owner completes setup and publishes the store.';
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--store-background)] px-6">
-      <div className="w-full max-w-xl border-y border-[var(--store-border)] py-16 text-center">
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-[var(--store-radius)] bg-[var(--store-primary)] text-[var(--store-primary-foreground)]"><Wrench className="h-5 w-5" /></span>
-        <p className="mt-6 text-xs font-semibold uppercase text-[var(--store-muted)]">{store.document.brand.name}</p>
-        <h1 className="mt-2 text-3xl font-semibold" style={{ fontFamily: 'var(--store-heading-font)' }}>{title}</h1>
-        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[var(--store-muted)]">{detail}</p>
-        <div className="mt-8"><StorefrontRenderer document={store.document} page="maintenance" locale={locale} slots={{ maintenanceMessage: null }} /></div>
-      </div>
-    </main>
+    <section className="mx-auto w-full max-w-xl px-4 py-12">
+      <span className="flex h-12 w-12 items-center justify-center rounded-lg bg-neutral-100"><Wrench className="h-5 w-5" /></span>
+      <p className="mt-6 text-xs font-semibold uppercase text-neutral-500">{store.document.brand.name}</p>
+      <h1 className="mt-2 text-3xl font-semibold">{t.customerUx.maintenanceTitle}</h1>
+      <p className="mt-3 text-sm leading-6 text-neutral-600">{t.customerUx.maintenanceHint}</p>
+      <div className="mt-8"><SupportPanel /></div>
+    </section>
   );
 }
 

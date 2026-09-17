@@ -1,6 +1,17 @@
 import type { Dictionary } from './vi';
 
+import { customerUxEn } from './customer-ux';
+import { adminUxEn } from './admin-ux';
+import { settingsUxEn } from './settings-ux';
+import { builderUxEn } from './builder-ux';
+import { reconciliationUxEn } from './reconciliation-ux';
+
 export const en: Dictionary = {
+  customerUx: customerUxEn,
+  adminUx: adminUxEn,
+  settingsUx: settingsUxEn,
+  builderUx: builderUxEn,
+  reconciliationUx: reconciliationUxEn,
   meta: {
     description:
       'Digital goods store — license keys, gift cards and activation codes. Automatic 24/7 delivery, pay with USDT.',
@@ -94,7 +105,12 @@ export const en: Dictionary = {
     scanQr: 'Scan the QR code with the Binance app to pay',
     qrAlt: (code: string) => `Payment QR code for order ${code}`,
     openBinance: 'Open Binance Pay',
-    autoChecking: 'Checking payment automatically every 3 seconds',
+    autoChecking: 'Checking payment automatically at regular intervals',
+    autoRefreshing: 'Updating order status automatically',
+    initializingTitle: 'Waiting for a payment session',
+    unavailableTitle: 'Payment session is not ready',
+    initializingHint: 'Valid payment instructions are not available yet. Please wait for an update or choose an enabled method to try creating the session again.',
+    balancePendingHint: 'This order uses your wallet balance. Payment is not confirmed yet; wait for the order status to update and do not send additional funds.',
     checkNow: 'Check payment',
     cancelOrder: 'Cancel order',
     cancelConfirm: 'Are you sure you want to cancel this order?',
@@ -356,6 +372,7 @@ export const en: Dictionary = {
   },
 
   paymentMode: {
+    INITIALIZING: 'Creating payment session',
     MOCK: 'Sandbox (Mock)',
     BINANCE: 'Binance Pay (merchant)',
     BINANCE_ID: 'Binance Pay · send to ID',
@@ -799,7 +816,13 @@ export const en: Dictionary = {
     cancelOrder: 'Cancel order',
     markPaidAction: 'Mark as paid',
     markPaidPrompt:
-      'Confirm that you HAVE RECEIVED the money for this order and deliver it now.\n\nNote where the money came from so it can be reconciled later (e.g. "Bank transfer 14:05", "USDT sent on the wrong network, verified manually"):',
+      'Confirm only after receiving and verifying the correct funds for this order. Select a transfer below, check its amount, transaction reference and receiver, then record why it needs manual reconciliation. The system will validate it before delivery; a note is not proof of payment.',
+    markPaidTransferLabel: 'Received transfer (selection required)',
+    markPaidTransfersLoading: 'Loading unassigned transfers…',
+    markPaidTransfersEmpty: 'No selectable transfers are available in the latest list. A note alone cannot confirm payment.',
+    markPaidTransferReference: 'Transaction reference',
+    markPaidTransferReceiver: 'Receiving account / wallet',
+    markPaidNoteLabel: 'Reconciliation note (required, up to 300 characters)',
     cancelOrderConfirm: (code: string) => `Cancel order ${code}? Reserved stock will be released.`,
 
     /* ===== v5 — payment settings + Binance status ===== */

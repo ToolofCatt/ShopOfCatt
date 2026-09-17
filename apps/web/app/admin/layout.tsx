@@ -29,7 +29,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-4rem)]">
+    <div className="flex min-h-[calc(100vh-4rem)] min-w-0 flex-col md:flex-row">
       <AdminSidebar />
       <div className="min-w-0 flex-1 bg-neutral-50">
         <div className="mx-auto max-w-6xl px-4 py-8 lg:px-8">{children}</div>

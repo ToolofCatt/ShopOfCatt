@@ -44,6 +44,9 @@ import { FulfillmentService } from './fulfillment.service';
 import { toOrderDetailDto, toOrderSummaryDto } from './order.mapper';
 import { usdtToVnd } from '../payments/sepay-qr';
 import { K } from '../i18n/messages';
+import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/financial-lock';
+import { reconcileCryptoTransfers } from '../common/reconcile-transfers';
+import { observeTransfer, settleOrderTransfer } from '../common/incoming-transfer';
 
 type VariantWithProduct = ProductVariant & { product: Product };
 
@@ -180,6 +183,7 @@ export class OrdersService {
       checkedCoupon = await this.coupons.validate(user.id, rawCoupon, subtotal);
     }
 
+    await this.fulfillment.releaseExpiredOrders();
     let created: {
       orderId: string;
       code: string;
@@ -189,6 +193,7 @@ export class OrdersService {
     try {
       created = await this.prisma.$transaction(
         async (tx) => {
+          await lockFinancialArbitration(tx);
           if (telegramCallbackId) {
             // Khóa từ ĐẦU transaction, trước khi rút kho. Unique ở cuối chỉ
             // chống tạo trùng nhưng bên thua có thể thấy "hết hàng" giả do
@@ -215,10 +220,15 @@ export class OrdersService {
             }
           }
 
-          await this.fulfillment.releaseExpiredOrders(tx);
-
+          // Quota phải khóa trước Variant/Stock, không đọc per-user ngoài transaction rồi tin lại.
+          if (checkedCoupon) await this.coupons.reserve(tx, checkedCoupon.coupon, user.id);
+          const productIds = [...new Set((await tx.productVariant.findMany({
+            where: { id: { in: [...merged.keys()] } }, select: { productId: true },
+          })).map((variant) => variant.productId))].sort();
+          for (const productId of productIds) await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${productId} FOR KEY SHARE`;
           const reservedItems: ReservedItem[] = [];
-          for (const [variantId, quantity] of merged) {
+          for (const [variantId, quantity] of [...merged].sort(([a], [b]) => a.localeCompare(b))) {
+            await tx.$queryRaw`SELECT id FROM "ProductVariant" WHERE id = ${variantId} FOR KEY SHARE`;
             const variant = await tx.productVariant.findFirst({
               where: { id: variantId, active: true, product: { active: true } },
               include: { product: true },
@@ -264,7 +274,6 @@ export class OrdersService {
                 params: { min: Number(coupon.minAmount).toFixed(2) },
               });
             }
-            await this.coupons.reserve(tx, coupon);
             discountAmount = new Prisma.Decimal(
               calcDiscount(
                 subtotal,
@@ -325,7 +334,7 @@ export class OrdersService {
             data: {
               orderId: order.id,
               provider: 'BINANCE_PAY',
-              mode: 'MOCK',
+              mode: 'INITIALIZING',
               merchantTradeNo,
               amount: totalAmount,
               currency: 'USDT',
@@ -406,9 +415,8 @@ export class OrdersService {
     if (!detail.payment) {
       throw new InternalServerErrorException(K.paymentSessionMissing);
     }
-    // Payment được tạo MOCK làm placeholder ngay trong transaction giữ kho;
-    // phương thức thật được cấu hình sau commit. Callback đua nhau phải chờ
-    // bước đó xong, không được đem placeholder ra hướng dẫn khách.
+    // Khởi tạo chưa xong không phải cổng MOCK và tuyệt đối không có đường confirm.
+    if (detail.payment.mode === 'INITIALIZING') return null;
     if (!allowMock && detail.payment.mode === 'MOCK') return null;
     return { order: detail, payment: detail.payment };
   }
@@ -507,9 +515,14 @@ export class OrdersService {
         );
       }
       if (gatewayStatus === 'PAID') {
-        await this.fulfillment.markPaidAndDeliver({ orderId: order.id });
+        const settled = await this.prisma.$transaction(async (tx) => {
+          await lockFinancialArbitration(tx);
+          const transfer = await observeTransfer(tx, { source: 'BINANCE_MERCHANT', reference: order.payment!.merchantTradeNo, amount: order.totalAmount, currency: 'USDT' });
+          return settleOrderTransfer(tx, order.payment!.id, transfer);
+        }, FINANCIAL_TRANSACTION);
+        if (settled) await this.fulfillment.deliverOrder(settled);
       } else if (gatewayStatus === 'CANCELED' || gatewayStatus === 'EXPIRED') {
-        await this.fulfillment.expireOrder(order.id);
+        await this.fulfillment.expireOrder(order.id, { merchantTradeNo: order.payment.merchantTradeNo, sessionVersion: order.payment.sessionVersion });
       }
     } else if (order.status === 'PENDING' && order.payment?.mode === 'CRYPTO') {
       await this.reconcileCryptoOrder(order);
@@ -568,34 +581,17 @@ export class OrdersService {
       throw new BadRequestException(K.paymentTxNetworkMismatch);
     }
 
-    // Dùng ĐÚNG bộ khớp tự động thay vì luật riêng: cùng mạng, đúng số tiền duy
-    // nhất (sai số 0.00005 = nửa bước 0.0001), và khoản nạp phải đến SAU khi đơn
-    // được tạo. Trước đây nhánh "deposit.amount >= total" cho phép khai bất kỳ
-    // khoản nạp nào lớn hơn tiền đơn — kể cả tiền của khách khác.
-    const usedTxIds = await this.getUsedTxIds([deposit.txId]);
-    // Phân biệt rõ hai lý do bị từ chối: đã có đơn khác nhận khoản nạp này,
-    // hay số tiền/thời điểm không khớp. Gộp chung làm khách hiểu nhầm.
-    if (usedTxIds.has(deposit.txId)) {
-      throw new BadRequestException(K.paymentTxAlreadyUsed);
+    // Nhập TxID không được thu hẹp pool về đơn caller: mã giao dịch on-chain là công khai.
+    const ids = await this.prisma.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      return reconcileCryptoTransfers(tx, [deposit!]);
+    }, FINANCIAL_TRANSACTION);
+    for (const id of ids) await this.fulfillment.deliverOrder(id);
+    const fresh = await this.prisma.order.findUniqueOrThrow({ where: { id: order.id }, select: { status: true } });
+    if (!['PAID', 'DELIVERED'].includes(fresh.status)) {
+      throw new BadRequestException(K.paymentReviewRequired);
     }
-    const matched = matchDeposits(
-      [
-        {
-          orderId: order.id,
-          network: payment.cryptoNetwork as CryptoNetwork,
-          expected: Number(payment.cryptoAmount ?? order.totalAmount),
-          createdAtMs: order.createdAt.getTime(),
-        },
-      ],
-      [deposit],
-      usedTxIds,
-      { slackMs: CRYPTO_SLACK_MS },
-    );
-    if (matched.length === 0) {
-      throw new BadRequestException(K.paymentTxAmountMismatch);
-    }
-
-    return this.claimDeposit(order.id, payment.id, deposit.txId);
+    return { status: fresh.status, delivered: fresh.status === 'DELIVERED' };
   }
 
   async cancel(userId: string, code: string): Promise<{ status: OrderStatus }> {
@@ -649,12 +645,6 @@ export class OrdersService {
       phutMacDinh: this.expireMinutes,
       phutNganHang: this.sepayExpireMinutes,
     });
-    // Có điều kiện trạng thái: một lần gọi lại muộn không được hồi sinh đơn đã
-    // hết hạn, đã hủy hay đã trả tiền.
-    await this.prisma.order.updateMany({
-      where: { id: orderId, status: 'PENDING' },
-      data: { expiresAt: han },
-    });
     return han;
   }
 
@@ -674,20 +664,41 @@ export class OrdersService {
       throw new InternalServerErrorException(K.paymentSessionMissing);
     }
     const payment = order.payment;
-
-    // Chốt hạn TRƯỚC khi dựng phiên: nhánh binance_pay đọc lại `hetHan` để báo
-    // cho Binance, nên nó phải là giá trị sau khi đã điều chỉnh.
     const hetHan = await this.apDungHan(order.id, order.createdAt, method);
+    // Version được giữ trước I/O, settlement/cancel sau đó vẫn có thể thắng mà không bị ghi đè.
+    const version = await this.prisma.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+      const live = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { payment: true } });
+      if (live.status !== 'PENDING' || !live.payment || live.payment.status !== 'PENDING' || live.payment.cryptoTxId || live.payment.sepayRef) throw new BadRequestException(K.orderCannotCancel);
+      const updated = await tx.payment.update({ where: { id: payment.id }, data: { sessionVersion: { increment: 1 } } });
+      return updated.sessionVersion;
+    }, FINANCIAL_TRANSACTION);
+    const persist = async (data: Prisma.PaymentUpdateManyMutationInput, merchantTradeNo?: string) => {
+      await this.prisma.$transaction(async (tx) => {
+        await lockFinancialArbitration(tx);
+        await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+        if (merchantTradeNo) await tx.merchantPaymentSession.upsert({ where: { merchantTradeNo }, create: { merchantTradeNo, paymentId: payment.id }, update: {} });
+        const gate = await tx.payment.updateMany({ where: {
+          id: payment.id, sessionVersion: version, status: 'PENDING', cryptoTxId: null, sepayRef: null,
+          order: { status: 'PENDING' }, incomingTransfer: { is: null },
+        }, data });
+        if (gate.count === 0) throw new BadRequestException(K.orderCannotCancel);
+        const applied = await tx.payment.findUniqueOrThrow({ where: { id: payment.id } });
+        if (['CRYPTO', 'BINANCE_ID', 'SEPAY'].includes(applied.mode)) {
+          await tx.paymentInstruction.create({ data: {
+            paymentId: payment.id, sessionVersion: version, mode: applied.mode,
+            amount: applied.mode === 'SEPAY' ? applied.vndAmount! : applied.cryptoAmount!,
+            network: applied.cryptoNetwork, receiver: applied.cryptoAddress,
+          } });
+        }
+        await tx.order.updateMany({ where: { id: orderId, status: 'PENDING' }, data: { expiresAt: hetHan } });
+      }, FINANCIAL_TRANSACTION);
+    };
 
     if (method === 'mock') {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          mode: 'MOCK',
-          ...CLEAR_PAY_SESSION,
-          ...CLEAR_CRYPTO,
-        },
-      });
+      if (!(await this.settings.getEnabledMethods()).some((entry) => entry.method === 'mock')) throw new BadRequestException(K.paymentMockDisabled);
+      await persist({ mode: 'MOCK', ...CLEAR_PAY_SESSION, ...CLEAR_CRYPTO });
       return;
     }
 
@@ -699,6 +710,8 @@ export class OrdersService {
       // Tạo phiên với merchantTradeNo MỚI — Binance từ chối mã đã dùng cho
       // phiên trước đó (trường hợp khách đổi qua lại giữa các phương thức).
       const merchantTradeNo = generateMerchantTradeNo(order.code);
+      // Lưu mapping trước I/O để webhook tới sớm hoặc response bị timeout không mất phiên cũ.
+      await this.prisma.merchantPaymentSession.create({ data: { merchantTradeNo, paymentId: payment.id } });
       let session: BinanceCreateOrderResult;
       try {
         session = await this.binance.createOrder({
@@ -726,19 +739,11 @@ export class OrdersService {
         );
         throw new BadGatewayException(K.paymentSessionFailed);
       }
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          mode: 'BINANCE',
-          merchantTradeNo,
-          prepayId: session.prepayId,
-          checkoutUrl: session.checkoutUrl,
-          qrcodeLink: session.qrcodeLink,
-          deeplink: session.deeplink,
-          universalUrl: session.universalUrl,
-          ...CLEAR_CRYPTO,
-        },
-      });
+      await persist({
+        mode: 'BINANCE', merchantTradeNo, prepayId: session.prepayId,
+        checkoutUrl: session.checkoutUrl, qrcodeLink: session.qrcodeLink,
+        deeplink: session.deeplink, universalUrl: session.universalUrl, ...CLEAR_CRYPTO,
+      }, merchantTradeNo);
       return;
     }
 
@@ -754,18 +759,9 @@ export class OrdersService {
        * MÃ ĐƠN vào phần ghi chú khi chuyển. Không ghi thì bộ đối soát chỉ dám
        * khớp khi đúng một đơn chờ cùng số tiền — xem `matchPayTransfers`.
        */
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          mode: 'BINANCE_ID',
-          cryptoNetwork: null,
-          cryptoAddress: binanceId,
-          cryptoAmount: new Prisma.Decimal(
-            Number(order.totalAmount).toFixed(6),
-          ),
-          cryptoTxId: null,
-          ...CLEAR_PAY_SESSION,
-        },
+      await persist({
+        mode: 'BINANCE_ID', cryptoNetwork: null, cryptoAddress: binanceId,
+        cryptoAmount: order.totalAmount, ...CLEAR_PAY_SESSION,
       });
       return;
     }
@@ -783,23 +779,10 @@ export class OrdersService {
        * xong lại bị đối chiếu với số khác, và đơn treo.
        */
       const vnd = usdtToVnd(Number(order.totalAmount), cauHinh.vndPerUsdt);
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: {
-          mode: 'SEPAY',
-          cryptoNetwork: null,
-          // Chụp lại nơi nhận tiền: đổi tài khoản sau đó thì đơn đang chờ vẫn
-          // trỏ đúng chỗ đã báo khách.
-          cryptoAddress: cauHinh.accountNumber,
-          sepayBank: cauHinh.bank,
-          vndAmount: new Prisma.Decimal(vnd),
-          cryptoAmount: new Prisma.Decimal(
-            Number(order.totalAmount).toFixed(6),
-          ),
-          cryptoTxId: null,
-          sepayRef: null,
-          ...CLEAR_PAY_SESSION,
-        },
+      await persist({
+        mode: 'SEPAY', cryptoNetwork: null, cryptoAddress: cauHinh.accountNumber,
+        sepayBank: cauHinh.bank, vndAmount: new Prisma.Decimal(vnd),
+        cryptoAmount: order.totalAmount, ...CLEAR_PAY_SESSION,
       });
       return;
     }
@@ -812,26 +795,9 @@ export class OrdersService {
       throw new BadRequestException(K.paymentMethodUnavailable);
     }
 
-    /*
-     * Số tiền ĐÚNG BẰNG giá bán, không thêm phần lẻ.
-     *
-     * Giao dịch on-chain không có chỗ ghi chú, nên khi hai khách cùng mua một
-     * sản phẩm thì hai khoản nạp giống hệt nhau và hệ thống KHÔNG tự phân biệt
-     * được. Khách dán TxID để chỉ rõ khoản nào của mình; bộ đối soát nền chỉ tự
-     * khớp khi đúng một đơn chờ cùng số tiền.
-     */
-    const amount = Number(order.totalAmount);
-
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        mode: 'CRYPTO',
-        cryptoNetwork: network,
-        cryptoAddress: address,
-        cryptoAmount: new Prisma.Decimal(amount.toFixed(6)),
-        cryptoTxId: null,
-        ...CLEAR_PAY_SESSION,
-      },
+    // Giữ exact-price. TxID công khai không chứng minh payer, mọi caller dùng pool chung và không đoán khi trùng.
+    await persist({ mode: 'CRYPTO', cryptoNetwork: network, cryptoAddress: address,
+      cryptoAmount: order.totalAmount, ...CLEAR_PAY_SESSION,
     });
   }
 
@@ -849,36 +815,12 @@ export class OrdersService {
     if (!this.binanceExchange.isConfigured) return;
 
     try {
-      // TxID đã được ghi nhận (submit-tx/poller) nhưng đơn chưa chuyển trạng thái
-      // (tiến trình bị ngắt giữa chừng) → chỉ cần giao hàng lại.
-      if (payment.cryptoTxId) {
-        await this.fulfillment.markPaidAndDeliver({ orderId: order.id });
-        return;
-      }
-
-      const deposits = await this.binanceExchange.listUsdtDeposits(
-        order.createdAt.getTime() - CRYPTO_SLACK_MS,
-      );
-      const usedTxIds = await this.getUsedTxIds(deposits.map((d) => d.txId));
-      const matches = matchDeposits(
-        [
-          {
-            orderId: order.id,
-            network: payment.cryptoNetwork as CryptoNetwork,
-            expected: Number(payment.cryptoAmount),
-            createdAtMs: order.createdAt.getTime(),
-          },
-        ],
-        deposits,
-        usedTxIds,
-      );
-      const match = matches[0];
-      if (!match) return;
-
-      await this.claimDeposit(order.id, payment.id, match.txId);
-      this.logger.log(
-        `Đã khớp nạp crypto cho đơn ${order.code}: ${match.amount} USDT (${match.network}, tx ${match.txId})`,
-      );
+      const deposits = await this.binanceExchange.listUsdtDeposits(order.createdAt.getTime() - CRYPTO_SLACK_MS);
+      const ids = await this.prisma.$transaction(async (tx) => {
+        await lockFinancialArbitration(tx);
+        return reconcileCryptoTransfers(tx, deposits);
+      }, FINANCIAL_TRANSACTION);
+      for (const id of ids) await this.fulfillment.deliverOrder(id);
     } catch (error) {
       this.logger.warn(
         `Đối soát crypto thất bại cho đơn ${order.code}: ${
@@ -886,71 +828,6 @@ export class OrdersService {
         }`,
       );
     }
-  }
-
-  /**
-   * Gán một khoản nạp cho đơn rồi giao hàng.
-   *
-   * Việc "TxID này đã dùng chưa" do RÀNG BUỘC `Payment.cryptoTxId @unique` quyết
-   * định, không phải bằng một lần đọc trước đó: hai request song song cùng khai
-   * một TxID sẽ có đúng một request ghi được, request còn lại nhận lỗi P2002.
-   * Kiểm tra bằng `findFirst` rồi mới ghi là chỗ hở kinh điển (TOCTOU).
-   */
-  private async claimDeposit(
-    orderId: string,
-    paymentId: string,
-    txId: string,
-  ): Promise<CheckPaymentDto> {
-    try {
-      await this.prisma.payment.update({
-        where: { id: paymentId },
-        data: { cryptoTxId: txId, status: 'SUCCESS' },
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        throw new BadRequestException(K.paymentTxAlreadyUsed);
-      }
-      throw error;
-    }
-    const result = await this.fulfillment.markPaidAndDeliver({ orderId });
-    return {
-      status: result?.status ?? 'PAID',
-      delivered: result?.delivered ?? false,
-    };
-  }
-
-  /**
-   * Trong `txIds`, những TxID đã được một đơn khác nhận — mỗi khoản nạp chỉ được
-   * tính cho MỘT đơn.
-   *
-   * Chỉ tra đúng các TxID đang xét. Trước đây hàm này tải TOÀN BỘ cryptoTxId của
-   * mọi đơn ở mỗi lần khách bấm "tôi đã chuyển", nên chi phí một request tăng
-   * mãi theo số đơn crypto đã bán. `matchDeposits` cũng chỉ hỏi tới các TxID nằm
-   * trong danh sách truyền vào, nên thu hẹp thế này là tương đương.
-   *
-   * Hàng rào chống dùng lại thật sự vẫn là ràng buộc `Payment.cryptoTxId @unique`
-   * lúc ghi — đây chỉ để báo lỗi cho khách sớm và rõ ràng.
-   */
-  private async getUsedTxIds(txIds: string[]): Promise<Set<string>> {
-    if (txIds.length === 0) return new Set();
-    // Soát CẢ bảng Deposit: một khoản nạp đã cộng ví thì không được đem khai
-    // cho đơn nữa (và ngược lại) — một khoản tiền chỉ đổi được một thứ.
-    const [donRows, napRows] = await Promise.all([
-      this.prisma.payment.findMany({
-        where: { cryptoTxId: { in: txIds } },
-        select: { cryptoTxId: true },
-      }),
-      this.prisma.deposit.findMany({
-        where: { cryptoTxId: { in: txIds } },
-        select: { cryptoTxId: true },
-      }),
-    ]);
-    return new Set(
-      [...donRows, ...napRows].map((row) => row.cryptoTxId as string),
-    );
   }
 
   private async loadOwnDetail(

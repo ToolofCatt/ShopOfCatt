@@ -133,7 +133,7 @@ export function ReadinessBanner({
             key={issue.key}
             role="alert"
             className={cn(
-              'flex flex-wrap items-start gap-3 rounded-xl border p-4',
+              'grid min-w-0 grid-cols-[auto_minmax(0,1fr)] items-start gap-3 rounded-xl border p-4 lg:grid-cols-[auto_minmax(0,1fr)_auto]',
               blocking
                 ? 'border-red-200 bg-red-50'
                 : 'border-amber-200 bg-amber-50',
@@ -146,7 +146,7 @@ export function ReadinessBanner({
                 blocking ? 'text-red-600' : 'text-amber-600',
               )}
             />
-            <div className="min-w-0 flex-1">
+            <div className="min-w-0 break-words">
               <p
                 className={cn(
                   'text-sm font-semibold',
@@ -167,7 +167,7 @@ export function ReadinessBanner({
             <Link
               href={issue.href}
               className={cn(
-                'inline-flex shrink-0 items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
+                'col-start-2 inline-flex min-h-11 max-w-full items-center justify-self-start gap-1 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 lg:col-start-3 lg:min-h-0',
                 blocking
                   ? 'bg-red-600 text-white hover:bg-red-700'
                   : 'bg-amber-600 text-white hover:bg-amber-700',

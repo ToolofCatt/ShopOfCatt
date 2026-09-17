@@ -2,6 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { parseStockImport, StockImportError } from './stock-import';
 
 describe('parseStockImport', () => {
+  it.each(['9007199254740993', '123456789012345678901234567890', '1e6', '001234']) (
+    'preserves numeric key %s through the web import adapter',
+    (key) => {
+      expect(parseStockImport(key)).toEqual({ kind: 'lines', items: [key] });
+    },
+  );
+
+  it('accepts numeric-first mixed plain lines through the web import adapter', () => {
+    expect(parseStockImport('9007199254740993\r\nKEY-A\n00123\n1e6')).toEqual({
+      kind: 'lines', items: ['9007199254740993', 'KEY-A', '00123', '1e6'],
+    });
+  });
+
   it('keeps the existing one-line-per-item format', () => {
     expect(parseStockImport(' KEY-A \n\nKEY-B\r\n').items).toEqual(['KEY-A', 'KEY-B']);
   });

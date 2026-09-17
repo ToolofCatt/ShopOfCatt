@@ -122,14 +122,22 @@ describe('matchPayTransfers', () => {
     expect(kq).toEqual([]);
   });
 
-  it('ghi chú mã đơn không tồn tại → lùi về khớp theo số tiền', () => {
+  it('ghi chú chỉ mã khác → không lấy số tiền để trả nhầm đơn đang chờ', () => {
     const kq = matchPayTransfers(
       [don({ code: 'DH-AAA' })],
-      [giaoDich({ note: 'DH-KHONG-CO' })],
+      [giaoDich({ note: 'NAP-KHONG-CO' })],
       KHONG_DUNG,
     );
-    expect(kq).toHaveLength(1);
-    expect(kq[0].by).toBe('amount');
+    expect(kq).toEqual([]);
+  });
+
+  it('ghi chú chứa nhiều mã không được chọn bên đầu tiên hoặc fallback amount', () => {
+    const kq = matchPayTransfers(
+      [don({ code: 'DH-AAA' })],
+      [giaoDich({ note: 'DH-AAA NAP-BBB' })],
+      KHONG_DUNG,
+    );
+    expect(kq).toEqual([]);
   });
 
   it('ghi chú không phân biệt chữ hoa chữ thường', () => {

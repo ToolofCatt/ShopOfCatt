@@ -3,9 +3,9 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
-import { LifeBuoy } from 'lucide-react';
-import type { PublicStoreInfoDto } from '@webcatt/shared';
-import { apiErrorMessage, apiFetch } from '@/lib/api';
+import { apiErrorMessage } from '@/lib/api';
+import { safeCustomerNext } from '@/lib/customer-navigation';
+import { SupportPanel } from '@/components/support-panel';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import { Button, Card, Field, Input, Spinner } from '@/components/ui';
@@ -23,7 +23,7 @@ interface FieldErrors {
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get('next') || '/';
+  const next = safeCustomerNext(searchParams.get('next'));
   const { user, loading: authLoading, login } = useAuth();
   const { t } = useI18n();
   const storefront = useStorefront();
@@ -35,22 +35,6 @@ function LoginForm() {
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [storeInfo, setStoreInfo] = useState<PublicStoreInfoDto | null>(null);
-
-  // Kênh liên hệ để khách quên mật khẩu nhắn cho admin (admin tự đặt lại).
-  useEffect(() => {
-    let active = true;
-    apiFetch<PublicStoreInfoDto>('/store-info')
-      .then((info) => {
-        if (active) setStoreInfo(info);
-      })
-      .catch(() => {
-        /* không tải được thì chỉ hiện hướng dẫn chung */
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   // Already signed in → go straight to the destination.
   useEffect(() => {
@@ -134,43 +118,7 @@ function LoginForm() {
           </Button>
         </form>
 
-        {/* Quên mật khẩu: cửa hàng không gửi email tự động — khách liên hệ admin.
-            Lời nhắn và các kênh liên hệ do admin tự đặt trong trang Cấu hình. */}
-        <div className="space-y-2 rounded-lg border border-dashed border-neutral-300 p-3 text-center">
-          <p className="flex items-center justify-center gap-1.5 text-sm font-medium text-neutral-800">
-            <LifeBuoy className="h-4 w-4 shrink-0" strokeWidth={1.75} />
-            {t.auth.forgotTitle}
-          </p>
-          <p className="text-sm text-neutral-500">
-            {storeInfo?.supportNote?.trim() || t.auth.forgotHint}
-          </p>
-          {storeInfo && storeInfo.supportChannels.length > 0 && (
-            <ul className="space-y-1">
-              {storeInfo.supportChannels.map((channel, index) => (
-                <li
-                  key={`${channel.label}-${index}`}
-                  className="flex flex-wrap items-baseline justify-center gap-x-1.5 text-sm"
-                >
-                  <span className="text-neutral-500">{channel.label}</span>
-                  {channel.url ? (
-                    <a
-                      href={channel.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="font-mono font-medium break-all text-neutral-950 underline underline-offset-4 hover:no-underline"
-                    >
-                      {channel.value}
-                    </a>
-                  ) : (
-                    <span className="font-mono font-medium break-all text-neutral-950">
-                      {channel.value}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <SupportPanel title={t.auth.forgotTitle} hint={t.auth.forgotHint} />
 
         <p className="text-center text-sm text-neutral-500">
           {t.auth.noAccount}{' '}

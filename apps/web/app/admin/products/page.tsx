@@ -27,7 +27,7 @@ import { Tabs, type TabItem } from '@/components/admin/tabs';
 import { formatProductPrice } from '@/components/admin/helpers';
 
 const ICON_BUTTON_CLASSES =
-  'inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-950 disabled:pointer-events-none disabled:opacity-50';
+  'inline-flex h-11 w-11 cursor-pointer items-center justify-center rounded-lg text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-neutral-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 disabled:pointer-events-none disabled:opacity-50 md:h-8 md:w-8';
 
 const VIEW_STORAGE_KEY = 'wc_admin_products_view';
 
@@ -253,10 +253,10 @@ export default function AdminProductsPage() {
           }
         />
       ) : (
-        <div className="space-y-4">
+        <div className="min-w-0 space-y-4">
           {/* Thanh công cụ: tìm kiếm · lọc trạng thái · sắp xếp · kiểu xem */}
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="relative w-full lg:max-w-xs">
+            <div className="relative min-w-0 w-full lg:max-w-xs">
               <Search
                 strokeWidth={1.75}
                 aria-hidden="true"
@@ -282,14 +282,14 @@ export default function AdminProductsPage() {
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <Tabs items={statusTabs} value={status} onChange={setStatus} />
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
+              <Tabs items={statusTabs} value={status} onChange={setStatus} className="min-w-0 max-w-full [&>button]:h-11 md:[&>button]:h-10" />
 
               <select
                 value={sort}
                 onChange={(event) => setSort(event.target.value as SortKey)}
                 aria-label={t.admin.sortLabel}
-                className="h-10 cursor-pointer rounded-lg border border-neutral-300 bg-white px-3 text-sm outline-none transition-colors focus:border-neutral-950"
+                className="h-11 min-w-0 max-w-full cursor-pointer rounded-lg border border-neutral-300 bg-white px-3 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 md:h-10"
               >
                 <option value="NEWEST">{t.admin.sortNewest}</option>
                 <option value="NAME">{t.admin.sortName}</option>
@@ -316,7 +316,7 @@ export default function AdminProductsPage() {
                     aria-pressed={view === mode}
                     onClick={() => changeView(mode)}
                     className={cn(
-                      'flex h-8 w-8 cursor-pointer items-center justify-center rounded-md transition-colors',
+                      'flex h-11 w-11 cursor-pointer items-center justify-center rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950 md:h-8 md:w-8',
                       view === mode
                         ? 'bg-neutral-950 text-white'
                         : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-950',
@@ -334,12 +334,12 @@ export default function AdminProductsPage() {
               {t.admin.productsFilterEmpty}
             </p>
           ) : view === 'grid' ? (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
               {(visible ?? []).map((product) => (
                 <Card
                   key={product.id}
                   className={cn(
-                    'flex flex-col gap-3 p-4 transition-colors hover:border-neutral-400',
+                    'flex min-w-0 flex-col gap-3 p-4 transition-colors hover:border-neutral-400',
                     !product.active && 'bg-neutral-50',
                   )}
                 >
@@ -372,9 +372,9 @@ export default function AdminProductsPage() {
                     {!product.active && <Badge variant="muted">{t.admin.hidden}</Badge>}
                   </div>
 
-                  <div className="flex items-end justify-between gap-3 border-t border-neutral-100 pt-3">
+                  <div className="flex min-w-0 flex-wrap items-end justify-between gap-3 border-t border-neutral-100 pt-3">
                     <div className="min-w-0">
-                      <p className="font-semibold tabular-nums text-neutral-950">
+                      <p className="break-words font-semibold tabular-nums text-neutral-950">
                         {formatProductPrice(product, t)}
                       </p>
                       <p className="mt-0.5 text-xs text-neutral-500">
@@ -392,7 +392,7 @@ export default function AdminProductsPage() {
               ))}
             </div>
           ) : (
-            <Card className="overflow-x-auto">
+            <Card className="min-w-0 max-w-full overflow-x-auto focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-950" role="region" aria-label={t.admin.productsTitle} tabIndex={0}>
               <table className="w-full min-w-[760px] text-sm">
                 <thead>
                   <tr className="border-b border-neutral-200 text-left text-neutral-500">

@@ -62,6 +62,21 @@ export function I18nProvider({
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 
+/** Ngôn ngữ nội dung không được ghi cookie hay refresh làm mất bản nháp quản trị. */
+export function PreviewI18nProvider({ locale, children }: { locale: Locale; children: ReactNode }) {
+  const value = useMemo<I18nContextValue>(() => {
+    const dictionary = getDictionary(locale);
+    return {
+      locale,
+      t: dictionary,
+      // Preview chỉ đọc: component con không có quyền đổi ngôn ngữ quản trị.
+      setLocale: () => {},
+      formatDate: (raw) => raw ? new Date(raw).toLocaleString(LOCALE_DATE_TAG[locale]) : dictionary.common.dash,
+    };
+  }, [locale]);
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
 export function useI18n(): I18nContextValue {
   const context = useContext(I18nContext);
   if (!context) {

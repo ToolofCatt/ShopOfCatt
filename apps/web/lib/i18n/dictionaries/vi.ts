@@ -5,7 +5,18 @@ import type { AiProvider, AuditAction, PaymentMethod, StockDrawMode } from '@web
  * Kiểu Dictionary được suy ra từ file này, nên en.ts / zh.ts bắt buộc phải
  * khai báo đủ mọi khoá, thiếu một khoá là lỗi biên dịch.
  */
+import { customerUxVi } from './customer-ux';
+import { adminUxVi } from './admin-ux';
+import { settingsUxVi } from './settings-ux';
+import { builderUxVi } from './builder-ux';
+import { reconciliationUxVi } from './reconciliation-ux';
+
 export const vi = {
+  customerUx: customerUxVi,
+  adminUx: adminUxVi,
+  settingsUx: settingsUxVi,
+  builderUx: builderUxVi,
+  reconciliationUx: reconciliationUxVi,
   meta: {
     description:
       'Cửa hàng sản phẩm số — key bản quyền, thẻ quà tặng, mã kích hoạt. Giao hàng tự động 24/7, thanh toán bằng USDT.',
@@ -99,7 +110,12 @@ export const vi = {
     scanQr: 'Quét mã QR bằng ứng dụng Binance để thanh toán',
     qrAlt: (code: string) => `Mã QR thanh toán đơn ${code}`,
     openBinance: 'Mở Binance Pay',
-    autoChecking: 'Tự động kiểm tra thanh toán mỗi 3 giây',
+    autoChecking: 'Tự động kiểm tra thanh toán định kỳ',
+    autoRefreshing: 'Tự động cập nhật trạng thái đơn',
+    initializingTitle: 'Đang chờ tạo phiên thanh toán',
+    unavailableTitle: 'Phiên thanh toán chưa sẵn sàng',
+    initializingHint: 'Chưa có hướng dẫn thanh toán hợp lệ. Vui lòng chờ cập nhật hoặc chọn một phương thức đang bật để thử tạo lại phiên.',
+    balancePendingHint: 'Đơn sử dụng số dư ví. Chưa có xác nhận thanh toán; vui lòng chờ trạng thái đơn cập nhật, không chuyển thêm tiền.',
     checkNow: 'Kiểm tra thanh toán',
     cancelOrder: 'Hủy đơn',
     cancelConfirm: 'Bạn có chắc chắn muốn hủy đơn hàng này?',
@@ -365,6 +381,7 @@ export const vi = {
   },
 
   paymentMode: {
+    INITIALIZING: 'Đang tạo phiên thanh toán',
     MOCK: 'Giả lập (Mock)',
     BINANCE: 'Binance Pay (merchant)',
     BINANCE_ID: 'Binance Pay · chuyển tới ID',
@@ -806,7 +823,13 @@ export const vi = {
     cancelOrder: 'Hủy đơn',
     markPaidAction: 'Đánh dấu đã thanh toán',
     markPaidPrompt:
-      'Xác nhận đã NHẬN ĐƯỢC TIỀN cho đơn này rồi giao hàng ngay.\n\nGhi lại nguồn tiền để sau này còn đối chiếu (ví dụ: "Chuyển khoản VCB 14:05", "USDT TRC20 sai mạng, đã kiểm tra thủ công"):',
+      'Chỉ xác nhận khi đã nhận và kiểm tra đúng khoản tiền cho đơn này. Chọn khoản tiền bên dưới, đối chiếu số tiền, mã giao dịch và tài khoản nhận, rồi ghi chú lý do xử lý tay. Hệ thống sẽ kiểm tra lại trước khi giao hàng; ghi chú không thay thế bằng chứng nhận tiền.',
+    markPaidTransferLabel: 'Khoản tiền đã nhận (bắt buộc chọn)',
+    markPaidTransfersLoading: 'Đang tải khoản tiền chưa được ghép…',
+    markPaidTransfersEmpty: 'Không có khoản tiền nào có thể chọn trong danh sách mới nhất. Không thể xác nhận chỉ bằng ghi chú.',
+    markPaidTransferReference: 'Mã giao dịch',
+    markPaidTransferReceiver: 'Tài khoản / ví nhận',
+    markPaidNoteLabel: 'Ghi chú đối soát (bắt buộc, tối đa 300 ký tự)',
     cancelOrderConfirm: (code: string) => `Hủy đơn ${code}? Kho đang giữ sẽ được hoàn lại.`,
 
     /* ===== v5 — cấu hình thanh toán + trạng thái Binance ===== */

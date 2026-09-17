@@ -71,8 +71,9 @@ function BlockRenderer({ block, locale, slots, selectedId, onSelect, mediaUrl }:
       return shell(<Tag className={cn('font-semibold text-[var(--store-foreground)]', level === 1 ? 'text-4xl' : level === 2 ? 'text-2xl' : 'text-lg')} style={{ fontFamily: 'var(--store-heading-font)' }}>{text}</Tag>, 'mx-auto w-full px-4 py-3', { maxWidth: 'var(--store-container)', textAlign: textAlign(block.props.align) });
     }
     case 'richText': {
+      // Link trong HTML từng vẫn điều hướng khỏi bản nháp dù các slot nghiệp vụ đã inert.
       const html = localized(block.props, 'html', locale);
-      return html ? shell(<div className="wc-prose text-sm leading-7 text-[var(--store-muted)]" dangerouslySetInnerHTML={{ __html: html }} />, 'mx-auto w-full px-4 py-3', { maxWidth: 'var(--store-container)' }) : null;
+      return html ? shell(<div inert={editing || undefined} className={cn('wc-prose text-sm leading-7 text-[var(--store-muted)]', editing && 'pointer-events-none select-none')} dangerouslySetInnerHTML={{ __html: html }} />, 'mx-auto w-full px-4 py-3', { maxWidth: 'var(--store-container)' }) : null;
     }
     case 'image': {
       const src = mediaUrl(typeof block.props.assetId === 'string' ? block.props.assetId : null) ?? '';

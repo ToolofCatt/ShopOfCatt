@@ -1,83 +1,92 @@
 #!/bin/sh
-# Sao lưu PostgreSQL định kỳ.
-#
-# Mỗi dòng trong bảng StockItem LÀ một sản phẩm (key/mã kích hoạt) — mất cơ sở
-# dữ liệu là mất hàng hoá, không có cách nào dựng lại. Đây là lý do dịch vụ này
-# tồn tại chứ không phải "cho có".
+# StockItem là hàng hóa: dump chỉ được công bố khi mọi bước thành công.
+# Không pipe pg_dump | gzip: POSIX sh có thể che lỗi pg_dump dù có end marker.
 set -eu
-
-# Trong sh, mã lỗi của một pipeline là mã lỗi của lệnh CUỐI. `pg_dump | gzip` mà
-# pg_dump chết giữa đường thì gzip vẫn kết thúc thành công, nên nhánh `if` bên
-# dưới từng báo OK cho một bản dump bị cắt cụt. Bật pipefail nếu shell hỗ trợ;
-# phần kiểm tra sản phẩm ở dưới mới là hàng rào chính, vì nó bắt cả trường hợp
-# hết đĩa giữa lúc gzip đang ghi.
-# shellcheck disable=SC3040
-(set -o pipefail 2>/dev/null) && set -o pipefail || true
-
+umask 077
 : "${POSTGRES_HOST:=postgres}"
 : "${POSTGRES_USER:=postgres}"
 : "${POSTGRES_DB:=webcatt}"
 : "${BACKUP_DIR:=/backups}"
-: "${BACKUP_KEEP:=14}"          # số bản giữ lại
-: "${BACKUP_INTERVAL:=86400}"   # giây giữa hai lần (mặc định 24 giờ)
+: "${BACKUP_HEARTBEAT_DIR:=/backup-status}"
+: "${BACKUP_KEEP:=14}"
+: "${BACKUP_INTERVAL:=86400}"
+export POSTGRES_HOST POSTGRES_USER POSTGRES_DB BACKUP_DIR BACKUP_HEARTBEAT_DIR BACKUP_KEEP BACKUP_INTERVAL
+for number in "$BACKUP_KEEP" "$BACKUP_INTERVAL"; do
+  case "$number" in ''|*[!0-9]*|0|0*) printf '[backup] So luong/chu ky phai la so nguyen duong.\n' >&2; exit 2 ;; esac
+done
+case "${1:-}" in
+  '')
+    printf '[backup] Chu ky %ss, giu %s ban.\n' "$BACKUP_INTERVAL" "$BACKUP_KEEP"
+    # Child shell riêng giữ set -e hoạt động: gọi function trong `|| true`
+    # vô hiệu errexit bên trong function và từng biến lỗi ghi file thành OK.
+    while true; do
+      if sh "$0" --once; then :; else printf '[backup] THAT BAI; khong cap nhat heartbeat.\n' >&2; fi
+      sleep "$BACKUP_INTERVAL"
+    done ;;
+  --once) [ "$#" -eq 1 ] || exit 2 ;;
+  *) printf 'Usage: backup.sh [--once]\n' >&2; exit 2 ;;
+esac
 
-mkdir -p "$BACKUP_DIR"
-
-run_backup() {
-  stamp=$(date -u +%Y%m%d-%H%M%S)
-  target="$BACKUP_DIR/webcatt-$stamp.sql.gz"
-  tmp="$target.partial"
-
-  # Ghi ra file .partial rồi mới đổi tên: bản sao lưu nửa chừng (do container bị
-  # dừng giữa lúc dump) sẽ không bị nhầm là bản hoàn chỉnh.
-  if ! pg_dump -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
-       --no-owner --no-acl | gzip -9 > "$tmp"; then
-    rm -f "$tmp"
-    echo "[backup] $(date -u '+%F %T') THAT BAI - xem log postgres" >&2
-    return 1
-  fi
-
-  # KIỂM TRA SẢN PHẨM TRƯỚC KHI PHONG LÀ BẢN HOÀN CHỈNH.
-  # Mã lỗi một mình không đủ: chỉ cần shell không có pipefail, hoặc đĩa đầy đúng
-  # lúc gzip đang ghi, là ta có một file .gz "thành công" nhưng thiếu dữ liệu.
-  # Mỗi dòng StockItem là một món hàng — một bản sao lưu cắt cụt mà tưởng là tốt
-  # còn tệ hơn không có bản nào, vì nó khiến ta yên tâm sai.
-  if ! gzip -t "$tmp" 2>/dev/null; then
-    rm -f "$tmp"
-    echo "[backup] $(date -u '+%F %T') THAT BAI - file gz bi hong" >&2
-    return 1
-  fi
-  # pg_dump ghi dòng "-- PostgreSQL database dump complete" ở cuối. Thiếu nó =
-  # bản dump bị cắt. (Đọc 20 dòng cuối vì sau nó còn vài dòng meta của psql.)
-  if ! gunzip -c "$tmp" | tail -20 | grep -q 'PostgreSQL database dump complete'; then
-    rm -f "$tmp"
-    echo "[backup] $(date -u '+%F %T') THAT BAI - ban dump bi cat cut, da xoa" >&2
-    return 1
-  fi
-
-  mv "$tmp" "$target"
-  # Heartbeat chỉ xuất hiện SAU cả pg_dump và gzip -t. API đọc file này để
-  # wizard phân biệt "container còn chạy" với "đã có backup khôi phục được".
-  heartbeat_tmp="$BACKUP_DIR/.last-success.json.partial"
-  printf '{"completedAt":"%s","file":"%s","bytes":%s}\n' \
-    "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$(basename "$target")" "$(wc -c < "$target" | tr -d ' ')" \
-    > "$heartbeat_tmp"
-  mv "$heartbeat_tmp" "$BACKUP_DIR/.last-success.json"
-  echo "[backup] $(date -u '+%F %T') OK  -> $(basename "$target") ($(du -h "$target" | cut -f1))"
-
-  # Dọn bản cũ, chỉ giữ $BACKUP_KEEP bản mới nhất
-  count=$(ls -1 "$BACKUP_DIR"/webcatt-*.sql.gz 2>/dev/null | wc -l)
-  if [ "$count" -gt "$BACKUP_KEEP" ]; then
-    ls -1t "$BACKUP_DIR"/webcatt-*.sql.gz | tail -n +$((BACKUP_KEEP + 1)) | while read -r old; do
-      rm -f "$old"
-      echo "[backup] da xoa ban cu: $(basename "$old")"
-    done
-  fi
+mkdir -p "$BACKUP_DIR" "$BACKUP_HEARTBEAT_DIR"
+BACKUP_DIR=$(CDPATH= cd -- "$BACKUP_DIR" && pwd)
+BACKUP_HEARTBEAT_DIR=$(CDPATH= cd -- "$BACKUP_HEARTBEAT_DIR" && pwd)
+case "$BACKUP_HEARTBEAT_DIR/" in "$BACKUP_DIR/"*) printf '[backup] Heartbeat phai nam NGOAI thu muc dump.\n' >&2; exit 2 ;; esac
+case "$BACKUP_DIR/" in "$BACKUP_HEARTBEAT_DIR/"*) printf '[backup] Thu muc dump khong duoc nam trong mount heartbeat.\n' >&2; exit 2 ;; esac
+chmod 700 "$BACKUP_DIR"
+chmod 755 "$BACKUP_HEARTBEAT_DIR"
+# Worker định kỳ và --once có thể trùng nhau. Serial hóa cả heartbeat/retention,
+# không tự cướp khóa còn lại sau crash vì không biết tiến trình kia đã dừng chưa.
+LOCK="$BACKUP_DIR/.backup.lock"
+mkdir "$LOCK" 2>/dev/null || { printf '[backup] Dang co backup/lock. Chi xoa .backup.lock sau khi xac minh khong con worker.\n' >&2; exit 1; }
+WORK="" HEARTBEAT_TMP=""
+cleanup() {
+  rc=$?
+  trap - EXIT
+  [ -z "$WORK" ] || rm -rf "$WORK"
+  [ -z "$HEARTBEAT_TMP" ] || rm -f "$HEARTBEAT_TMP"
+  rmdir "$LOCK" || rc=1
+  [ "$rc" -eq 0 ] || printf '[backup] THAT BAI; dump chua xac minh khong duoc cong bo.\n' >&2
+  exit "$rc"
 }
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+WORK=$(mktemp -d "$BACKUP_DIR/.backup.XXXXXXXX")
 
-echo "[backup] Khoi dong. Chu ky ${BACKUP_INTERVAL}s, giu ${BACKUP_KEEP} ban, thu muc ${BACKUP_DIR}"
-# Sao lưu ngay lần đầu để biết cấu hình có chạy không, thay vì đợi 24 giờ mới phát hiện sai.
-while true; do
-  run_backup || true
-  sleep "$BACKUP_INTERVAL"
+pg_dump -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -d "$POSTGRES_DB" \
+  --no-owner --no-acl > "$WORK/dump.sql"
+awk '
+  /^-- PostgreSQL database dump complete([[:space:]]|$)/ { marker=NR }
+  END { exit !(marker && NR-marker <= 20) }
+' "$WORK/dump.sql"
+gzip -9 -c "$WORK/dump.sql" > "$WORK/dump.sql.gz"
+gzip -t "$WORK/dump.sql.gz"
+chmod 600 "$WORK/dump.sql.gz"
+stamp=$(date -u +%Y%m%d-%H%M%S)
+# Suffix mktemp tránh hai lần --once trong cùng giây ghi đè một bản tốt.
+name="webcatt-$stamp-${WORK##*.}.sql.gz"
+target="$BACKUP_DIR/$name"
+mv "$WORK/dump.sql.gz" "$target"
+
+# Chỉ metadata vô hại được API node đọc. KHÔNG chmod dump thành world-readable.
+HEARTBEAT_TMP=$(mktemp "$BACKUP_HEARTBEAT_DIR/.heartbeat.XXXXXXXX")
+bytes=$(wc -c < "$target")
+printf '{"completedAt":"%s","file":"%s","bytes":%s}\n' \
+  "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$name" "$bytes" > "$HEARTBEAT_TMP"
+chmod 644 "$HEARTBEAT_TMP"
+mv "$HEARTBEAT_TMP" "$BACKUP_HEARTBEAT_DIR/.last-success.json"
+HEARTBEAT_TMP=""
+printf '[backup] OK -> %s (%s bytes)\n' "$name" "$bytes"
+
+# Tên UTC sắp xếp theo thời gian; glob không có pipeline che lỗi ls/rm.
+# Không đụng file ngoài mẫu của worker, không cắt retention sau một dump lỗi.
+LC_ALL=C; export LC_ALL
+count=0
+for old in "$BACKUP_DIR"/webcatt-*.sql.gz; do [ ! -f "$old" ] || count=$((count + 1)); done
+for old in "$BACKUP_DIR"/webcatt-*.sql.gz; do
+  [ "$count" -gt "$BACKUP_KEEP" ] || break
+  [ -f "$old" ] || continue
+  [ "$old" != "$target" ] || continue
+  rm "$old"
+  count=$((count - 1))
 done

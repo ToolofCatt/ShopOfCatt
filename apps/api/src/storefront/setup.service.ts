@@ -280,7 +280,7 @@ export class SetupService {
   }
 
   private async backupCheck(now: Date): Promise<StoredCheck> {
-    const path = this.config.get<string>('BACKUP_HEARTBEAT_FILE') ?? '/backups/.last-success.json';
+    const path = this.config.get<string>('BACKUP_HEARTBEAT_FILE') ?? '/backup-status/.last-success.json';
     try {
       const parsed = JSON.parse(await readFile(path, 'utf8')) as { completedAt?: string; file?: string };
       const completedAt = new Date(parsed.completedAt ?? '');

@@ -69,7 +69,12 @@ function tryParseJson(
   value: string,
 ): { ok: true; value: unknown } | { ok: false } {
   try {
-    return { ok: true, value: JSON.parse(value) as unknown };
+    const parsed: unknown = JSON.parse(value);
+    // Key thuần số từng bị làm tròn hoặc đổi ký pháp khi nhận nhầm là JSON.
+    // Chỉ object/array tự nhận là cấu trúc; scalar vẫn là nội dung key gốc.
+    return isRecord(parsed) || Array.isArray(parsed)
+      ? { ok: true, value: parsed }
+      : { ok: false };
   } catch {
     return { ok: false };
   }

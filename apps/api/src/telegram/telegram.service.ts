@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   Optional,
@@ -48,6 +49,7 @@ import {
 } from './order-view';
 import { TelegramUsersService } from './telegram-users.service';
 import { TelegramAdminBotService } from '../telegram-admin/bot.service';
+import { sendAdminDocument } from '../telegram-admin/transport';
 import {
   mainMenuKeyboard,
   matchMenuAction,
@@ -953,6 +955,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   ): Promise<void> {
     const { chatId, lang, answer, edit, stop } = ctx;
     const dict = botDict(lang);
+    // Bot không đi qua JwtStrategy của HTTP. Callback cũ/tự chế vẫn phải kiểm
+    // lockedAt trước mọi nghiệp vụ mua, trả, đối soát, huỷ hoặc tạo mã nạp.
+    if (['qty', 'method', 'check', 'mockConfirm', 'cancelOrder', 'payBalance',
+      'depositAmount', 'depositMethod', 'depositCancel'].includes(parsed.kind)) {
+      const user = await this.users.findByChat(chatId);
+      if (user?.lockedAt) throw new ForbiddenException(K.accountLocked);
+    }
 
     switch (parsed.kind) {
       case 'membershipCheck': {
@@ -1186,10 +1195,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
             parsed.orderCode,
           );
           await answer();
-          await edit(renderOrderDelivered(detail, lang));
-          // Khách đã thấy key qua nút kiểm tra — đánh dấu để vòng đẩy không
-          // gửi lại lần nữa.
-          await this.markNotified(detail.id);
+          await this.sendDelivered(token, detail, lang, ctx, edit);
           return;
         }
         if (result.status === 'PAID') {
@@ -1222,8 +1228,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
             parsed.orderCode,
           );
           await answer();
-          await edit(renderOrderDelivered(detail, lang));
-          await this.markNotified(detail.id);
+          await this.sendDelivered(token, detail, lang, ctx, edit);
           return;
         }
         await answer({ text: dict.checkPaidWaitDelivery, show_alert: true });
@@ -1264,7 +1269,14 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           this.settings.getEnabledMethods(),
         ]);
         await answer();
-        if (detail.status === 'DELIVERED') await this.markNotified(detail.id);
+        if (detail.status === 'DELIVERED') {
+          await this.sendDelivered(token, detail, lang, ctx, edit);
+          return;
+        }
+        if (detail.status === 'PENDING' && detail.payment?.mode === 'INITIALIZING') {
+          await this.showInstructions(token, detail, lang, rates, methods, ctx);
+          return;
+        }
         // Xem lại đơn PENDING thì KHÔNG gửi lại ảnh QR — dội ảnh mỗi lần mở là spam.
         const view = renderOrderView(
           detail,
@@ -1411,8 +1423,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
             parsed.orderCode,
           );
           await answer();
-          await edit(renderOrderDelivered(detail, lang));
-          await this.markNotified(detail.id);
+          await this.sendDelivered(token, detail, lang, ctx, edit);
           return;
         }
         // Trả xong nhưng kho thiếu lúc giao — sweeper sẽ cứu, khách tự kiểm lại.
@@ -1526,31 +1537,14 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
             order.userId,
             order.code,
           );
-          const view = renderOrderDelivered(detail, lang);
-          await this.sendHtml(
-            token,
-            chatId,
-            view.text,
-            view.keyboard,
-            this.stopController.signal,
-          );
-          await this.markNotified(order.id);
+          await this.sendDelivered(token, detail, lang, { chatId, stop: this.stopController.signal });
           this.logger.log(`Đã đẩy key đơn ${order.code} vào chat ${chatId}`);
         } catch (err) {
-          if (err instanceof TelegramApiError) {
-            // Lỗi CỦA CHAT (khách chặn bot, chat biến mất…) — không bao giờ
-            // gửi được nữa, đánh dấu luôn kẻo lượt nào cũng thử lại và rác log.
-            // Key vẫn nằm ở "🧾 Đơn của tôi" và trang quản trị.
-            this.logger.warn(
-              `Đẩy key đơn ${order.code} bị Telegram từ chối (${errText(err)}) — thôi không thử lại.`,
-            );
-            await this.markNotified(order.id);
-          } else {
-            // Lỗi mạng/CSDL thoáng qua — để nguyên, lượt sau thử lại.
-            this.logger.warn(
-              `Đẩy key đơn ${order.code} trượt: ${errText(err)}`,
-            );
-          }
+          this.logger.warn(`Đẩy key đơn ${order.code} trượt: ${errText(err)}`);
+          // Cùng phân loại stock alert: 400/403 riêng chat, 429/5xx/mất mạng
+          // dừng batch. Không có failedAt cho đơn nên tuyệt đối không lấy
+          // telegramNotifiedAt làm marker lỗi: marker này chỉ có nghĩa đã gửi.
+          if (!isPermanentRecipientError(err)) return;
         }
       }
       // Tin nạp đã cộng — cùng cơ chế outbox với key.
@@ -1580,14 +1574,8 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           await this.balance.markDepositNotified(nap.id);
           this.logger.log(`Đã báo cộng ví mã nạp ${nap.code}`);
         } catch (err) {
-          if (err instanceof TelegramApiError) {
-            this.logger.warn(
-              `Báo cộng ví ${nap.code} bị Telegram từ chối (${errText(err)}) — thôi không thử lại.`,
-            );
-            await this.balance.markDepositNotified(nap.id);
-          } else {
-            this.logger.warn(`Báo cộng ví ${nap.code} trượt: ${errText(err)}`);
-          }
+          this.logger.warn(`Báo cộng ví ${nap.code} trượt: ${errText(err)}`);
+          if (!isPermanentRecipientError(err)) return;
         }
       }
 
@@ -1664,10 +1652,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
             data: { sentAt: new Date(), lastError: null },
           });
         } catch (err) {
-          if (
-            err instanceof TelegramApiError &&
-            (err.code === 400 || err.code === 403)
-          ) {
+          if (isPermanentRecipientError(err)) {
             await this.markStockAlertFailed(
               recipient.alertId,
               recipient.userId,
@@ -1897,6 +1882,28 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Đánh dấu "đã báo khách" — updateMany điều kiện null nên gọi trùng vô hại. */
+  /**
+   * Cùng đường gửi cho outbox và xem tay/check/mock/ví. Document dùng transport
+   * multipart đã có của quản trị (không retry POST): timeout có thể đã gửi,
+   * lượt outbox sau có thể trùng tin nhưng không bao giờ cắt hoặc bỏ mất key.
+   * Chỉ mark sau khi cả summary và mọi file thành công; không giữ DB lock khi I/O.
+   */
+  private async sendDelivered(
+    token: string,
+    order: Parameters<typeof renderOrderDelivered>[0],
+    lang: BotLang,
+    ctx: { chatId: number; stop: AbortSignal },
+    edit?: (view: BotView) => Promise<void>,
+  ): Promise<void> {
+    const view = renderOrderDelivered(order, lang);
+    if (edit) await edit(view);
+    else await this.sendHtml(token, ctx.chatId, view.text, view.keyboard, ctx.stop);
+    for (const document of view.documents ?? []) {
+      await sendAdminDocument(token, ctx.chatId, document, ctx.stop);
+    }
+    await this.markNotified(order.id);
+  }
+
   private async markNotified(orderId: string): Promise<void> {
     try {
       await this.prisma.order.updateMany({
@@ -1929,7 +1936,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     order: Parameters<typeof renderPaymentInstructions>[0],
     lang: BotLang,
     rates: Parameters<typeof renderPaymentInstructions>[2],
-    methods: { method: string; accountHolder?: string }[],
+    methods: Parameters<typeof renderMethodChooser>[1],
     ctx: {
       chatId: number;
       edit: (view: {
@@ -1946,6 +1953,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
       minutesLeft(order.expiresAt),
       sepayHolder(methods),
     );
+    if (order.status === 'PENDING' && order.payment?.mode === 'INITIALIZING') {
+      // Phiên chưa khởi tạo không phải MOCK. Replay phải có đường chọn lại
+      // phương thức thay vì hiển thị hướng dẫn giả hoặc mắc kẹt chỉ còn nút huỷ.
+      const chooser = renderMethodChooser(order, methods, lang, rates, minutesLeft(order.expiresAt));
+      await ctx.edit({ text: `${view.text}\n\n${escapeText(botDict(lang).chooseMethod)}`, keyboard: chooser.keyboard });
+      return;
+    }
     await ctx.edit({ text: view.text, keyboard: view.keyboard });
     if (view.photo) {
       await this.sendQrPhoto(
@@ -2002,6 +2016,11 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     this.callbackCooldown.set(chatId, now);
     return true;
   }
+}
+
+/** Lỗi chat không nên chặn người nhận khác; lỗi server/rate limit giữ cả batch. */
+function isPermanentRecipientError(err: unknown): boolean {
+  return err instanceof TelegramApiError && (err.code === 400 || err.code === 403);
 }
 
 function errText(err: unknown): string {

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/financial-lock';
+import { creditDepositTransfer, observeTransfer, type TransferFacts } from '../common/incoming-transfer';
 
 /** Mã nạp crypto quá 24 giờ thì thôi không đối soát nữa — xem listAwaiting. */
 const CRYPTO_AWAIT_HOURS = 24;
@@ -27,65 +29,22 @@ export class WalletCreditService {
     depositId: string,
     ref: { sepayRef: string } | { cryptoTxId: string },
   ): Promise<boolean> {
-    try {
-      return await this.prisma.$transaction(
-        async (tx) => {
-          const gate = await tx.deposit.updateMany({
-          where: {
-            id: depositId,
-            status: { in: ['PENDING', 'EXPIRED'] },
-            // Một mã nạp chỉ nhận đúng MỘT giao dịch, bất kể kênh nào.
-            sepayRef: null,
-            cryptoTxId: null,
-          },
-          data: { status: 'SUCCESS', paidAt: new Date(), ...ref },
-        });
-          if (gate.count === 0) return false;
-
-          const deposit = await tx.deposit.findUniqueOrThrow({
-          where: { id: depositId },
-          select: { userId: true, amountUsdt: true, code: true },
-        });
-
-        /*
-         * Khoá dòng User trước khi đọc-cộng: không khoá thì hai lần cộng/trừ
-         * song song cùng đọc một số dư cũ và balanceAfter trong sổ cái nói dối.
-         */
-          await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${deposit.userId} FOR UPDATE`;
-          const user = await tx.user.findUniqueOrThrow({
-          where: { id: deposit.userId },
-          select: { balance: true },
-        });
-          const balanceAfter = user.balance.add(deposit.amountUsdt);
-          await tx.user.update({
-          where: { id: deposit.userId },
-          data: { balance: balanceAfter },
-        });
-          await tx.balanceEntry.create({
-          data: {
-            userId: deposit.userId,
-            amount: deposit.amountUsdt,
-            balanceAfter,
-            reason: 'deposit',
-            refCode: deposit.code,
-          },
-        });
-          return true;
-        },
-        // Hai webhook/tick cùng nhắm một mã phải CHỜ trọng tài hàng Deposit,
-        // không được vỡ vì maxWait 2 giây mặc định trước khi CAS trả false.
-        { maxWait: 10_000, timeout: 10_000 },
-      );
-    } catch (err) {
-      if (
-        err instanceof Prisma.PrismaClientKnownRequestError &&
-        err.code === 'P2002'
-      ) {
-        // Bên kia vừa ghi cùng ref — coi như đã xử lý.
-        return false;
-      }
-      throw err;
-    }
+    return this.prisma.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      const deposit = await tx.deposit.findUnique({ where: { id: depositId } });
+      if (!deposit) return false;
+      const sepay = 'sepayRef' in ref;
+      const source: TransferFacts['source'] = sepay ? 'SEPAY'
+        : deposit.mode === 'BINANCE_ID' ? 'BINANCE_ID'
+        : deposit.cryptoNetwork === 'BEP20' ? 'CRYPTO:BEP20' : 'CRYPTO:TRC20';
+      if (!sepay && deposit.mode !== 'BINANCE_ID' && !['BEP20', 'TRC20'].includes(deposit.cryptoNetwork ?? '')) return false;
+      const transfer = await observeTransfer(tx, {
+        source, reference: sepay ? ref.sepayRef : ref.cryptoTxId,
+        amount: sepay ? deposit.vndAmount : deposit.amountUsdt,
+        currency: sepay ? 'VND' : 'USDT', network: deposit.cryptoNetwork, receiver: deposit.cryptoAddress,
+      });
+      return creditDepositTransfer(tx, depositId, transfer);
+    }, FINANCIAL_TRANSACTION);
   }
 
   /**

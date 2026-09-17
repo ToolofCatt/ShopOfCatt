@@ -9,6 +9,7 @@ import { CreateProductDto } from '../admin/dto/create-product.dto';
 import { UpdateProductDto } from '../admin/dto/update-product.dto';
 import { CreateVariantDto } from '../admin/dto/create-variant.dto';
 import { UpdateVariantDto } from '../admin/dto/update-variant.dto';
+import { MarkPaidDto } from '../admin/dto/mark-paid.dto';
 import {
   CreateCouponDto,
   UpdateCouponDto,
@@ -181,7 +182,8 @@ export const ADMIN_COMMANDS = {
     title: 'markPaid',
     permission: 'FULL',
     sensitive: true,
-    fields: [text('note')],
+    fields: [text('incomingTransferId'), text('note')],
+    dto: MarkPaidDto,
   },
   'customer.lock': { title: 'lock', permission: 'OPERATOR', fields: [] },
   'customer.unlock': { title: 'unlock', permission: 'OPERATOR', fields: [] },
@@ -332,9 +334,13 @@ export function validateCommand(
       Number(payload.quantity) > WITHDRAW_MAX)
   )
     throw new BadRequestException(K.adminStockContentInvalid);
-  if (
-    kind === 'order.markPaid' &&
-    (typeof payload.note !== 'string' || !payload.note.trim())
-  )
-    throw new BadRequestException(K.adminStockContentInvalid);
+  if (kind === 'order.markPaid') {
+    // Note không định danh khoản tiền; từ chối ngay trước khi tạo action bền vững.
+    if (typeof payload.incomingTransferId !== 'string' || !payload.incomingTransferId.trim()) {
+      throw new BadRequestException(K.paymentReviewRequired);
+    }
+    if (typeof payload.note !== 'string' || !payload.note.trim()) {
+      throw new BadRequestException(K.adminStockContentInvalid);
+    }
+  }
 }

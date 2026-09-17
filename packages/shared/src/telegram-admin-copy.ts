@@ -9,6 +9,7 @@ export const TELEGRAM_ADMIN_COPY = {
   product: ['Sản phẩm', 'Product', '商品'],
   variant: ['Loại sản phẩm', 'Option', '规格'],
   order: ['Đơn hàng', 'Order', '订单'],
+  incomingTransferId: ['ID giao dịch (lấy tại trang đối soát web admin)', 'Transfer ID (from web admin reconciliation)', '转账 ID（从网页管理对账页获取）'],
   customer: ['Khách hàng', 'Customer', '客户'],
   coupon: ['Mã giảm giá', 'Coupon', '优惠码'],
   policy: ['Chính sách', 'Policy', '政策'],

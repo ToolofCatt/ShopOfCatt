@@ -13,7 +13,7 @@ import {
 } from '@webcatt/shared';
 import { sepayQrUrl } from '../payments/sepay-qr';
 import { encodeCallback, escapeHtml } from './catalog-view';
-import { orderMoney, sortPaymentMethods, type BotView } from './order-view';
+import { exactUsdtHtml, orderMoney, sortPaymentMethods, type BotView } from './order-view';
 import { botDict, type BotLang } from './messages';
 import type { TgInlineKeyboard, TgReplyKeyboard } from './telegram-api';
 
@@ -229,9 +229,8 @@ export function renderDepositInstructions(
       accountHolder: bank.accountHolder,
     });
   } else {
-    // Kênh crypto/Binance ID — số USDT hiện đủ 6 chữ số lẻ trong <code>:
-    // phần lẻ 0.0001 chính là "chữ ký" nhận diện mã nạp, cắt là mất dấu.
-    const soUsdt = deposit.amountUsdt.toFixed(6);
+    // Cùng formatter với đơn hàng: cắt phần lẻ làm số khách chuyển không khớp.
+    const soUsdt = exactUsdtHtml(deposit.amountUsdt);
     if (deposit.mode === 'CRYPTO') {
       if (deposit.cryptoNetwork) {
         lines.push(escapeHtml(dict.payCryptoNetwork(deposit.cryptoNetwork)));
@@ -249,7 +248,7 @@ export function renderDepositInstructions(
     lines.push(
       '',
       escapeHtml(dict.depositUsdtExact),
-      `<code>${soUsdt}</code> USDT`,
+      soUsdt,
       escapeHtml(dict.payAmount(formatMoney(deposit.vndAmount, 'VND'))),
     );
     if (deposit.mode === 'BINANCE_ID') {

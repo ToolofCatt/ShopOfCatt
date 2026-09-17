@@ -8,11 +8,26 @@ thứ tự, mỗi bước đều có cách tự kiểm chứng.
 
 ---
 
+## Cảnh báo khi cập nhật bản vá vận hành
+
+- **Không chạy lại `install.sh` để cập nhật hoặc chữa lỗi khởi động.** Installer
+  từ chối nếu còn `.env`, container hoặc volume `webcatt`; không xoay mật khẩu/JWT.
+  Nếu lần cài đầu bị ngắt, giữ nguyên `.env` rồi tiếp tục bằng Compose của **đúng
+  deployment** sau khi kiểm tra lỗi. Mất `.env` nhưng còn volume: tìm lại cấu hình
+  gốc từ bản lưu an toàn; không sinh mật khẩu Postgres mới, không xóa volume.
+- Heartbeat chuyển từ `backups/.last-success.json` sang
+  `backup-status/.last-success.json`. Dump và volume PostgreSQL **không đổi vị
+  trí/tên**. Xem mục 5 trước khi recreate API/backup; không mở quyền dump để chữa
+  lỗi API không đọc được heartbeat.
+- Restore mặc định là thao tác **phá hủy target** sau diễn tập. Dùng
+  `--rehearsal` khi chỉ muốn kiểm backup và `--no-start` khi cần giữ writer dừng
+  để đối soát. Chỉ nhận dump tin cậy của chính shop, không SQL từ nguồn lạ.
+
 ## 0. Chuẩn bị
 
 | Thứ cần có | Ghi chú |
 |---|---|
-| VPS | 2 GB RAM là đủ cho cửa hàng nhỏ (Postgres 1 GB + API 768 MB + Web 512 MB) |
+| VPS | Tính cả OS, build và các dịch vụ khác: riêng giới hạn Postgres + API + web đã khoảng 2,25 GB. Chạy staging cùng máy chỉ khi còn đủ RAM/đĩa; không ép máy 2 GB chạy cả hai stack |
 | Tên miền | Đã trỏ bản ghi **A** về IP của VPS. Kiểm: `dig +short shop.cua-ban.com` |
 | Docker + Docker Compose | `curl -fsSL https://get.docker.com \| sh` |
 | Cổng 80 và 443 mở | Caddy cần cả hai để xin chứng chỉ Let's Encrypt |
@@ -185,14 +200,72 @@ Mỗi dòng trong kho **chính là hàng hoá**. Mất cơ sở dữ liệu là 
 không có cách nào dựng lại.
 
 Dịch vụ `backup` chạy sẵn, đổ file vào `./backups` mỗi 24 giờ, giữ 14 bản.
+`./storectl backup` chạy **một lần** và trả exit code thật; không coi container
+`running` hay lệnh restart thành công là bằng chứng backup đã xong. Worker dùng
+khóa `backups/.backup.lock` để tránh hai backup ghi heartbeat/retention chồng nhau.
+Nếu báo đang có lock, chờ lượt hiện tại; sau crash/kill cứng, chỉ xóa thư mục lock
+rỗng khi đã xác minh cả worker định kỳ lẫn container `run --once` đều dừng. Không
+xóa lock tự động để ép chạy. File SQL tạm private còn lại sau kill cứng cũng chỉ
+dọn sau khi xác minh không còn worker.
 
-**Diễn tập khôi phục một lần — đừng đợi đến lúc cần:**
+### Tách heartbeat khỏi dump khi nâng cấp
+
+Dump chứa key/email/hash: thư mục `backups` mode **700**, bản mới mode **600**.
+Chỉ metadata (`completedAt`, tên file, số byte) nằm trong `backup-status` mode
+**755**, heartbeat **644**; API user `node` chỉ mount thư mục này read-only.
+
+Thực hiện trong cửa sổ bảo trì đã cho phép, từ thư mục deployment cũ:
 
 ```bash
-ls -lh backups/                             # phải có ít nhất 1 file .sql.gz
-./docker/restore.sh backups/webcatt-*.sql.gz   # gõ YES để xác nhận
-docker compose logs api | tail              # kiểm tra khởi động lại bình thường
+# Không đổi webcatt_pgdata, tên container hay nơi chứa dump.
+mkdir -p backup-status
+chmod 755 backup-status
+chmod 700 backups
+# Cập nhật đúng source/image đã kiểm chứng trước khi recreate.
+docker compose up -d --no-deps api backup
+./storectl backup
+./storectl doctor --json
 ```
+
+Không cần copy heartbeat cũ: worker sẽ ghi bản mới sau backup thành công. Không
+mount lại `backups` vào API, không `chmod -R 777`. Các dump cũ vẫn được bảo vệ bởi
+thư mục 700; có thể siết riêng từng file cũ về 600. Git Bash/NTFS không chứng minh
+quyền POSIX: xác nhận trên Linux rằng UID `node` đọc được heartbeat nhưng không
+có mount `/backups`.
+
+### Diễn tập và phục hồi
+
+Chọn **một tên file cụ thể**, không dùng wildcard khớp nhiều bản. Chỉ chạy các
+lệnh dưới đây trên máy/stack đã được phép; ví dụ tên file chỉ là minh họa:
+
+```bash
+# Kiểm gzip + giải nén một lần + end marker + SQL vào database tạm.
+# Không stop/start writer, không thay đổi target. Có CREATE/DROP database tạm.
+./storectl restore --rehearsal backups/webcatt-20260917-010000-AbCd1234.sql.gz
+
+# Chỉ khi thực sự cần thay target, sau khi được phép downtime/rollback.
+./storectl restore --no-start backups/webcatt-20260917-010000-AbCd1234.sql.gz
+```
+
+`--no-start` vẫn cần gõ `YES`. Script kiểm rehearsal trước, rồi dừng
+`api web backup`, dùng lại `backup.sh --once` lấy backup cuối của target, thay
+schema và nạp **cùng file SQL private bất biến** trong một transaction. So sánh
+counts `StockItem|Order|User` với rehearsal trước khi báo thành công. Counts
+không thay kiểm ledger/stock/settlement invariants của bản phát hành.
+
+Bất kỳ lỗi gzip/giải nén/end marker/SQL rehearsal: target chưa bị sửa và không
+stop writer. Lỗi sau stop: **không tự start**. Không khởi động API để "xem thử"
+khi chưa đối soát. Lỗi DROP database tạm được báo rõ; không xóa database khác để
+vượt lỗi. Dump phải do `pg_dump --no-owner --no-acl` của worker tạo, không có
+`--create`; yêu cầu dung lượng cho file nén private, SQL giải nén, DB rehearsal
+và backup target. SQL dump có thể chứa lệnh psql: rehearsal **không phải sandbox**
+để kiểm file không tin cậy.
+
+Mặc định không có flag sẽ start lại `api web backup` **chỉ sau mọi bước thành
+công**; dùng `--no-start` trong cutover. Nếu còn writer bên ngoài Compose (process
+Node chạy tay, service khác), phải dừng chúng theo runbook trước restore; ba
+service Compose không bao quát writer ngoài. Database production cần diễn tập
+migration: chỉ PostgreSQL cách ly, không API/bot, không xuất key/raw dump khỏi host.
 
 Chép bản sao lưu **ra khỏi VPS** (đĩa hỏng là mất cả máy lẫn backup):
 
@@ -243,19 +316,76 @@ thêm kho — bộ quét chạy mỗi 2 phút.
 
 ---
 
-## Cập nhật phiên bản
+## Staging và cập nhật phiên bản
+
+### Staging synthetic độc lập
+
+`docker-compose.staging.yml` là manifest **độc lập**, không override manifest
+production. Không có `container_name`, image `latest`, proxy production hay
+external volume. Mỗi `STAGING_ID` tạo project/images/network/volumes riêng;
+các cổng mặc định chỉ loopback `15433`, `18401`, `18400`. Tổng giới hạn RAM runtime
+khoảng **1,4 GB**, chưa tính Docker/OS/build; kiểm tài nguyên thật trước khi chạy
+cùng production. `internal: true`, gateway mode `isolated` (IPv4/IPv6) và DNS
+loopback chặn egress runtime, đồng thời bỏ IP bridge để container không gọi dịch
+vụ host qua gateway. Cần Docker Engine hỗ trợ gateway modes: **không tự hạ về
+`nat`** để chạy cho được. Trước khi bật app phải xác minh trên Linux external
+IP/DNS, host gateway/metadata đều không tới được và published loopback ports còn
+hoạt động; nếu engine không hỗ trợ, dừng staging để thiết kế lại ingress, không
+nới egress. Build/pull không được cô lập bằng network runtime này.
+[Hành vi gateway modes của Docker](https://docs.docker.com/engine/network/port-publishing/#gateway-modes).
+
+Tạo env-file riêng **ngoài repo**, mode 600, không copy `.env` production. Cần:
+`STAGING_ID` (tag chữ-số/dấu gạch riêng), `STAGING_POSTGRES_PASSWORD` (chữ/số),
+`STAGING_JWT_SECRET` (ngẫu nhiên ≥32 ký tự), `STAGING_ADMIN_EMAIL`,
+`STAGING_ADMIN_PASSWORD` (ngẫu nhiên, không mẫu công khai). Có thể đổi
+`STAGING_POSTGRES_PORT`, `STAGING_API_PORT`, `STAGING_WEB_PORT` khi cổng đã bận.
+Không nhúng giá trị bí mật vào lệnh, repo hay log `compose config` đầy đủ.
+
+Ví dụ chỉ chạy sau approval, từ snapshot source candidate đã kiểm chứng:
 
 ```bash
-cd /opt/catt-store
-docker compose restart backup   # ép sao lưu ngay (dịch vụ dump luôn khi khởi động)
-ls -lt backups | head -3        # xác nhận có bản mới trước khi đụng vào gì
-git pull
-docker compose up -d --build
-docker compose logs -f api      # migration chạy tự động lúc khởi động
+# Kiểm manifest, không in cấu hình chứa secrets.
+docker compose --env-file /secure/catt-stage.env -f docker-compose.staging.yml config --quiet
+# Mặc định CHỈ PostgreSQL. API/web/backup cần bật profile app một cách tường minh.
+docker compose --env-file /secure/catt-stage.env -f docker-compose.staging.yml up -d postgres
+# Chỉ với database rỗng synthetic mới, chưa từng restore production.
+docker compose --env-file /secure/catt-stage.env -f docker-compose.staging.yml --profile app up -d --build
 ```
 
-> `docker/backup.sh` là tiến trình chạy nền **bên trong container** (vòng lặp vô
-> hạn) — đừng gọi thẳng trên máy chủ.
+Secret provider đều rỗng; mock thanh toán off, seed demo off. DB mới có
+`rateAuto=false`, bot token/recipient/SePay key rỗng theo default schema. Provider
+fixture nếu cần phải bổ sung **nội bộ** mạng isolated, không nối mạng production.
+Không import settings thật rồi mới tắt: worker/outbox có thể chạy ngay lúc boot,
+maintenance UI không chặn worker. Chỉ user/order/key `TEST-*`; kiểm auth/CSP bản
+build, mua/mark-paid và ledger invariants bằng fixture được phép, không tiền/key thật.
+Rehearsal dữ liệu production phải dùng project **chỉ PostgreSQL khác**, không bật
+profile app trên volume từng chứa dữ liệu production.
+
+Khi chạy restore với manifest staging, truyền `COMPOSE_FILE` và
+`COMPOSE_ENV_FILES` trỏ manifest/env-file staging; `POSTGRES_DB=stage_store`,
+`POSTGRES_USER=stage_user` phải khớp. Không gọi `storectl` production để suy đoán
+project staging. Fixture shell dùng Docker giả lập không thay Linux rehearsal.
+
+### Gate trước cutover
+
+1. Pin candidate image và image/config cũ, lưu SHA-256 source đã kiểm chứng.
+   `scripts/release.mjs` chỉ đóng gói HEAD sạch; khi chưa commit, ZIP HEAD cũ
+   **không chứa bản vá**. Không deploy nhầm ZIP đó thay snapshot candidate.
+2. Staging Linux xanh; kiểm backup/restore rehearsal và migration riêng trước.
+   Không sửa credentials hoặc chạy installer lại.
+3. Dừng admission/writers theo kế hoạch downtime thật (không chỉ maintenance UI),
+   lấy final backup bằng `./storectl backup`, kiểm gzip + rehearsal, rồi migrate
+   một lần và bật đúng image candidate. Lệnh Compose tự migrate khi API boot,
+   nên không bật API trước bước migration/cutover được duyệt.
+4. Health/readiness và read-only smoke đã xét side effect. Trang `/admin` phải
+   hết cảnh báo launch. GET orders có thể cleanup expiry nên không mặc định an toàn.
+5. Trước khi mở writer có thể rollback snapshot đã xác minh. **Sau khi mở bán,
+   không restore snapshot cũ** mà chưa đối soát giao dịch mới. Với schema claim
+   tiền mới, image cũ không tự nhiên tương thích; giữ writer dừng để forward-fix
+   nếu chưa có compatibility image đã kiểm chứng.
+
+> `docker/backup.sh` chạy **bên trong container**; không gọi daemon trực tiếp
+> trên host. `./storectl backup` dùng `--once` và báo lỗi thật.
 
 ---
 

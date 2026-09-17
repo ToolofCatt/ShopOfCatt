@@ -29,13 +29,26 @@ done
 fail() { echo "[install] ERROR: $*" >&2; exit 1; }
 info() { echo "[install] $*"; }
 
-[ "$(uname -s)" = "Linux" ] || fail "Production installer supports Linux only."
-[ -r /etc/os-release ] || fail "Cannot identify this Linux distribution."
-# shellcheck disable=SC1091
-. /etc/os-release
-case "${ID:-}" in ubuntu|debian) ;; *) fail "Supported distributions: Ubuntu and Debian (found ${ID:-unknown})." ;; esac
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+cd "$ROOT"
+# Installer chỉ dành cho lần đầu. Retry với mật khẩu random mới làm API mất
+# kết nối volume Postgres cũ và vô hiệu JWT; copy .env cũ không chữa được lỗi này.
+[ ! -e .env ] && [ ! -L .env ] || fail "Existing .env: refusing reinstall/credential rotation. Keep this file; resume with docker compose config --quiet, then docker compose up -d --build using the SAME deployment. See docs/TRIEN-KHAI.md."
+[ -z "${COMPOSE_FILE:-}" ] || fail "Use the production manifest from this directory, not COMPOSE_FILE."
+[ "${COMPOSE_PROJECT_NAME:-webcatt}" = webcatt ] || fail "Installer only supports the webcatt production project."
 command -v docker >/dev/null 2>&1 || fail "Docker Engine is missing: https://docs.docker.com/engine/install/"
 docker compose version >/dev/null 2>&1 || fail "Docker Compose plugin is missing."
+# Thiếu .env nhưng còn volume/container nghĩa là phải tìm lại credentials, không
+# tự khởi tạo. Lỗi kiểm kê Docker cũng phải fail-closed, không coi là stack rỗng.
+volumes=$(docker volume ls --filter name=webcatt --format '{{.Name}}') || fail "Cannot inspect existing volumes."
+containers=$(docker ps -a --filter name=webcatt --format '{{.Names}}') || fail "Cannot inspect existing containers."
+[ -z "$volumes$containers" ] || fail "Existing deployment containers/volumes: recover the original .env; no credentials or volumes were changed."
+[ "$(uname -s)" = "Linux" ] || fail "Production installer supports Linux only."
+[ -r /etc/os-release ] || fail "Cannot identify this Linux distribution."
+# shellcheck source=docker/env.sh
+. "$ROOT/docker/env.sh"
+ID=$(env_value ID /etc/os-release)
+case "$ID" in ubuntu|debian) ;; *) fail "Supported distributions: Ubuntu and Debian (found ${ID:-unknown})." ;; esac
 command -v openssl >/dev/null 2>&1 || fail "openssl is required to generate secrets."
 
 if [ "$NON_INTERACTIVE" = false ]; then
@@ -69,14 +82,15 @@ fi
 
 GENERATED_PASSWORD=false
 if [ -z "$ADMIN_PASSWORD" ]; then ADMIN_PASSWORD=$(openssl rand -hex 18); GENERATED_PASSWORD=true; fi
-# File .env này vừa được Docker Compose đọc vừa được `storectl` nạp bằng shell.
-# Chặn ký tự có thể đổi cú pháp thay vì âm thầm sinh file cài đặt không đọc được.
+# Giới hạn alphabet để file .env của lần cài mới luôn đọc được bởi Compose;
+# storectl/restore đọc nó như dữ liệu, không bao giờ thực thi bằng shell.
 echo "$ADMIN_PASSWORD" | grep -Eq '^[A-Za-z0-9._~@%+=:-]{12,128}$' || fail "Owner password must be 12-128 characters using letters, numbers, or ._~@%+=:-"
-JWT_SECRET=$(openssl rand -base64 48 | tr -d '\r\n')
+JWT_SECRET=$(openssl rand -hex 48)
 POSTGRES_PASSWORD=$(openssl rand -hex 24)
 
 umask 077
-[ ! -e .env ] || cp .env ".env.before-install.$(date -u +%Y%m%d-%H%M%S)"
+# Noclobber chặn cả race hai installer; không ghi đè .env xuất hiện sau preflight.
+set -C
 cat > .env <<EOF
 JWT_SECRET=$JWT_SECRET
 POSTGRES_USER=postgres
@@ -104,8 +118,11 @@ SEED_DEMO=false
 BACKUP_INTERVAL=86400
 BACKUP_KEEP=14
 EOF
+set +C
 chmod 600 .env
-mkdir -p backups
+mkdir -p backups backup-status
+chmod 700 backups
+chmod 755 backup-status
 
 info "Validating Docker Compose configuration..."
 docker compose config --quiet

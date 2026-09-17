@@ -95,6 +95,9 @@ export const K = {
   paymentTxNetworkMismatch: 'payment.tx_network_mismatch',
   paymentTxAmountMismatch: 'payment.tx_amount_mismatch',
   paymentTxAlreadyUsed: 'payment.tx_already_used',
+  paymentReviewRequired: 'payment.review_required',
+  adminVariantHasStock: 'admin.variant_has_stock',
+  adminProductHasStock: 'admin.product_has_stock',
 
   // --- admin: product form ---
   adminNameInvalid: 'admin.name_invalid',
@@ -491,6 +494,22 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     vi: 'TxID này đã được dùng cho một đơn hàng khác',
     en: 'This TxID has already been used for another order',
     zh: '该 TxID 已被其他订单使用',
+  },
+
+  [K.paymentReviewRequired]: {
+    vi: 'Khoản tiền cần được cửa hàng đối soát trước khi giao hàng. Vui lòng liên hệ hỗ trợ.',
+    en: 'This payment needs store review before delivery. Please contact support.',
+    zh: '此笔付款需要商店核实后才能交付，请联系支持。',
+  },
+  [K.adminVariantHasStock]: {
+    vi: 'Loại sản phẩm còn hàng hoặc lịch sử kho. Hãy ngừng bán thay vì xóa.',
+    en: 'This variant has stock or inventory history. Deactivate it instead of deleting it.',
+    zh: '此规格仍有库存或库存记录，请停用而非删除。',
+  },
+  [K.adminProductHasStock]: {
+    vi: 'Sản phẩm còn hàng hoặc lịch sử kho. Hãy ngừng bán thay vì xóa.',
+    en: 'This product has stock or inventory history. Deactivate it instead of deleting it.',
+    zh: '此商品仍有库存或库存记录，请停用而非删除。',
   },
 
   // --- admin: product form ---

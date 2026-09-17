@@ -1,0 +1,47 @@
+export const settingsUxVi = {
+  tabs: { payments: 'Thanh toán', rates: 'Tỉ giá', ai: 'Dịch AI', support: 'Hỗ trợ' },
+  sectionHint: 'Mỗi mục được lưu riêng. Chuyển tab không làm mất bản nháp trong trang này.',
+  unsaved: 'Có thay đổi chưa lưu', upToDate: 'Không có thay đổi chưa lưu',
+  saveSection: 'Lưu mục này', savedSection: 'Đã lưu mục này',
+  rateDirty: 'Tỉ giá có thay đổi chưa lưu. Hãy lưu hoặc bỏ bản nháp tỉ giá trước khi lấy tỉ giá mới. Các mục khác không bị ảnh hưởng.',
+  discardRates: 'Bỏ bản nháp tỉ giá', savedRateHint: 'Thanh toán dùng tỉ giá đã lưu. Sửa và lưu tỉ giá trong mục Tỉ giá trước khi bật SePay.',
+  secretsHint: 'Để trống để giữ khoá hiện tại. Chỉ nút xoá mới đánh dấu xoá khoá khi lưu. Khoá chỉ nằm trong bộ nhớ của trang, không được lưu vào URL hay bộ nhớ trình duyệt.',
+  cancelDelete: 'Huỷ xoá khoá', deletePending: 'Khoá sẽ bị xoá khi lưu mục này.',
+  legalDraftHint: 'Bản nháp của từng chính sách được giữ khi chuyển tab. Lưu chỉ cập nhật chính sách đang chọn.',
+  legalEmptyWarning: 'Chính sách này chưa có nội dung. Chủ shop cần tự soạn và kiểm tra nội dung phù hợp trước khi bán hàng; trang này không tự tạo cam kết thay chủ shop.',
+  legalFetchError: 'Chưa tải được chính sách', legalFetchHint: 'Không thể xác nhận nội dung chính sách lúc này. Hãy thử lại hoặc liên hệ cửa hàng trước khi mua.',
+  setupRestricted: 'Bạn có thể xem kết quả và mở các mục cấu hình. Chỉ chủ shop (SUPERADMIN) được chạy kiểm tra thiết lập và xuất bản cửa hàng.',
+  ratesInvalid: 'Kiểm tra tỉ giá, phần trăm cộng thêm và giờ cập nhật: nhập số hợp lệ trong giới hạn hiển thị.',
+};
+
+export const settingsUxEn: typeof settingsUxVi = {
+  tabs: { payments: 'Payments', rates: 'Exchange rates', ai: 'AI translation', support: 'Support' },
+  sectionHint: 'Each section saves independently. Switching tabs keeps drafts on this page.',
+  unsaved: 'Unsaved changes', upToDate: 'No unsaved changes',
+  saveSection: 'Save this section', savedSection: 'Section saved',
+  rateDirty: 'Exchange rates have unsaved changes. Save or discard the rate draft before fetching new rates. Other sections are not affected.',
+  discardRates: 'Discard rate draft', savedRateHint: 'Payments use saved exchange rates. Edit and save rates in Exchange rates before enabling SePay.',
+  secretsHint: 'Leave blank to keep the current key. Only the delete button marks a key for deletion on save. Keys stay in page memory, never in URLs or browser storage.',
+  cancelDelete: 'Cancel key deletion', deletePending: 'This key will be deleted when you save this section.',
+  legalDraftHint: 'Each policy keeps its own draft when switching tabs. Saving updates only the selected policy.',
+  legalEmptyWarning: 'This policy has no content. The store owner must write and review suitable content before selling; this page does not create commitments on their behalf.',
+  legalFetchError: 'Policy could not be loaded', legalFetchHint: 'The policy content cannot be confirmed right now. Retry or contact the store before purchasing.',
+  setupRestricted: 'You can view results and open configuration pages. Only the store owner (SUPERADMIN) can run setup checks and publish the store.',
+  ratesInvalid: 'Check the rates, markup and update hour: enter valid numbers within the displayed limits.',
+};
+
+export const settingsUxZh: typeof settingsUxVi = {
+  tabs: { payments: '支付', rates: '汇率', ai: 'AI 翻译', support: '支持' },
+  sectionHint: '每个部分独立保存。在此页面切换标签不会丢失草稿。',
+  unsaved: '有未保存的更改', upToDate: '没有未保存的更改',
+  saveSection: '保存此部分', savedSection: '此部分已保存',
+  rateDirty: '汇率有未保存的更改。请先保存或放弃汇率草稿，再获取最新汇率。其他部分不会受影响。',
+  discardRates: '放弃汇率草稿', savedRateHint: '支付使用已保存的汇率。启用 SePay 前，请在汇率部分编辑并保存汇率。',
+  secretsHint: '留空以保留现有密钥。只有删除按钮才会标记密钥在保存时删除。密钥仅保留在页面内存中，不写入 URL 或浏览器存储。',
+  cancelDelete: '取消删除密钥', deletePending: '保存此部分时将删除此密钥。',
+  legalDraftHint: '切换标签时每项政策保留自己的草稿。保存仅更新当前选中的政策。',
+  legalEmptyWarning: '此政策尚无内容。店主需在销售前自行撰写并审核适当的内容；此页面不会代替店主作出承诺。',
+  legalFetchError: '无法加载政策', legalFetchHint: '目前无法确认政策内容。购买前请重试或联系商店。',
+  setupRestricted: '您可以查看结果并打开配置页面。只有店主（SUPERADMIN）可以运行设置检查和发布商店。',
+  ratesInvalid: '请检查汇率、加价比例和更新时间，输入显示范围内的有效数字。',
+};

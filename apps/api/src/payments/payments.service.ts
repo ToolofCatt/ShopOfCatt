@@ -16,6 +16,9 @@ import {
 } from './sepay-matcher';
 import { PrismaService } from '../prisma/prisma.service';
 import { K } from '../i18n/messages';
+import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/financial-lock';
+import { creditDepositTransfer, observeTransfer, reviewTransfer, settleOrderTransfer } from '../common/incoming-transfer';
+import { markOrderPaid } from '../common/order-settlement';
 
 export interface BinanceWebhookPayload {
   bizType?: string;
@@ -46,122 +49,49 @@ export class PaymentsService {
    * (khách chuyển thiếu, người khác chuyển vào tài khoản) thì gửi lại bao nhiêu
    * lần cũng vẫn không khớp — chỉ tạo ra một vòng thử lại vô nghĩa.
    */
-  async handleSepayWebhook(tx: SepayTransaction): Promise<string> {
-    const ref = String(tx.id);
-    if (ref === '' || ref === 'undefined') {
-      return 'bo qua: giao dich khong co id';
-    }
-
-    // Đã ghi nhận rồi thì thôi — webhook được gửi lại là chuyện bình thường.
-    const daCo = await this.prisma.payment.findUnique({
-      where: { sepayRef: ref },
-      select: { orderId: true },
-    });
-    if (daCo) {
-      return `bo qua: giao dich ${ref} da duoc ghi nhan truoc do`;
-    }
-    if (await this.balance.findDepositBySepayRef(ref)) {
-      return `bo qua: giao dich ${ref} da duoc ghi cho mot ma nap truoc do`;
-    }
-
-    const cauHinh = await this.settings.getSepayConfig();
-
-    /*
-     * Nhận cả đơn ĐÃ HẾT HẠN, không chỉ PENDING.
-     *
-     * Chuyển khoản liên ngân hàng có lúc chậm hơn 30 phút hết hạn đơn. Tiền đã
-     * vào tài khoản rồi thì phải giao hàng — `markPaidAndDeliver` cũng nhận
-     * EXPIRED nên kho được lấy bù nếu dòng cũ đã bị nhả.
-     */
-    const dangCho = await this.prisma.payment.findMany({
-      where: {
-        mode: 'SEPAY',
-        status: 'PENDING',
-        sepayRef: null,
-        order: { status: { in: ['PENDING', 'EXPIRED'] } },
-      },
-      select: {
-        id: true,
-        orderId: true,
-        vndAmount: true,
-        order: { select: { code: true } },
-      },
-    });
-
-    const kq = matchSepayTransaction(
-      tx,
-      dangCho
-        .filter((p) => p.vndAmount !== null)
-        .map((p) => ({
-          orderId: p.orderId,
-          code: p.order.code,
-          expectedVnd: Number(p.vndAmount),
-        })),
-      { expectedAccountNumber: cauHinh.accountNumber },
-    );
-
-    if (!kq.payment) {
-      /*
-       * Không khớp đơn nào — thử MÃ NẠP VÍ (NAP-xxx) bằng CHÍNH bộ matcher
-       * này: cùng luật mã-trong-nội-dung + số tiền tuyệt đối, không có nhánh
-       * nới lỏng riêng cho nạp tiền.
-       */
-      const napKq = matchSepayTransaction(
-        tx,
-        (await this.balance.listAwaitingDeposits()).map((d) => ({
-          orderId: d.id, // matcher gọi là orderId nhưng chỉ là id tham chiếu
-          code: d.code,
-          expectedVnd: d.expectedVnd,
-        })),
-        { expectedAccountNumber: cauHinh.accountNumber },
-      );
-      if (napKq.payment) {
-        const daCong = await this.balance.creditDeposit(napKq.payment.orderId, ref);
-        if (daCong) {
-          this.logger.log(
-            `SePay ${ref}: da cong vi (ma nap) — ${tx.transferAmount} VND`,
-          );
-          return 'da cong vi (ma nap)';
-        }
-        return `bo qua: ma nap vua duoc mot tien trinh khac ghi nhan`;
+  async handleSepayWebhook(event: SepayTransaction): Promise<string> {
+    const ref = String(event.id ?? '').trim();
+    if (!ref || event.transferType !== 'in' || !Number.isFinite(event.transferAmount) || event.transferAmount <= 0) return 'bo qua: giao dich khong hop le';
+    const config = await this.settings.getSepayConfig();
+    const result = await this.prisma.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      const transfer = await observeTransfer(tx, { source: 'SEPAY', reference: ref, amount: event.transferAmount, currency: 'VND', receiver: event.accountNumber });
+      if (transfer.status === 'CLAIMED') return {
+        orderId: transfer.paymentId ? await settleOrderTransfer(tx, transfer.paymentId, transfer) : null,
+        text: 'bo qua: giao dich da ghi nhan',
+      };
+      if (transfer.status === 'REVIEW') return { orderId: null, text: 'can doi soat' };
+      const [payments, instructions, deposits] = await Promise.all([
+        tx.payment.findMany({ where: { mode: 'SEPAY', status: { in: ['PENDING', 'EXPIRED', 'FAILED'] }, sepayRef: null, order: { status: { in: ['PENDING', 'EXPIRED', 'CANCELLED'] } } }, include: { order: { select: { code: true } } } }),
+        tx.paymentInstruction.findMany({ where: { mode: 'SEPAY', payment: { status: { not: 'SUCCESS' }, sepayRef: null, order: { status: { in: ['PENDING', 'EXPIRED', 'CANCELLED'] } } } }, include: { payment: { include: { order: { select: { code: true } } } } } }),
+        tx.deposit.findMany({ where: { mode: 'SEPAY', status: { in: ['PENDING', 'EXPIRED', 'CANCELLED'] }, sepayRef: null } }),
+      ]);
+      const all = [
+        ...payments.filter((p) => p.vndAmount !== null).map((p) => ({ orderId: `payment:${p.id}`, code: p.order.code, expectedVnd: Number(p.vndAmount), account: p.cryptoAddress })),
+        ...instructions.map((i) => ({ orderId: `payment:${i.paymentId}`, code: i.payment.order.code, expectedVnd: Number(i.amount), account: i.receiver })),
+        ...deposits.map((d) => ({ orderId: `deposit:${d.id}`, code: d.code, expectedVnd: Number(d.vndAmount), account: d.cryptoAddress })),
+      ];
+      // Một đích có nhiều QR đã phát hành. Chọn theo snapshot account+amount rồi dedupe target.
+      const pool = [...new Map(all.filter((p) => p.account && p.account === event.accountNumber?.trim() && p.expectedVnd === event.transferAmount).map((p) => [p.orderId, p])).values()];
+      const match = matchSepayTransaction(event, pool);
+      if (!match.payment) {
+        const unresolved = matchSepayTransaction(event, all);
+        if (unresolved.payment || match.reason !== 'khong-thay-ma-don') await reviewTransfer(tx, transfer, unresolved.payment ? 'missing-or-mismatched-receiver-snapshot' : match.reason ?? 'unmatched');
+        return { orderId: null, text: `khong khop: ${match.reason}` };
       }
-      const themVao =
-        kq.reason === 'sai-so-tien' ? ` (lech ${kq.shortfall} VND)` : '';
-      this.logger.warn(
-        `SePay ${ref}: khong khop — ${kq.reason}${themVao}. ` +
-          `So tien ${tx.transferAmount} VND, noi dung "${tx.content}"`,
-      );
-      return `khong khop: ${kq.reason}`;
-    }
-
-    const payment = dangCho.find((p) => p.orderId === kq.payment?.orderId);
-    if (!payment) return 'khong khop: khong tim lai duoc don';
-
-    /*
-     * Ghi `sepayRef` TRƯỚC khi giao hàng. Ràng buộc @unique là trọng tài: hai
-     * webhook cùng lúc thì chỉ một bên ghi được, bên kia nhận P2002 và dừng —
-     * không giao hàng hai lần.
-     */
-    try {
-      await this.prisma.payment.update({
-        where: { id: payment.id },
-        data: { sepayRef: ref, status: 'SUCCESS' },
-      });
-    } catch (error) {
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2002'
-      ) {
-        return `bo qua: giao dich ${ref} vua duoc mot tien trinh khac ghi nhan`;
+      const selected = pool.find((p) => p.orderId === match.payment!.orderId)!;
+      if (!selected.account || selected.account !== event.accountNumber?.trim()) {
+        await reviewTransfer(tx, transfer, 'wrong-receiver'); return { orderId: null, text: 'khong khop: sai-tai-khoan' };
       }
-      throw error;
-    }
-
-    await this.fulfillment.markPaidAndDeliver({ orderId: payment.orderId });
-    this.logger.log(
-      `SePay ${ref}: da khop don ${payment.order.code} — ${tx.transferAmount} VND`,
-    );
-    return `da khop don ${payment.order.code}`;
+      if (selected.orderId.startsWith('deposit:')) {
+        const credited = await creditDepositTransfer(tx, selected.orderId.slice(8), transfer);
+        return { orderId: null, text: credited ? 'da cong vi (ma nap)' : 'can doi soat' };
+      }
+      const orderId = await settleOrderTransfer(tx, selected.orderId.slice(8), transfer);
+      return { orderId, text: orderId ? `da khop don ${selected.code}` : 'can doi soat' };
+    }, FINANCIAL_TRANSACTION);
+    if (result.orderId) await this.fulfillment.deliverOrder(result.orderId);
+    return result.text;
   }
 
   /**
@@ -195,26 +125,21 @@ export class PaymentsService {
       return;
     }
 
-    const payment = await this.prisma.payment.findUnique({
-      where: { merchantTradeNo },
-      select: { id: true, orderId: true },
-    });
-    if (!payment) {
-      this.logger.warn(
-        `Webhook Binance: không tìm thấy payment cho merchantTradeNo=${merchantTradeNo}`,
-      );
-      return;
-    }
-
-    await this.prisma.payment.update({
-      where: { id: payment.id },
-      data: { rawWebhook: payload as unknown as Prisma.InputJsonValue },
-    });
-
+    const reference = merchantTradeNo;
+    const session = await this.prisma.merchantPaymentSession.findUnique({ where: { merchantTradeNo: reference }, include: { payment: true } });
+    const payment = session?.payment ?? await this.prisma.payment.findUnique({ where: { merchantTradeNo: reference } });
+    if (!payment) { this.logger.warn('Webhook Binance: không tìm thấy phiên thanh toán'); return; }
     if (payload.bizStatus === 'PAY_SUCCESS') {
-      await this.fulfillment.markPaidAndDeliver({ merchantTradeNo });
-    } else if (payload.bizStatus === 'PAY_CLOSED') {
-      await this.fulfillment.expireOrder(payment.orderId);
+      const orderId = await this.prisma.$transaction(async (tx) => {
+        await lockFinancialArbitration(tx);
+        const transfer = await observeTransfer(tx, { source: 'BINANCE_MERCHANT', reference, amount: payment.amount, currency: 'USDT' });
+        const id = await settleOrderTransfer(tx, payment.id, transfer);
+        await tx.payment.update({ where: { id: payment.id }, data: { rawWebhook: payload as unknown as Prisma.InputJsonValue } });
+        return id;
+      }, FINANCIAL_TRANSACTION);
+      if (orderId) await this.fulfillment.deliverOrder(orderId);
+    } else if (payload.bizStatus === 'PAY_CLOSED' && payment.merchantTradeNo === reference && payment.mode === 'BINANCE') {
+      await this.fulfillment.expireOrder(payment.orderId, { merchantTradeNo: reference, sessionVersion: payment.sessionVersion });
     }
   }
 
@@ -227,28 +152,21 @@ export class PaymentsService {
     userId: string,
     code: string,
   ): Promise<{ status: OrderStatus }> {
-    if (!this.isMockMode) {
-      throw new ForbiddenException(
-        K.paymentMockDisabled,
-      );
-    }
-    const order = await this.prisma.order.findFirst({
-      where: { code, userId },
-      select: { id: true, payment: { select: { mode: true } } },
-    });
-    if (!order) {
-      throw new NotFoundException(K.orderNotFound);
-    }
-    // Đơn đang chờ Binance Pay hoặc chuyển USDT thật thì không được "giả lập" xong.
-    if (order.payment?.mode !== 'MOCK') {
-      throw new ForbiddenException(K.paymentMockDisabled);
-    }
-    const result = await this.fulfillment.markPaidAndDeliver({
-      orderId: order.id,
-    });
-    if (!result) {
-      throw new NotFoundException(K.orderNotFound);
-    }
-    return { status: result.status };
+    if (!this.isMockMode) throw new ForbiddenException(K.paymentMockDisabled);
+    const orderId = await this.prisma.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      // Giữ gate DB tới commit: tắt công tắc không được đua với confirm miễn phí.
+      await tx.$queryRaw`SELECT id FROM "StoreSetting" WHERE id = 'main' FOR SHARE`;
+      const setting = await tx.storeSetting.findUnique({ where: { id: 'main' }, select: { mockEnabled: true } });
+      if (!setting?.mockEnabled) throw new ForbiddenException(K.paymentMockDisabled);
+      const order = await tx.order.findFirst({ where: { code, userId }, include: { payment: true } });
+      if (!order) throw new NotFoundException(K.orderNotFound);
+      if (order.payment?.mode !== 'MOCK') throw new ForbiddenException(K.paymentMockDisabled);
+      await markOrderPaid(tx, order.id);
+      return order.id;
+    }, FINANCIAL_TRANSACTION);
+    const live = await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { status: true } });
+    if (live.status === 'PAID') await this.fulfillment.deliverOrder(orderId);
+    return { status: (await this.prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { status: true } })).status };
   }
 }

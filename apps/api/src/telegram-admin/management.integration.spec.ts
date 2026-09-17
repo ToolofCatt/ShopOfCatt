@@ -9,7 +9,8 @@ import { SettingsService } from '../settings/settings.service';
 import { FulfillmentService } from '../orders/fulfillment.service';
 import { CustomersService } from '../customers/customers.service';
 import { TelegramAdminAccessService } from './access.service';
-import { TelegramAdminActionsService } from './actions.service';
+import { TelegramAdminActionsService, payloadHash } from './actions.service';
+import { K } from '../i18n/messages';
 import type { PrismaService } from '../prisma/prisma.service';
 
 const DB = 'webcatt_telegram_management_test';
@@ -345,7 +346,7 @@ describe('Telegram admin transaction (real PostgreSQL)', () => {
     ).toBe('RESERVED');
   });
 
-  it('manual payment confirmation uses fulfillment and never delivers twice', async (ctx) => {
+  it('manual canonical transfer confirmation claims and delivers once under duplicate confirms', async (ctx) => {
     if (!reachable) return ctx.skip();
     const variant = await db.productVariant.findUniqueOrThrow({
       where: { id: variantId },
@@ -374,18 +375,25 @@ describe('Telegram admin transaction (real PostgreSQL)', () => {
           create: {
             merchantTradeNo: 'ADMIN-FIXTURE',
             amount: 2,
+            vndAmount: 52_000,
+            cryptoAddress: 'SYNTHETIC-ACCOUNT',
             mode: 'SEPAY',
             status: 'PENDING',
           },
         },
       },
     });
+    const incoming = await db.incomingTransfer.create({ data: {
+      source: 'SEPAY', reference: 'synthetic-telegram-payment', amount: 52_000,
+      currency: 'VND', receiver: 'SYNTHETIC-ACCOUNT', status: 'REVIEW',
+      reviewReason: 'ambiguous-order-or-deposit',
+    } });
     const snap = await actions.snapshot('order.markPaid', order.code);
     const action = await actions.prepare(
       full,
       'order.markPaid',
       order.code,
-      { note: 'Fixture only' },
+      { note: 'Fixture only', incomingTransferId: incoming.id },
       snap.hash,
       snap.label,
     );
@@ -404,5 +412,51 @@ describe('Telegram admin transaction (real PostgreSQL)', () => {
         where: { action: 'order.mark_paid', actorSource: 'TELEGRAM' },
       }),
     ).toBe(1);
+    const payment = await db.payment.findUniqueOrThrow({ where: { orderId: order.id } });
+    expect(payment.sepayRef).toBe(incoming.reference);
+    expect((await db.incomingTransfer.findUniqueOrThrow({ where: { id: incoming.id } })))
+      .toMatchObject({ status: 'CLAIMED', paymentId: payment.id });
+    expect((await db.telegramAdminAction.findUniqueOrThrow({ where: { id: action.id } })).status).toBe('DONE');
+  });
+
+  it('note-only markPaid rejects before prepare or RUNNING/REVIEW and preserves reserved stock', async (ctx) => {
+    if (!reachable) return ctx.skip();
+    const variant = await db.productVariant.findUniqueOrThrow({ where: { id: variantId } });
+    const order = await db.order.create({
+      data: {
+        code: 'DH-ADMIN-NO-TRANSFER', userId: owner.id, totalAmount: 2,
+        payment: { create: { merchantTradeNo: 'ADMIN-NO-TRANSFER', amount: 2, mode: 'SEPAY' } },
+        items: { create: {
+          productId: variant.productId, variantId, productName: 'Test',
+          variantName: 'Default', unitPrice: 2, quantity: 1,
+        } },
+      },
+      include: { items: true },
+    });
+    const stock = await db.stockItem.create({ data: {
+      variantId, content: 'SYNTHETIC-NOTE-ONLY', status: 'RESERVED', orderItemId: order.items[0].id,
+    } });
+    const snapshot = await actions.snapshot('order.markPaid', order.code);
+    await expect(actions.prepare(full, 'order.markPaid', order.code,
+      { note: 'Fixture only' }, snapshot.hash, snapshot.label)).rejects.toThrow(K.paymentReviewRequired);
+    expect(await db.telegramAdminAction.count({ where: { targetId: order.code } })).toBe(0);
+
+    // Callback đã prepare từ phiên bản cũ phải bị từ chối TRƯỚC gate bền vững,
+    // không để note-only tạo REVIEW rồi khóa mọi thao tác sau trên đơn này.
+    const payload = { note: 'legacy note-only' };
+    const saved = await db.telegramAdminAction.create({ data: {
+      id: 'legacy-note-only-payment', kind: 'order.markPaid', targetId: order.code,
+      telegramUserId: full.telegramUserId, adminVersion: full.version,
+      payloadHash: payloadHash(payload), expiresAt: new Date(Date.now() + 60_000),
+    } });
+    await expect(actions.execute(full, {
+      id: saved.id, kind: 'order.markPaid', targetId: order.code, targetCode: order.code,
+      expected: snapshot.hash, payload,
+    })).rejects.toThrow(K.paymentReviewRequired);
+    expect((await db.telegramAdminAction.findUniqueOrThrow({ where: { id: saved.id } })).status).toBe('PENDING');
+    expect((await db.order.findUniqueOrThrow({ where: { id: order.id } })).status).toBe('PENDING');
+    expect((await db.payment.findUniqueOrThrow({ where: { orderId: order.id } })).status).toBe('PENDING');
+    expect((await db.stockItem.findUniqueOrThrow({ where: { id: stock.id } })).status).toBe('RESERVED');
+    expect(await db.auditLog.count({ where: { action: 'order.mark_paid', entityId: order.id } })).toBe(0);
   });
 });

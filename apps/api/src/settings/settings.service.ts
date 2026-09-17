@@ -18,6 +18,7 @@ import type { AdminActor } from '../audit/admin-actor';
 import { K } from '../i18n/messages';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateSettingsDto } from './dto/update-settings.dto';
+import { recalculateAnchoredPrices } from '../rates/anchored-prices';
 import { UpdateTelegramSettingsDto } from './dto/update-telegram-settings.dto';
 import { inspectMembershipChannel, normalizeChannelId, validJoinUrl } from '../telegram/membership-access';
 
@@ -273,33 +274,7 @@ export class SettingsService {
     actor: AdminActor,
     patch: Partial<UpdateSettingsDto>,
   ): Promise<AdminStoreSettingDto> {
-    const current = await this.getAdmin();
-    const merged: UpdateSettingsDto = {
-      mockEnabled: current.mockEnabled,
-      binancePayEnabled: current.binancePayEnabled,
-      binanceIdEnabled: current.binanceIdEnabled,
-      binanceId: current.binanceId,
-      binanceQr: current.binanceQr,
-      cryptoEnabled: current.cryptoEnabled,
-      bep20Address: current.bep20Address,
-      trc20Address: current.trc20Address,
-      sepayEnabled: current.sepayEnabled,
-      sepayAccountNumber: current.sepayAccountNumber,
-      sepayBank: current.sepayBank,
-      sepayAccountHolder: current.sepayAccountHolder,
-      vndPerUsdt: current.vndPerUsdt,
-      cnyPerUsdt: current.cnyPerUsdt,
-      rateAuto: current.rateAuto,
-      rateMarkupPercent: current.rateMarkupPercent,
-      rateHour: current.rateHour,
-      aiProvider: current.aiProvider,
-      aiBaseUrl: current.aiBaseUrl,
-      aiModel: current.aiModel,
-      supportChannels: current.supportChannels,
-      supportNote: current.supportNote,
-      ...patch,
-    };
-    return this.update(actor, merged);
+    return this.update(actor, patch);
   }
 
   /**
@@ -308,8 +283,8 @@ export class SettingsService {
    * Cùng quy tắc fail-closed và cùng nhật ký với update() đầy đủ.
    */
   async updateTelegram(actor: AdminActor, dto: UpdateTelegramSettingsDto): Promise<AdminStoreSettingDto> {
-    const before = await this.getSetting();
-
+    const observed = await this.getSetting();
+    const before = observed;
     const token = dto.telegramBotToken?.trim();
     const enabledNext = dto.telegramBotEnabled ?? before.telegramBotEnabled;
     const tokenSauKhiLuu = token === undefined ? before.telegramBotToken.trim() : token;
@@ -326,6 +301,7 @@ export class SettingsService {
     } catch {
       throw new BadRequestException(K.adminTelegramMembershipInvalid);
     }
+    let inspectedMembership = false;
     // Chỉ kiểm kết nối khi bật hoặc đổi cấu hình liên quan. Tắt luôn thực hiện
     // được dù Telegram đang lỗi, để chủ shop có đường mở lại bot cho khách.
     if (membershipRequired && (!before.telegramMembershipRequired
@@ -336,14 +312,25 @@ export class SettingsService {
         const channel = await inspectMembershipChannel(tokenSauKhiLuu, membershipChatId, membershipJoinUrl);
         membershipChatId = channel.chatId;
         membershipJoinUrl = channel.joinUrl;
+        inspectedMembership = true;
       } catch {
         throw new BadRequestException(K.adminTelegramMembershipUnavailable);
       }
     }
 
-    const updated = await this.prisma.storeSetting.update({
-      where: { id: SETTING_ID },
-      data: {
+    const { prior, updated } = await this.prisma.$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "StoreSetting" WHERE "id" = ${SETTING_ID} FOR UPDATE`;
+      const prior = await tx.storeSetting.findUniqueOrThrow({ where: { id: SETTING_ID } });
+      const sensitive = ['telegramBotToken', 'telegramMembershipRequired', 'telegramMembershipChatId', 'telegramMembershipJoinUrl'] as const;
+      // Telegram I/O đã làm ngoài transaction; không được áp bằng chứng xác minh
+      // trên một bộ token/channel bị request khác đổi trong lúc chờ Telegram.
+      if (sensitive.some(key => dto[key] !== undefined) && sensitive.some(key => prior[key] !== observed[key])) {
+        throw new BadRequestException(K.adminTelegramMembershipUnavailable);
+      }
+      if ((dto.telegramBotEnabled ?? prior.telegramBotEnabled) && (token ?? prior.telegramBotToken).trim() === '') {
+        throw new BadRequestException(K.adminTelegramTokenRequired);
+      }
+      const data = {
         telegramBotEnabled: enabledNext,
         telegramMembershipRequired: membershipRequired,
         telegramMembershipChatId: membershipChatId,
@@ -372,18 +359,20 @@ export class SettingsService {
           dto.telegramGreeting === undefined
             ? before.telegramGreeting
             : dto.telegramGreeting.trim(),
-      },
+      };
+      const ownedData = Object.fromEntries(Object.entries(data).filter(([key]) =>
+        dto[key as keyof UpdateTelegramSettingsDto] !== undefined ||
+        (inspectedMembership && (key === 'telegramMembershipChatId' || key === 'telegramMembershipJoinUrl')),
+      )) as Prisma.StoreSettingUpdateInput;
+      const updated = await tx.storeSetting.update({ where: { id: SETTING_ID }, data: ownedData });
+      if (shouldRearmOwnerLowStockAlerts(prior, updated)) {
+        // Reset marker và cấu hình nhận phải cùng commit, tránh bỏ sót chat mới.
+        await tx.productVariant.updateMany({ data: { telegramOwnerLowStockNotifiedAt: null } });
+      }
+      return { prior, updated };
     });
 
-    if (shouldRearmOwnerLowStockAlerts(before, updated)) {
-      // Cả ngưỡng và chat nhận đều là một phần của trạng thái thông báo. Giữ
-      // marker cũ có thể che mất variant thấp kho đối với cấu hình mới.
-      await this.prisma.productVariant.updateMany({
-        data: { telegramOwnerLowStockNotifiedAt: null },
-      });
-    }
-
-    const changes = diffChanges(toSnapshot(before), toSnapshot(updated));
+    const changes = diffChanges(toSnapshot(prior), toSnapshot(updated));
     await this.audit.log(
       actor,
       'settings.update',
@@ -483,10 +472,35 @@ export class SettingsService {
   }
 
   /** Cập nhật cấu hình + ghi nhật ký `settings.update` kèm diff thay đổi. */
-  async update(actor: AdminActor, dto: UpdateSettingsDto): Promise<AdminStoreSettingDto> {
-    // Đọc sớm: vài phép kiểm bên dưới cần biết giá trị CŨ, vì trang quản trị
-    // chỉ gửi lên những trường nó thực sự đổi.
-    const before0 = await this.getSetting();
+  async update(actor: AdminActor, patch: Partial<UpdateSettingsDto>): Promise<AdminStoreSettingDto> {
+    // Tạo singleton nếu cần trước transaction; không dùng snapshot này để ghi.
+    await this.getSetting();
+    const supplied = Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined));
+    const { before, updated } = await this.prisma.$transaction(async (tx) => {
+      // Khoá trước khi kiểm cấu hình ghép: hai tab không được validate trên bản
+      // cũ rồi ghi lại bí mật/tỉ giá mà tab kia vừa thay đổi.
+      await tx.$queryRaw`SELECT "id" FROM "StoreSetting" WHERE "id" = ${SETTING_ID} FOR UPDATE`;
+      const before = await tx.storeSetting.findUniqueOrThrow({ where: { id: SETTING_ID } });
+      const data = this.prepareSettingsPatch(before, supplied);
+      const updated = await tx.storeSetting.update({ where: { id: SETTING_ID }, data });
+      if (!before.vndPerUsdt.equals(updated.vndPerUsdt) || !before.cnyPerUsdt.equals(updated.cnyPerUsdt)) {
+        await recalculateAnchoredPrices(tx, updated.vndPerUsdt, updated.cnyPerUsdt);
+      }
+      return { before, updated };
+    });
+
+    const changes = diffChanges(toSnapshot(before), toSnapshot(updated));
+    await this.audit.log(
+      actor,
+      'settings.update',
+      { type: 'settings', id: SETTING_ID },
+      Object.keys(changes).length > 0 ? { changes } : undefined,
+    );
+    return toAdminDto(updated);
+  }
+
+  private prepareSettingsPatch(before0: StoreSetting, supplied: Partial<UpdateSettingsDto>): Prisma.StoreSettingUpdateInput {
+    const dto: UpdateSettingsDto = { ...toAdminDto(before0), ...supplied };
     const bep20Address = dto.bep20Address.trim();
     const trc20Address = dto.trc20Address.trim();
     const binanceId = dto.binanceId.trim();
@@ -616,20 +630,11 @@ export class SettingsService {
           : (channels as unknown as Prisma.InputJsonValue),
       supportNote: dto.supportNote?.trim() ?? before.supportNote,
     };
-    const updated = await this.prisma.storeSetting.update({
-      where: { id: SETTING_ID },
-      data,
-    });
-
-    const changes = diffChanges(toSnapshot(before), toSnapshot(updated));
-    await this.audit.log(
-      actor,
-      'settings.update',
-      { type: 'settings', id: SETTING_ID },
-      Object.keys(changes).length > 0 ? { changes } : undefined,
-    );
-
-    return toAdminDto(updated);
+    // Chỉ ghi trường caller sở hữu; merge ở trên chỉ phục vụ kiểm ràng buộc.
+    // Không echo secret hoặc snapshot của tab khác, kể cả với endpoint legacy.
+    return Object.fromEntries(
+      Object.entries(data).filter(([key]) => Object.hasOwn(supplied, key)),
+    ) as Prisma.StoreSettingUpdateInput;
   }
 }
 

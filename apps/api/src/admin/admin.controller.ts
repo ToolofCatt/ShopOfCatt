@@ -20,6 +20,7 @@ import type {
   AdminAnnouncementDto,
   AdminCouponDto,
   AdminOrderDetailDto,
+  IncomingTransferDto,
   AdminStatsDto,
   AdminStoreSettingDto,
   AuditLogDto,
@@ -36,6 +37,7 @@ import type {
   TranslationStatusDto,
 } from '@webcatt/shared';
 import { AnalyticsService } from '../analytics/analytics.service';
+import { RateLimit, RateLimitGuard } from '../security/rate-limit.guard';
 import { AnnouncementService } from '../announcement/announcement.service';
 import {
   ExchangeRateService,
@@ -58,6 +60,8 @@ import {
 import { SettingsService } from '../settings/settings.service';
 import { UpdateSettingsDto } from '../settings/dto/update-settings.dto';
 import { AdminService } from './admin.service';
+import type { ReconciliationTransferDto, ReconciliationSummaryDto } from '@webcatt/shared';
+import { ReconciliationQueryDto } from './dto/reconciliation-query.dto';
 import { AddStockDto } from './dto/add-stock.dto';
 import { MarkPaidDto } from './dto/mark-paid.dto';
 import { CreateProductDto } from './dto/create-product.dto';
@@ -415,6 +419,27 @@ export class AdminController {
 
   // ---------- Đơn hàng ----------
 
+  @Get('reconciliation/incoming-transfers/summary')
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ limit: 60, windowMs: 60_000 })
+  reconciliationSummary(): Promise<ReconciliationSummaryDto> {
+    return this.adminService.reconciliationSummary();
+  }
+
+  @Get('reconciliation/incoming-transfers')
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ limit: 60, windowMs: 60_000 })
+  listReconciliation(@Query() query: ReconciliationQueryDto): Promise<Paginated<ReconciliationTransferDto>> {
+    return this.adminService.listReconciliation(query);
+  }
+
+  @Get('incoming-transfers')
+  @UseGuards(RateLimitGuard)
+  @RateLimit({ limit: 60, windowMs: 60_000 })
+  listIncomingTransfers(): Promise<IncomingTransferDto[]> {
+    return this.adminService.listIncomingTransfers();
+  }
+
   @Get('orders')
   listOrders(
     @Query() query: OrdersQueryDto,
@@ -457,17 +482,19 @@ export class AdminController {
   }
 
   /**
-   * Xác nhận đã nhận tiền ngoài hệ thống (chuyển khoản ngân hàng, USDT không tự
-   * khớp được) rồi giao hàng ngay. Ghi nhật ký kèm ghi chú của quản trị viên.
+   * Giải quyết transfer chưa khớp cho đúng một đơn; service ghi claim và audit
+   * trước khi giao, không cho ghi chú tay thay thế reference thanh toán.
    */
   @Post('orders/:code/mark-paid')
+  @UseGuards(RateLimitGuard)
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 30, windowMs: 60_000 })
   markOrderPaid(
     @CurrentUser() user: User,
     @Param('code') code: string,
     @Body() dto: MarkPaidDto,
   ): Promise<AdminOrderDetailDto> {
-    return this.adminService.markOrderPaid(user, code, dto.note);
+    return this.adminService.markOrderPaid(user, code, dto.note, dto.incomingTransferId);
   }
 
   @Post('orders/:code/cancel')

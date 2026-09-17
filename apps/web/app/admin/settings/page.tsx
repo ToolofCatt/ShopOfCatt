@@ -2,7 +2,9 @@
 
 import Link from 'next/link';
 
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Suspense, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { createDraft, editDraft, isDraftDirty, mergeSettingsSection, SETTINGS_TABS, settingsDrafts, settingsPayload, settingsTab, settleDraft, type SettingsDrafts, type SettingsTab, type SettingsValues } from '@/lib/settings-drafts';
 import { Plus, PlugZap, ServerCrash, ShieldAlert, Trash2 } from 'lucide-react';
 import {
   AI_DEFAULT_MODEL,
@@ -20,7 +22,6 @@ import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import type { Dictionary } from '@/lib/i18n/dictionaries/vi';
-import { cn } from '@/lib/cn';
 import {
   Badge,
   Button,
@@ -47,117 +48,109 @@ function StatusRow({ label, value }: { label: string; value: ReactNode }) {
 }
 
 export default function AdminSettingsPage() {
+  return <Suspense fallback={<div className="flex justify-center py-24"><Spinner className="h-6 w-6" /></div>}><SettingsContent /></Suspense>;
+}
+
+function SettingsContent() {
   const { token } = useAuth();
-  const { t, formatDate } = useI18n();
+  const { t, locale, formatDate } = useI18n();
+  const router = useRouter();
+  const params = useSearchParams();
+  const activeTab = settingsTab(params.get('tab'));
+  const selectTab = (tab: SettingsTab) => {
+    router.push(`/admin/settings?tab=${tab}`, { scroll: false });
+  };
 
   const [settings, setSettings] = useState<AdminStoreSettingDto | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
-  const [mockEnabled, setMockEnabled] = useState(false);
-  const [binancePayEnabled, setBinancePayEnabled] = useState(false);
-  const [binanceIdEnabled, setBinanceIdEnabled] = useState(false);
-  const [binanceId, setBinanceId] = useState('');
-  const [binanceQr, setBinanceQr] = useState('');
-  const [sepayEnabled, setSepayEnabled] = useState(false);
-  const [sepayAccountNumber, setSepayAccountNumber] = useState('');
-  const [sepayBank, setSepayBank] = useState('');
-  const [sepayAccountHolder, setSepayAccountHolder] = useState('');
-  const [vndPerUsdt, setVndPerUsdt] = useState('0');
-  const [cnyPerUsdt, setCnyPerUsdt] = useState('0');
-  const [rateAuto, setRateAuto] = useState(false);
-  const [rateMarkupPercent, setRateMarkupPercent] = useState('0');
-  const [rateHour, setRateHour] = useState('7');
+  const [groups, setGroups] = useState<SettingsDrafts>(() => settingsDrafts());
+  const groupsRef = useRef(groups);
+  const changeGroups = (update: (current: SettingsDrafts) => SettingsDrafts) => {
+    groupsRef.current = update(groupsRef.current);
+    setGroups(groupsRef.current);
+  };
+  const edit = <K extends SettingsTab>(tab: K, patch: Partial<SettingsValues[K]>) => {
+    changeGroups((current) => ({ ...current, [tab]: editDraft(current[tab], patch) }));
+  };
+  const { mockEnabled, binancePayEnabled, binanceIdEnabled, binanceId, binanceQr, sepayEnabled, sepayAccountNumber, sepayBank, sepayAccountHolder, sepayApiKey, sepayWebhookSecret, clearSepayApiKey, clearSepayWebhookSecret, cryptoEnabled, bep20Address, trc20Address } = groups.payments.draft;
+  const { vndPerUsdt, cnyPerUsdt, rateAuto, rateMarkupPercent, rateHour } = groups.rates.draft;
+  const { aiProvider, aiBaseUrl, aiModel, aiKey, clearAiKey } = groups.ai.draft;
+  const { supportNote, supportChannels } = groups.support.draft;
+  const setMockEnabled = (value: boolean) => edit('payments', { mockEnabled: value });
+  const setBinancePayEnabled = (value: boolean) => edit('payments', { binancePayEnabled: value });
+  const setBinanceIdEnabled = (value: boolean) => edit('payments', { binanceIdEnabled: value });
+  const setBinanceId = (value: string) => edit('payments', { binanceId: value });
+  const setBinanceQr = (value: string) => edit('payments', { binanceQr: value });
+  const setSepayEnabled = (value: boolean) => edit('payments', { sepayEnabled: value });
+  const setSepayAccountNumber = (value: string) => edit('payments', { sepayAccountNumber: value });
+  const setSepayBank = (value: string) => edit('payments', { sepayBank: value });
+  const setSepayAccountHolder = (value: string) => edit('payments', { sepayAccountHolder: value });
+  const setSepayApiKey = (value: string) => edit('payments', { sepayApiKey: value, clearSepayApiKey: false });
+  const setSepayWebhookSecret = (value: string) => edit('payments', { sepayWebhookSecret: value, clearSepayWebhookSecret: false });
+  const setCryptoEnabled = (value: boolean) => edit('payments', { cryptoEnabled: value });
+  const setBep20Address = (value: string) => edit('payments', { bep20Address: value });
+  const setTrc20Address = (value: string) => edit('payments', { trc20Address: value });
+  const setVndPerUsdt = (value: string) => edit('rates', { vndPerUsdt: value });
+  const setCnyPerUsdt = (value: string) => edit('rates', { cnyPerUsdt: value });
+  const setRateAuto = (value: boolean) => edit('rates', { rateAuto: value });
+  const setRateMarkupPercent = (value: string) => edit('rates', { rateMarkupPercent: value });
+  const setRateHour = (value: string) => edit('rates', { rateHour: value });
+  const setAiProvider = (value: AiProvider) => edit('ai', { aiProvider: value });
+  const setAiBaseUrl = (value: string) => edit('ai', { aiBaseUrl: value });
+  const setAiModel = (value: string) => edit('ai', { aiModel: value });
+  const setAiKey = (value: string) => edit('ai', { aiKey: value });
+  const setClearAiKey = (value: boolean) => edit('ai', { clearAiKey: value });
+  const setSupportNote = (value: string) => edit('support', { supportNote: value });
+  const setSupportChannels = (value: SupportChannelDto[]) => edit('support', { supportChannels: value });
   const [refreshingRate, setRefreshingRate] = useState(false);
+  const refreshingRef = useRef(false);
   const [rateMessage, setRateMessage] = useState<string | null>(null);
-  /* Khoá webhook: máy chủ không trả về, nên ô này luôn rỗng khi mở trang. */
-  const [sepayApiKey, setSepayApiKey] = useState('');
-  const [sepayWebhookSecret, setSepayWebhookSecret] = useState('');
   const [sepayError, setSepayError] = useState<string | null>(null);
-  const [cryptoEnabled, setCryptoEnabled] = useState(false);
-  const [bep20Address, setBep20Address] = useState('');
-  const [trc20Address, setTrc20Address] = useState('');
-  const [aiProvider, setAiProvider] = useState<AiProvider>('anthropic');
-  const [aiBaseUrl, setAiBaseUrl] = useState('');
-  const [aiModel, setAiModel] = useState('');
-  /*
-    Khoá API: máy chủ KHÔNG BAO GIỜ trả khoá về, nên ô này luôn rỗng khi mở
-    trang. Rỗng = "không đổi gì", chứ không phải "xoá khoá" — muốn xoá thì bấm
-    nút riêng, nếu không mỗi lần lưu cài đặt là khoá bay mất.
-  */
-  const [aiKey, setAiKey] = useState('');
-  const [clearAiKey, setClearAiKey] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [supportNote, setSupportNote] = useState('');
-  const [supportChannels, setSupportChannels] = useState<SupportChannelDto[]>([]);
-
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const { saving, saved, error: saveError } = groups[activeTab];
+  const requestContext = useRef({ token, locale, connectionError: t.common.connectionError });
+  requestContext.current = { token, locale, connectionError: t.common.connectionError };
+  const session = useRef(0);
   const [addressError, setAddressError] = useState<string | null>(null);
   const [binanceIdError, setBinanceIdError] = useState<string | null>(null);
 
   const [status, setStatus] = useState<BinanceStatusDto | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
 
-  /** Đồng bộ biểu mẫu với cấu hình máy chủ vừa trả về. */
-  const apply = (next: AdminStoreSettingDto) => {
-    setSettings(next);
-    setMockEnabled(next.mockEnabled);
-    setBinancePayEnabled(next.binancePayEnabled);
-    setBinanceIdEnabled(next.binanceIdEnabled);
-    setBinanceId(next.binanceId);
-    setBinanceQr(next.binanceQr);
-    setSepayEnabled(next.sepayEnabled);
-    setSepayAccountNumber(next.sepayAccountNumber);
-    setSepayBank(next.sepayBank);
-    setSepayAccountHolder(next.sepayAccountHolder);
-    setVndPerUsdt(String(next.vndPerUsdt));
-    setCnyPerUsdt(String(next.cnyPerUsdt));
-    setRateAuto(next.rateAuto);
-    setRateMarkupPercent(String(next.rateMarkupPercent));
-    setRateHour(String(next.rateHour));
-    setSepayApiKey('');
-    setSepayWebhookSecret('');
-    setCryptoEnabled(next.cryptoEnabled);
-    setBep20Address(next.bep20Address);
-    setTrc20Address(next.trc20Address);
-    setSupportNote(next.supportNote);
-    setSupportChannels(next.supportChannels);
-    setAiProvider(next.aiProvider);
-    setAiBaseUrl(next.aiBaseUrl);
-    setAiModel(next.aiModel);
-    setAiKey('');
-    setClearAiKey(false);
-  };
-
   useEffect(() => {
-    let active = true;
-    apiFetch<AdminStoreSettingDto>('/admin/settings', { token })
+    const generation = ++session.current;
+    setSettings(null);
+    setLoadError(null);
+    changeGroups(() => settingsDrafts());
+    if (token) apiFetch<AdminStoreSettingDto>('/admin/settings', { token, locale: requestContext.current.locale })
       .then((data) => {
-        if (active) apply(data);
+        if (generation !== session.current) return;
+        setSettings(data);
+        changeGroups(() => settingsDrafts(data));
       })
       .catch((err: unknown) => {
-        if (active) setLoadError(apiErrorMessage(err, t.common.connectionError));
+        if (generation === session.current) setLoadError(apiErrorMessage(err, requestContext.current.connectionError));
       });
-    return () => {
-      active = false;
-    };
-  }, [token, t]);
+    // Đổi ngôn ngữ chỉ đổi nhãn, không nạp đè bản nháp hoặc bí mật đang gõ.
+    return () => { session.current++; };
+  }, [token]);
 
   // Trạng thái Binance tải riêng — cuộc gọi ra Binance có thể chậm.
   useEffect(() => {
     let active = true;
-    apiFetch<BinanceStatusDto>('/admin/binance/status', { token })
+    if (!token) return;
+    apiFetch<BinanceStatusDto>('/admin/binance/status', { token, locale: requestContext.current.locale })
       .then((data) => {
         if (active) setStatus(data);
       })
       .catch((err: unknown) => {
-        if (active) setStatusError(apiErrorMessage(err, t.common.connectionError));
+        if (active) setStatusError(apiErrorMessage(err, requestContext.current.connectionError));
       });
     return () => {
       active = false;
     };
-  }, [token, t]);
+  }, [token]);
 
   const binanceConfigured = status?.configured === true;
   const cryptoToggleDisabled = status !== null && !status.configured;
@@ -195,7 +188,14 @@ export default function AdminSettingsPage() {
    * đây không phải lỗi, chỉ là "chưa cập nhật được".
    */
   const handleRefreshRate = async () => {
-    if (refreshingRate) return;
+    if (!token || refreshingRef.current || groupsRef.current.rates.saving) return;
+    if (isDraftDirty(groupsRef.current.rates)) {
+      setRateMessage(t.settingsUx.rateDirty);
+      return;
+    }
+    const sent = groupsRef.current.rates.draft;
+    const generation = session.current;
+    refreshingRef.current = true;
     setRefreshingRate(true);
     setRateMessage(null);
     try {
@@ -204,28 +204,28 @@ export default function AdminSettingsPage() {
         vndPerUsdt?: number;
         cnyPerUsdt?: number;
         reason?: string;
-      }>('/admin/rates/refresh', { method: 'POST', token });
+      }>('/admin/rates/refresh', { method: 'POST', token, locale });
+      if (generation !== session.current) return;
       if (kq.ok) {
-        // Đọc lại cả cấu hình: tỉ giá vừa được ghi ở phía máy chủ, không phải
-        // do biểu mẫu này gửi lên.
-        const moi = await apiFetch<AdminStoreSettingDto>('/admin/settings', { token });
-        apply(moi);
-        setRateMessage(t.admin.rateRefreshDone);
+        const next = await apiFetch<AdminStoreSettingDto>('/admin/settings', { token, locale });
+        if (generation !== session.current) return;
+        setSettings((current) => current ? mergeSettingsSection(current, next, 'rates') : current);
+        changeGroups((current) => ({ ...current, rates: settleDraft(current.rates, sent, settingsDrafts(next).rates.draft) }));
+        setRateMessage(isDraftDirty(groupsRef.current.rates) ? t.settingsUx.rateDirty : t.admin.rateRefreshDone);
       } else {
         setRateMessage(`${t.admin.rateRefreshFailed} ${kq.reason ?? ''}`.trim());
       }
     } catch (err) {
-      setRateMessage(apiErrorMessage(err, t.common.connectionError));
+      if (generation === session.current) setRateMessage(apiErrorMessage(err, t.common.connectionError));
     } finally {
-      setRefreshingRate(false);
+      refreshingRef.current = false;
+      if (generation === session.current) setRefreshingRate(false);
     }
   };
 
   const markDirty = () => {
-    setSaved(false);
-    setAddressError(null);
-    setAiError(null);
-    setSepayError(null);
+    if (activeTab === 'payments') { setAddressError(null); setSepayError(null); setBinanceIdError(null); }
+    if (activeTab === 'ai') setAiError(null);
   };
 
   /** Sửa một ô của kênh liên hệ thứ `index`. */
@@ -240,23 +240,23 @@ export default function AdminSettingsPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (saving) return;
-
-    if (cryptoEnabled && !bep20Address.trim() && !trc20Address.trim()) {
+    const tab = activeTab;
+    if (!token || groupsRef.current[tab].saving || (tab === 'rates' && refreshingRef.current)) return;
+    if (tab === 'payments' && cryptoEnabled && !bep20Address.trim() && !trc20Address.trim()) {
       setAddressError(t.admin.errCryptoAddressRequired);
       return;
     }
     setAddressError(null);
     // Bật nhận tiền mà chưa điền ID thì khách sẽ thấy một phương thức không
     // chuyển đi đâu được. Máy chủ cũng chặn, đây chỉ là báo sớm ngay tại ô nhập.
-    if (binanceIdEnabled && !binanceId.trim()) {
+    if (tab === 'payments' && binanceIdEnabled && !binanceId.trim()) {
       setBinanceIdError(t.admin.errBinanceIdRequired);
       return;
     }
     setBinanceIdError(null);
     // Anthropic có model mặc định, nhà cung cấp khác thì không đoán được.
     // Máy chủ cũng chặn; đây chỉ là báo sớm ngay tại ô nhập.
-    if (aiProvider === 'openai' && aiModel.trim() === '') {
+    if (tab === 'ai' && aiProvider === 'openai' && aiModel.trim() === '') {
       setAiError(t.admin.errAiModelRequired);
       return;
     }
@@ -268,9 +268,9 @@ export default function AdminSettingsPage() {
       Khoá API: ô rỗng nghĩa là "giữ khoá cũ", nên chỉ coi là thiếu khi máy chủ
       cũng báo chưa có khoá nào.
     */
-    if (sepayEnabled) {
-      const rate = Number(vndPerUsdt);
-      const thieuKhoa = sepayApiKey.trim() === '' && settings?.sepayApiKeySet !== true;
+    if (tab === 'payments' && sepayEnabled) {
+      const rate = settings?.vndPerUsdt ?? 0;
+      const thieuKhoa = clearSepayApiKey || (sepayApiKey.trim() === '' && settings?.sepayApiKeySet !== true);
       if (
         sepayAccountNumber.trim() === '' ||
         sepayBank.trim() === '' ||
@@ -283,63 +283,32 @@ export default function AdminSettingsPage() {
       }
     }
     setSepayError(null);
-    setSaving(true);
-    setSaveError(null);
-    setSaved(false);
+    if (tab === 'rates') {
+      const values = [vndPerUsdt, cnyPerUsdt, rateMarkupPercent, rateHour];
+      const [vnd, cny, markup, hour] = values.map(Number);
+      if (values.some((value) => !value.trim() || !Number.isFinite(Number(value))) || vnd < 0 || vnd > 10_000_000 || cny < 0 || cny > 10_000 || markup < 0 || markup > 50 || !Number.isInteger(hour) || hour < 0 || hour > 23) {
+        changeGroups((current) => ({ ...current, rates: { ...current.rates, error: t.settingsUx.ratesInvalid } }));
+        return;
+      }
+    }
+    await saveSection(tab);
+  };
+
+  const saveSection = async <K extends SettingsTab>(tab: K) => {
+    const sent = groupsRef.current[tab].draft;
+    const generation = session.current;
+    changeGroups((current) => ({ ...current, [tab]: { ...current[tab], saving: true, saved: false, error: null } }));
     try {
-      const next = await apiFetch<AdminStoreSettingDto>('/admin/settings', {
-        method: 'PUT',
-        body: {
-          mockEnabled,
-          binancePayEnabled,
-          binanceIdEnabled,
-          binanceId: binanceId.trim(),
-          binanceQr,
-          sepayEnabled,
-          sepayAccountNumber: sepayAccountNumber.trim(),
-          sepayBank: sepayBank.trim(),
-          sepayAccountHolder: sepayAccountHolder.trim(),
-          vndPerUsdt: Number(vndPerUsdt) || 0,
-          cnyPerUsdt: Number(cnyPerUsdt) || 0,
-          rateAuto,
-          rateMarkupPercent: Number(rateMarkupPercent) || 0,
-          rateHour: Number(rateHour) || 0,
-          // Rỗng = giữ khoá cũ; máy chủ phân biệt bằng việc KHÔNG gửi trường.
-          ...(sepayApiKey.trim() === '' ? {} : { sepayApiKey: sepayApiKey.trim() }),
-          ...(sepayWebhookSecret.trim() === ''
-            ? {}
-            : { sepayWebhookSecret: sepayWebhookSecret.trim() }),
-          cryptoEnabled,
-          bep20Address: bep20Address.trim(),
-          trc20Address: trc20Address.trim(),
-          aiProvider,
-          aiBaseUrl: aiBaseUrl.trim(),
-          aiModel: aiModel.trim(),
-          // Ba trạng thái: bấm xoá → chuỗi rỗng, có gõ → khoá mới, không đụng
-          // tới → KHÔNG gửi trường này để máy chủ giữ nguyên khoá cũ.
-          ...(clearAiKey
-            ? { aiApiKey: '' }
-            : aiKey.trim() !== ''
-              ? { aiApiKey: aiKey.trim() }
-              : {}),
-          supportNote: supportNote.trim(),
-          // Bỏ các dòng còn trống trước khi gửi.
-          supportChannels: supportChannels
-            .map((channel) => ({
-              label: channel.label.trim(),
-              value: channel.value.trim(),
-              url: channel.url?.trim() ?? '',
-            }))
-            .filter((channel) => channel.label !== '' && channel.value !== ''),
-        },
-        token,
+      const next = await apiFetch<AdminStoreSettingDto>(`/admin/settings/${tab}`, {
+        method: 'PATCH', body: settingsPayload(tab, sent), token, locale,
       });
-      apply(next);
-      setSaved(true);
+      if (generation !== session.current) return;
+      setSettings((current) => current ? mergeSettingsSection(current, next, tab) : current);
+      const received = settingsDrafts(next)[tab].draft;
+      changeGroups((current) => ({ ...current, [tab]: settleDraft(current[tab], sent, received) }));
     } catch (err) {
-      setSaveError(apiErrorMessage(err, t.common.connectionError));
-    } finally {
-      setSaving(false);
+      if (generation !== session.current) return;
+      changeGroups((current) => ({ ...current, [tab]: { ...current[tab], saving: false, saved: false, error: apiErrorMessage(err, t.common.connectionError) } }));
     }
   };
 
@@ -370,9 +339,12 @@ export default function AdminSettingsPage() {
     <div className="mx-auto max-w-3xl">
       <PageHeader title={t.admin.settingsTitle} description={t.admin.settingsSubtitle} />
 
+      <p className="mb-4 text-sm text-neutral-500">{t.settingsUx.sectionHint}</p>
+      <Tabs idPrefix="settings" label={t.admin.settingsTitle} items={SETTINGS_TABS.map((value) => ({ value, label: `${t.settingsUx.tabs[value]}${isDraftDirty(groups[value]) ? ' *' : ''}` }))} value={activeTab} onChange={selectTab} className="mb-5 w-full" />
       <div className="space-y-6">
-        <Card className="p-6">
+        <Card className="p-4 sm:p-6">
           <form onSubmit={(event) => void handleSubmit(event)} className="space-y-4" noValidate>
+            <section id="settings-panel-payments" role="tabpanel" aria-labelledby="settings-tab-payments" hidden={activeTab !== 'payments'} className="space-y-4">
             <div>
               <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
                 {t.admin.settingsMethodsTitle}
@@ -540,26 +512,11 @@ export default function AdminSettingsPage() {
                     />
                   </Field>
 
-                  <Field
-                    label={t.admin.settingVndRateLabel}
-                    htmlFor="setting-vnd-rate"
-                    hint={t.admin.settingVndRateHint}
-                  >
-                    <Input
-                      id="setting-vnd-rate"
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      inputMode="decimal"
-                      value={vndPerUsdt}
-                      placeholder="26000"
-                      className="tabular-nums"
-                      onChange={(event) => {
-                        setVndPerUsdt(event.target.value);
-                        markDirty();
-                      }}
-                    />
-                  </Field>
+                  <div className="space-y-2 text-sm">
+                    <p>{t.admin.settingVndRateLabel}: <strong className="tabular-nums">{settings.vndPerUsdt}</strong></p>
+                    <p className="text-neutral-500">{t.settingsUx.savedRateHint}</p>
+                    <button type="button" className="min-h-11 underline underline-offset-4" onClick={() => selectTab('rates')}>{t.settingsUx.tabs.rates}</button>
+                  </div>
                 </div>
 
                 {/*
@@ -589,11 +546,12 @@ export default function AdminSettingsPage() {
                   </div>
                 </Field>
 
-                {settings?.sepayApiKeySet ? (
-                  <p className="font-mono text-sm text-neutral-950">
-                    {t.admin.settingApiKeySaved(settings.sepayApiKeyHint)}
-                  </p>
-                ) : null}
+                <p className="text-xs text-neutral-500">{t.settingsUx.secretsHint}</p>
+                {settings?.sepayApiKeySet && <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-mono text-sm text-neutral-950">{t.admin.settingApiKeySaved(settings.sepayApiKeyHint)}</p>
+                  <Button type="button" variant="outline" size="sm" onClick={() => edit('payments', { clearSepayApiKey: !clearSepayApiKey, sepayApiKey: '' })}>{clearSepayApiKey ? t.settingsUx.cancelDelete : t.admin.settingApiKeyClear}</Button>
+                </div>}
+                {clearSepayApiKey && <p role="status" className="text-sm">{t.settingsUx.deletePending}</p>}
 
                 <Field
                   label={
@@ -618,6 +576,8 @@ export default function AdminSettingsPage() {
                   />
                 </Field>
 
+                {settings?.sepayWebhookSecretSet && <Button type="button" variant="outline" size="sm" onClick={() => edit('payments', { clearSepayWebhookSecret: !clearSepayWebhookSecret, sepayWebhookSecret: '' })}>{t.admin.settingSepaySecretLabel} — {clearSepayWebhookSecret ? t.settingsUx.cancelDelete : t.admin.settingApiKeyClear}</Button>}
+                {clearSepayWebhookSecret && <p role="status" className="text-sm">{t.settingsUx.deletePending}</p>}
                 <Field
                   label={t.admin.settingSepaySecretLabel}
                   htmlFor="setting-sepay-secret"
@@ -640,11 +600,20 @@ export default function AdminSettingsPage() {
               </div>
             )}
 
-            {/*
-              Tỉ giá: vừa dùng để dựng số tiền chuyển khoản VND, vừa dùng để hiện
-              giá theo ngôn ngữ khách chọn. Vì thế nó nằm RIÊNG, không nhét trong
-              khối SePay — tắt SePay thì vẫn cần tỉ giá để hiện giá.
-            */}
+            {cryptoEnabled && (
+              <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+                <Field label={t.admin.settingBep20Label} htmlFor="setting-bep20" error={addressError}>
+                  <Input id="setting-bep20" value={bep20Address} invalid={Boolean(addressError)} placeholder={t.admin.settingBep20Placeholder} className="font-mono text-[13px]" onChange={(event) => { setBep20Address(event.target.value); markDirty(); }} />
+                </Field>
+                <Field label={t.admin.settingTrc20Label} htmlFor="setting-trc20">
+                  <Input id="setting-trc20" value={trc20Address} invalid={Boolean(addressError)} placeholder={t.admin.settingTrc20Placeholder} className="font-mono text-[13px]" onChange={(event) => { setTrc20Address(event.target.value); markDirty(); }} />
+                </Field>
+                <p className="text-xs text-neutral-500">{t.admin.settingAddressesHint}</p>
+              </div>
+            )}
+            </section>
+            <section id="settings-panel-rates" role="tabpanel" aria-labelledby="settings-tab-rates" hidden={activeTab !== 'rates'}>
+            {/* Tỉ giá có bản nháp riêng; bật SePay không gửi nhầm tỉ giá chưa lưu. */}
             <div className="space-y-3 border-t border-neutral-100 pt-4">
               <div>
                 <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
@@ -758,6 +727,7 @@ export default function AdminSettingsPage() {
                   size="sm"
                   variant="outline"
                   loading={refreshingRate}
+                  disabled={groups.rates.saving || isDraftDirty(groups.rates)}
                   onClick={() => void handleRefreshRate()}
                 >
                   {t.admin.rateRefreshNow}
@@ -773,44 +743,12 @@ export default function AdminSettingsPage() {
               <p className="font-mono text-[11px] text-neutral-400">
                 {settings?.rateSource || t.admin.rateSourceHint}
               </p>
-              {rateMessage && <p className="text-sm text-neutral-950">{rateMessage}</p>}
+              {isDraftDirty(groups.rates) && <div className="space-y-2 border-l-2 border-amber-500 pl-3"><p className="text-sm text-neutral-700">{t.settingsUx.rateDirty}</p><Button type="button" variant="outline" size="sm" disabled={groups.rates.saving || refreshingRate} onClick={() => { changeGroups((current) => ({ ...current, rates: createDraft(current.rates.baseline) })); setRateMessage(null); }}>{t.settingsUx.discardRates}</Button></div>}
+              {rateMessage && <p role="status" className="text-sm text-neutral-950">{rateMessage}</p>}
             </div>
 
-            {cryptoEnabled && (
-              <div className="space-y-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-                <Field
-                  label={t.admin.settingBep20Label}
-                  htmlFor="setting-bep20"
-                  error={addressError}
-                >
-                  <Input
-                    id="setting-bep20"
-                    value={bep20Address}
-                    invalid={Boolean(addressError)}
-                    placeholder={t.admin.settingBep20Placeholder}
-                    className="font-mono text-[13px]"
-                    onChange={(event) => {
-                      setBep20Address(event.target.value);
-                      markDirty();
-                    }}
-                  />
-                </Field>
-                <Field label={t.admin.settingTrc20Label} htmlFor="setting-trc20">
-                  <Input
-                    id="setting-trc20"
-                    value={trc20Address}
-                    invalid={Boolean(addressError)}
-                    placeholder={t.admin.settingTrc20Placeholder}
-                    className="font-mono text-[13px]"
-                    onChange={(event) => {
-                      setTrc20Address(event.target.value);
-                      markDirty();
-                    }}
-                  />
-                </Field>
-                <p className="text-xs text-neutral-500">{t.admin.settingAddressesHint}</p>
-              </div>
-            )}
+            </section>
+            <section id="settings-panel-ai" role="tabpanel" aria-labelledby="settings-tab-ai" hidden={activeTab !== 'ai'}>
 
             {/*
               Cấu hình dịch tự động. Nằm trong CSDL nên sửa được ngay trên web —
@@ -884,6 +822,8 @@ export default function AdminSettingsPage() {
                 </Field>
               </div>
 
+              <p className="text-xs text-neutral-500">{t.settingsUx.secretsHint}</p>
+              {clearAiKey && <Button type="button" size="sm" variant="outline" onClick={() => setClearAiKey(false)}>{t.settingsUx.cancelDelete}</Button>}
               {settings?.aiKeySet && !clearAiKey ? (
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2.5">
                   <span className="font-mono text-sm text-neutral-950">
@@ -936,6 +876,8 @@ export default function AdminSettingsPage() {
               )}
             </div>
 
+            </section>
+            <section id="settings-panel-support" role="tabpanel" aria-labelledby="settings-tab-support" hidden={activeTab !== 'support'} className="space-y-4">
             {/* Cấu hình bot Telegram nằm ở trang riêng /admin/telegram (kèm xem trước). */}
             <div className="space-y-2 border-t border-neutral-100 pt-4">
               <h2 className="text-lg font-semibold tracking-tight text-neutral-950">
@@ -1056,20 +998,18 @@ export default function AdminSettingsPage() {
               </div>
             </div>
 
-            {saveError && <p className="text-sm text-red-600">{saveError}</p>}
-            {saved && !saveError && (
-              <p className="text-sm font-medium text-emerald-600">{t.admin.settingsSaved}</p>
-            )}
-
-            <div className="border-t border-neutral-100 pt-4">
-              <Button type="submit" loading={saving}>
-                {t.common.save}
+            </section>
+            {saveError && <p role="alert" className="text-sm text-red-600">{saveError}</p>}
+            <div className="flex flex-wrap items-center gap-3 border-t border-neutral-100 pt-4">
+              <Button type="submit" loading={saving} disabled={!isDraftDirty(groups[activeTab]) || (activeTab === 'rates' && refreshingRate)}>
+                {t.settingsUx.saveSection}
               </Button>
+              <p role="status" className="text-sm text-neutral-600">{isDraftDirty(groups[activeTab]) ? t.settingsUx.unsaved : saved ? t.settingsUx.savedSection : t.settingsUx.upToDate}</p>
             </div>
           </form>
         </Card>
 
-        <Card className="p-6">
+        {activeTab === 'payments' && <Card className="p-6">
           <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-neutral-950">
             <PlugZap className="h-5 w-5" strokeWidth={1.75} />
             {t.admin.binanceStatusTitle}
@@ -1172,7 +1112,7 @@ export default function AdminSettingsPage() {
               )}
             </>
           )}
-        </Card>
+        </Card>}
       </div>
     </div>
   );

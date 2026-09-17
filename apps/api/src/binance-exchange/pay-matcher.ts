@@ -100,14 +100,18 @@ export function matchPayTransfers(
      * được tin một mình. Ghi mã đơn của người khác cũng chẳng lợi gì — chỉ là tự
      * bỏ tiền cho người ta nhận hàng.
      */
+    const note = transfer.note?.trim().toUpperCase() ?? '';
+    const explicitCodes = [...new Set(note.match(/\b(?:DH|NAP)-[A-Z0-9-]+\b/g) ?? [])];
+    if (explicitCodes.length > 1) continue;
     const theoMemo = (() => {
-      const note = transfer.note?.trim().toUpperCase();
       if (!note) return null;
       const found = pending.filter(
-        (p) => conTrong(p) && note.includes(p.code.toUpperCase()) && dungTien(p) && dungLuc(p),
+        (p) => conTrong(p) && (explicitCodes.length ? explicitCodes[0] === p.code.toUpperCase() : note === p.code.toUpperCase()) && dungTien(p) && dungLuc(p),
       );
       return found.length === 1 ? found[0] : null;
     })();
+    // Mã đã chỉ đích khác/sai tiền không được rơi xuống amount rồi trả cho người khác.
+    if (explicitCodes.length > 0 && !theoMemo) continue;
 
     let candidate: PendingPayPayment | null = theoMemo;
     let by: PayMatch['by'] = 'memo';

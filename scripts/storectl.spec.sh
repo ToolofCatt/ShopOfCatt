@@ -7,7 +7,8 @@ trap 'rm -rf "$FIXTURE"' EXIT
 
 cp "$ROOT/storectl" "$FIXTURE/storectl"
 chmod +x "$FIXTURE/storectl"
-mkdir -p "$FIXTURE/bin" "$FIXTURE/backups"
+mkdir -p "$FIXTURE/bin" "$FIXTURE/backups" "$FIXTURE/backup-status" "$FIXTURE/docker"
+cp "$ROOT/docker/env.sh" "$ROOT/docker/restore.sh" "$FIXTURE/docker/"
 
 cat > "$FIXTURE/.env" <<'EOF'
 JWT_SECRET=0123456789abcdef0123456789abcdef
@@ -49,7 +50,7 @@ EOF
 chmod +x "$FIXTURE/bin/curl"
 
 printf 'backup fixture' | gzip > "$FIXTURE/backups/fixture.sql.gz"
-printf '{"file":"fixture.sql.gz"}\n' > "$FIXTURE/backups/.last-success.json"
+printf '{"file":"fixture.sql.gz"}\n' > "$FIXTURE/backup-status/.last-success.json"
 
 output=$(PATH="$FIXTURE/bin:$PATH" "$FIXTURE/storectl" doctor --json 2>&1) || {
   printf '%s\n' "$output" >&2
@@ -79,4 +80,20 @@ if printf '%s' "$missing_output" | grep -q 'No such file'; then
   printf '%s\n' "$missing_output" >&2
   exit 1
 fi
+# Parser phải giữ ký tự shell nguyên văn và hỗ trợ quoted/CRLF, không thực thi.
+cat > "$FIXTURE/.env" <<'EOF'
+SITE_DOMAIN=old.example
+ export SITE_DOMAIN = "new.example"
+POSTGRES_DB='webcatt'
+NEXT_PUBLIC_SITE_NAME=Catt Store
+LITERAL=$(touch should-not-exist)
+EOF
+printf 'CRLF="value with spaces"\r\nCOMMENT=value # comment\n' >> "$FIXTURE/.env"
+(cd "$FIXTURE" && . ./docker/env.sh &&
+  [ "$(env_value SITE_DOMAIN)" = new.example ] &&
+  [ "$(env_value NEXT_PUBLIC_SITE_NAME)" = 'Catt Store' ] &&
+  [ "$(env_value LITERAL)" = '$(touch should-not-exist)' ] &&
+  [ "$(env_value CRLF)" = 'value with spaces' ] &&
+  [ "$(env_value COMMENT)" = value ] &&
+  [ ! -e should-not-exist ])
 printf 'storectl env parsing: PASS\n'

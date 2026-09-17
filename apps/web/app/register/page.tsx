@@ -18,6 +18,7 @@ import { Button, Card, Field, Input, Spinner } from '@/components/ui';
 import { PasswordInput } from '@/components/password-input';
 import { Wordmark } from '@/components/wordmark';
 import { useStorefront } from '@/lib/storefront';
+import { safeCustomerNext } from '@/lib/customer-navigation';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -31,7 +32,7 @@ interface FieldErrors {
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const next = searchParams.get('next') || '/';
+  const next = safeCustomerNext(searchParams.get('next'));
   const { user, loading: authLoading, register } = useAuth();
   const { t } = useI18n();
   const storefront = useStorefront();

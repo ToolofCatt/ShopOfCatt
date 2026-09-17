@@ -14,6 +14,7 @@ import {
   toUsdtFromCurrency,
   type AddStockResponse,
   type AdminOrderDetailDto,
+  type IncomingTransferDto,
   type AdminStatsDto,
   type OrderSummaryDto,
   type Paginated,
@@ -29,6 +30,8 @@ import { diffChanges } from '../audit/audit-diff';
 import { AuditService } from '../audit/audit.service';
 import type { AdminActor } from '../audit/admin-actor';
 import { slugify } from '../common/slugify';
+import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/financial-lock';
+import { settleOrderTransfer } from '../common/incoming-transfer';
 import { FulfillmentService } from '../orders/fulfillment.service';
 import { toOrderDetailDto, toOrderSummaryDto } from '../orders/order.mapper';
 import { PrismaService } from '../prisma/prisma.service';
@@ -58,6 +61,8 @@ import type { SeriesDays } from './dto/stats-series-query.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { UpdateVariantDto } from './dto/update-variant.dto';
 import { K, withParams } from '../i18n/messages';
+import type { ReconciliationTransferDto, ReconciliationSummaryDto } from '@webcatt/shared';
+import { ReconciliationQueryDto, reconciliationWhere, RECONCILIATION_SELECT, transferToReconciliationDto } from './dto/reconciliation-query.dto';
 
 const DEFAULT_ORDERS_PAGE_SIZE = 20;
 /** Trần số dòng khi xuất CSV — một cú bấm không được kéo sập tiến trình. */
@@ -475,17 +480,34 @@ export class AdminService {
   }
 
   async deleteProduct(actor: AdminActor, id: string): Promise<{ success: boolean }> {
-    const product = await this.prisma.product.findUnique({
-      where: { id },
-      include: { _count: { select: { orderItems: true } } },
+    const product = await this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${id} FOR UPDATE`;
+      // Cùng thứ tự với xóa loại: không để cascade giữ Variant rồi quay lại Product.
+      await tx.$queryRaw`SELECT id FROM "ProductVariant" WHERE "productId" = ${id} ORDER BY id FOR UPDATE`;
+      const current = await tx.product.findUnique({
+        where: { id },
+        include: { _count: { select: { orderItems: true } } },
+      });
+      if (!current) throw new NotFoundException(K.productNotFound);
+      if (current._count.orderItems > 0) {
+        throw new ConflictException(K.adminProductHasOrders);
+      }
+      if (await tx.stockItem.count({ where: { variant: { productId: id } } })) {
+        throw new ConflictException(K.adminProductHasStock);
+      }
+      await tx.product.delete({ where: { id } });
+      return current;
+    }).catch((error: unknown) => {
+      // FK RESTRICT là hàng rào cuối khi writer khác tạo lịch sử cùng lúc.
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new ConflictException(
+          String(error.meta?.constraint).startsWith('StockItem')
+            ? K.adminProductHasStock
+            : K.adminProductHasOrders,
+        );
+      }
+      throw error;
     });
-    if (!product) {
-      throw new NotFoundException(K.productNotFound);
-    }
-    if (product._count.orderItems > 0) {
-      throw new ConflictException(K.adminProductHasOrders);
-    }
-    await this.prisma.product.delete({ where: { id } });
     await this.audit.log(
       actor,
       'product.delete',
@@ -758,26 +780,47 @@ export class AdminService {
   }
 
   async deleteVariant(actor: AdminActor, id: string): Promise<{ success: boolean }> {
-    const variant = await this.prisma.productVariant.findUnique({
-      where: { id },
-      include: {
-        _count: { select: { orderItems: true } },
-        product: { select: { name: true } },
-      },
+    const variant = await this.prisma.$transaction(async (tx) => {
+      const parent = await tx.productVariant.findUnique({
+        where: { id },
+        select: { productId: true },
+      });
+      if (!parent) throw new NotFoundException(K.variantNotFound);
+      // Hai lần xóa sibling từng cùng thấy count=2 rồi xóa hết loại cuối.
+      // Khóa cha trước loại, sau đó mới đọc lại lịch sử và số sibling.
+      await tx.$queryRaw`SELECT id FROM "Product" WHERE id = ${parent.productId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "ProductVariant" WHERE id = ${id} FOR UPDATE`;
+      const current = await tx.productVariant.findUnique({
+        where: { id },
+        include: {
+          _count: { select: { orderItems: true, stockItems: true } },
+          product: { select: { name: true } },
+        },
+      });
+      if (!current) throw new NotFoundException(K.variantNotFound);
+      if (current._count.orderItems > 0) {
+        throw new ConflictException(K.adminVariantHasOrders);
+      }
+      // Kể cả SOLD/WITHDRAWN vẫn là chứng cứ kho, không chỉ kiểm AVAILABLE.
+      if (current._count.stockItems > 0) {
+        throw new ConflictException(K.adminVariantHasStock);
+      }
+      const siblings = await tx.productVariant.count({
+        where: { productId: current.productId },
+      });
+      if (siblings <= 1) throw new BadRequestException(K.adminVariantLast);
+      await tx.productVariant.delete({ where: { id } });
+      return current;
+    }).catch((error: unknown) => {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
+        throw new ConflictException(
+          String(error.meta?.constraint).startsWith('StockItem')
+            ? K.adminVariantHasStock
+            : K.adminVariantHasOrders,
+        );
+      }
+      throw error;
     });
-    if (!variant) {
-      throw new NotFoundException(K.variantNotFound);
-    }
-    if (variant._count.orderItems > 0) {
-      throw new ConflictException(K.adminVariantHasOrders);
-    }
-    const siblings = await this.prisma.productVariant.count({
-      where: { productId: variant.productId },
-    });
-    if (siblings <= 1) {
-      throw new BadRequestException(K.adminVariantLast);
-    }
-    await this.prisma.productVariant.delete({ where: { id } });
     await this.audit.log(
       actor,
       'variant.delete',
@@ -789,29 +832,20 @@ export class AdminService {
 
   // ---------- Kho hàng (theo loại) ----------
 
+  /** Web và Telegram dùng cùng khóa này; bot phải lấy khóa trước snapshot. */
+  async lockStockVariant(tx: Prisma.TransactionClient, variantId: string): Promise<void> {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id FROM "ProductVariant" WHERE id = ${variantId} FOR UPDATE
+    `;
+    if (rows.length === 0) throw new NotFoundException(K.variantNotFound);
+  }
+
   async addStock(
     actor: AdminActor,
     variantId: string,
     dto: AddStockDto,
     transaction?: Prisma.TransactionClient,
   ): Promise<AddStockResponse> {
-    const db = transaction ?? this.prisma;
-    const variant = await db.productVariant.findUnique({
-      where: { id: variantId },
-      select: {
-        id: true,
-        name: true,
-        active: true,
-        price: true,
-        priceCurrency: true,
-        priceAmount: true,
-        product: { select: { id: true, name: true, active: true } },
-      },
-    });
-    if (!variant) {
-      throw new NotFoundException(K.variantNotFound);
-    }
-
     const lines = dto.content
       .split(/\r?\n/)
       .map((line) => line.trim())
@@ -820,28 +854,41 @@ export class AdminService {
       throw new BadRequestException(K.adminStockMinOneLine);
     }
 
-    const dedupe = dto.dedupe ?? true;
-    let toInsert: string[];
-    if (dedupe) {
-      const existing = await db.stockItem.findMany({
-        where: {
-          variantId,
-          status: { in: ['AVAILABLE', 'RESERVED'] },
-        },
-        select: { content: true },
-      });
-      const seen = new Set(existing.map((item) => item.content));
-      toInsert = [];
-      for (const line of lines) {
-        if (seen.has(line)) continue;
-        seen.add(line);
-        toInsert.push(line);
-      }
-    } else {
-      toInsert = lines;
-    }
-
     const insert = async (tx: Prisma.TransactionClient) => {
+      // Dedupe ngoài transaction từng cho hai lượt nhập cùng đọc kho cũ rồi
+      // thêm cùng một key. Giữ khóa loại tới khi key và outbox cùng commit.
+      await this.lockStockVariant(tx, variantId);
+      const variant = await tx.productVariant.findUnique({
+        where: { id: variantId },
+        select: {
+          id: true,
+          name: true,
+          active: true,
+          price: true,
+          priceCurrency: true,
+          priceAmount: true,
+          product: { select: { id: true, name: true, active: true } },
+        },
+      });
+      if (!variant) throw new NotFoundException(K.variantNotFound);
+
+      let toInsert: string[];
+      if (dto.dedupe ?? true) {
+        const existing = await tx.stockItem.findMany({
+          where: { variantId, status: { in: ['AVAILABLE', 'RESERVED'] } },
+          select: { content: true },
+        });
+        const seen = new Set(existing.map((item) => item.content));
+        toInsert = [];
+        for (const line of lines) {
+          if (seen.has(line)) continue;
+          seen.add(line);
+          toInsert.push(line);
+        }
+      } else {
+        toInsert = lines;
+      }
+
       if (toInsert.length > 0) {
         await tx.stockItem.createMany({
           data: toInsert.map((content) => ({ variantId, content })),
@@ -898,25 +945,27 @@ export class AdminService {
           }
         }
       }
-      return available;
+      return {
+        variantName: variant.name,
+        productName: variant.product.name,
+        added: toInsert.length,
+        skipped: lines.length - toInsert.length,
+        total: available,
+      };
     };
-    // Bot ghi kết quả chống lặp cùng transaction nhập kho; web giữ đường cũ.
-    const total = transaction ? await insert(transaction) : await this.prisma.$transaction(insert);
+    // Bot ghi kết quả chống lặp trong outer transaction, không mở transaction lồng.
+    const result = transaction ? await insert(transaction) : await this.prisma.$transaction(insert);
     if (!transaction) await this.audit.log(
       actor,
       'stock.add',
       { type: 'variant', id: variantId },
       {
-        variantName: variant.name,
-        productName: variant.product.name,
-        added: toInsert.length,
+        variantName: result.variantName,
+        productName: result.productName,
+        added: result.added,
       },
     );
-    return {
-      added: toInsert.length,
-      skipped: lines.length - toInsert.length,
-      total,
-    };
+    return { added: result.added, skipped: result.skipped, total: result.total };
   }
 
 
@@ -1292,48 +1341,95 @@ export class AdminService {
     return this.getOrderDetail(code);
   }
 
+  async listReconciliation(query: ReconciliationQueryDto): Promise<Paginated<ReconciliationTransferDto>> {
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 20;
+    const where = reconciliationWhere(query);
+    const [rows, total] = await Promise.all([
+      this.prisma.incomingTransfer.findMany({where,select:RECONCILIATION_SELECT,orderBy:[{createdAt:'desc'},{id:'asc'}],skip:(page-1)*limit,take:limit}),
+      this.prisma.incomingTransfer.count({where}),
+    ]);
+    return {items:rows.map(transferToReconciliationDto),total};
+  }
+
+  async reconciliationSummary(): Promise<ReconciliationSummaryDto> {
+    const [unresolved,conflicts] = await Promise.all([
+      this.prisma.incomingTransfer.count({where:{status:{in:['OBSERVED','REVIEW']}}}),
+      this.prisma.incomingTransfer.count({where:{reviewReason:'provider-facts-changed'}}),
+    ]);
+    // Conflicts có thể nằm trong unresolved, không cộng hai con số thành tổng giả.
+    return {unresolved,conflicts};
+  }
+
+  /** Chỉ công bố dữ kiện đối soát, không trả payload provider hay thông tin khách. */
+  async listIncomingTransfers(): Promise<IncomingTransferDto[]> {
+    const rows = await this.prisma.incomingTransfer.findMany({
+      where: { status: { in: ['OBSERVED', 'REVIEW'] } },
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      take: 100,
+      select: {
+        id: true, source: true, reference: true, amount: true, currency: true,
+        receiver: true, status: true, reviewReason: true, createdAt: true,
+      },
+    });
+    return rows.map((row) => ({
+      ...row, amount: row.amount.toString(), createdAt: row.createdAt.toISOString(),
+    }));
+  }
+
   /**
-   * Xác nhận đã nhận tiền NGOÀI hệ thống rồi giao hàng.
-   *
-   * Đây là van an toàn của cả cửa hàng: khách chuyển khoản ngân hàng, hoặc gửi
-   * USDT mà bộ đối soát tự động không khớp được (sai mạng, gửi từ sàn gộp lệnh,
-   * Binance API lỗi…). Trước khi có nút này, tiền đã vào tài khoản mà không có
-   * cách nào giao hàng ngoài sửa tay cơ sở dữ liệu.
-   *
-   * Chỉ nhận đơn PENDING/EXPIRED — đơn đã PAID/DELIVERED gọi lại không làm gì
-   * thêm (markPaidAndDeliver có chốt trạng thái), đơn CANCELLED thì phải để
-   * khách đặt lại chứ không hồi sinh.
+   * Operator chọn khoản tiền đã quan sát để giải quyết một đích cụ thể. Note
+   * không phải bằng chứng ownership: bản cũ mark PAID trước poll làm transfer
+   * còn trống được dùng để thanh toán thêm một đơn khác cùng số tiền.
    */
   async markOrderPaid(
     actor: AdminActor,
     code: string,
     note?: string,
+    incomingTransferId?: string,
   ): Promise<AdminOrderDetailDto> {
-    const order = await this.prisma.order.findUnique({
-      where: { code },
-      select: { id: true, status: true },
-    });
-    if (!order) {
-      throw new NotFoundException(K.orderNotFound);
-    }
-    if (order.status !== 'PENDING' && order.status !== 'EXPIRED') {
-      throw new BadRequestException(K.adminCannotMarkPaid);
-    }
-
-    const result = await this.fulfillment.markPaidAndDeliver({
-      orderId: order.id,
-    });
-    await this.audit.log(
-      actor,
-      'order.mark_paid',
-      { type: 'order', id: order.id },
-      {
-        code,
-        from: order.status,
-        to: result?.status ?? 'PAID',
-        ...(note?.trim() ? { note: note.trim() } : {}),
-      },
-    );
+    const transferId = incomingTransferId?.trim();
+    if (!transferId) throw new BadRequestException(K.paymentReviewRequired);
+    const orderId = await this.prisma.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      const order = await tx.order.findUnique({
+        where: { code }, select: { id: true },
+      });
+      if (!order) throw new NotFoundException(K.orderNotFound);
+      await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${order.id} FOR UPDATE`;
+      await tx.$queryRaw`SELECT "id" FROM "Payment" WHERE "orderId" = ${order.id} FOR UPDATE`;
+      const live = await tx.order.findUniqueOrThrow({
+        where: { id: order.id }, include: { payment: true },
+      });
+      const incoming = await tx.incomingTransfer.findUnique({ where: { id: transferId } });
+      if (!incoming || !live.payment) throw new BadRequestException(K.paymentReviewRequired);
+      const replay = incoming.status === 'CLAIMED' && incoming.paymentId === live.payment.id;
+      if (live.status !== 'PENDING' && live.status !== 'EXPIRED' &&
+        !(replay && (live.status === 'PAID' || live.status === 'DELIVERED'))) {
+        throw new BadRequestException(K.adminCannotMarkPaid);
+      }
+      const settledId = await settleOrderTransfer(tx, live.payment.id, incoming, { allowReview: true });
+      if (!settledId) throw new BadRequestException(K.paymentReviewRequired);
+      if (!replay || live.status === 'PENDING' || live.status === 'EXPIRED') {
+        // Audit cũng là bằng chứng giải quyết REVIEW; lỗi ghi phải rollback claim,
+        // không dùng AuditService.log global vốn nuốt lỗi và commit tách rời.
+        await tx.auditLog.create({ data: {
+          actorId: actor.id,
+          actorSource: actor.telegramUserId ? 'TELEGRAM' : 'WEB',
+          telegramUserId: actor.telegramUserId ?? null,
+          telegramName: actor.telegramName ?? null,
+          actorEmail: actor.email ?? '', actorCode: actor.code,
+          action: 'order.mark_paid', entityType: 'order', entityId: live.id,
+          details: {
+            code, from: live.status, to: 'PAID', incomingTransferId: incoming.id,
+            source: incoming.source, reference: incoming.reference,
+            ...(note?.trim() ? { note: note.trim() } : {}),
+          },
+        } });
+      }
+      return settledId;
+    }, FINANCIAL_TRANSACTION);
+    await this.fulfillment.deliverOrder(orderId);
     return this.getOrderDetail(code);
   }
 

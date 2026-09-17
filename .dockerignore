@@ -8,6 +8,12 @@
 
 # Dữ liệu PostgreSQL nhúng của môi trường dev (rất nặng, không được đưa vào image)
 apps/api/pgdata
+backups
+backup-status
+scratchpad
+.agents
+**/*.sql.gz
+**/*.dump
 
 # Bí mật — container nhận biến môi trường từ docker-compose, không bake vào image
 **/.env

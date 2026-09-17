@@ -12,6 +12,8 @@ import { usePrices } from '@/lib/prices';
 import { Button, Card, EmptyState, Spinner, buttonVariants } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/order-status-badge';
 import { Tabs } from '@/components/admin/tabs';
+import { useStorefront } from '@/lib/storefront';
+import { SupportPanel } from '@/components/support-panel';
 
 /** 'ALL' + 5 trạng thái đơn hàng — lọc phía client trên danh sách đã tải. */
 type OrderFilter = 'ALL' | OrderStatus;
@@ -30,6 +32,8 @@ export default function OrdersPage() {
   const { token, loading: authLoading } = useAuth();
   const { t, formatDate } = useI18n();
   const { priceUsdt } = usePrices();
+  const store = useStorefront();
+  const readOnly = !store.published || store.maintenanceMode;
 
   const [orders, setOrders] = useState<OrderSummaryDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -99,8 +103,8 @@ export default function OrdersPage() {
           <EmptyState
             icon={PackageOpen}
             title={t.orders.emptyTitle}
-            hint={t.orders.emptyHint}
-            action={
+            hint={readOnly ? t.customerUx.maintenanceHint : t.orders.emptyHint}
+            action={readOnly ? undefined :
               <Link href="/" className={buttonVariants({})}>
                 {t.orders.shopNow}
               </Link>
@@ -174,6 +178,7 @@ export default function OrdersPage() {
           </div>
         )}
       </div>
+      <div className="mt-6"><SupportPanel /></div>
     </div>
   );
 }

@@ -93,15 +93,23 @@ hình. Key chỉ được ghi, không được echo về UI hay audit log.
 ./storectl backup
 ```
 
-Backup container chỉ ghi `backups/.last-success.json` sau khi `pg_dump`,
-`gzip -t` và marker cuối dump đều đạt. Nên đồng bộ `backups/` sang máy hoặc vùng
-khác. Khôi phục trong cửa sổ bảo trì:
+`./storectl backup` chạy một lần và trả mã lỗi thật. Worker chỉ ghi
+`backup-status/.last-success.json` sau khi `pg_dump`, `gzip -t` và marker cuối dump
+đều đạt. API chỉ đọc metadata này, **không mount dump**. Giữ `backups/` mode 700,
+file dump 600; đồng bộ ra máy/vùng khác bằng tài khoản được phép.
+
+Chọn một file có thật, chỉ dùng dump tin cậy. Diễn tập không sửa target; phục hồi
+thật chỉ trong cửa sổ bảo trì đã cho phép:
 
 ```bash
-./storectl restore backups/webcatt-YYYYMMDD-HHMMSS.sql.gz
+./storectl restore --rehearsal backups/webcatt-20260917-010000-AbCd1234.sql.gz
+./storectl restore --no-start backups/webcatt-20260917-010000-AbCd1234.sql.gz
 ```
 
-Thử khôi phục định kỳ quan trọng hơn việc chỉ nhìn thấy file backup.
+Restore luôn kiểm SQL trong DB tạm trước stop/drop. `--no-start` giữ writer dừng
+sau phục hồi để đối soát; mọi lỗi đều không tự restart. Không chạy lại installer
+để chữa lỗi: giữ nguyên `.env`/credentials/volume. Xem [runbook](../TRIEN-KHAI.md)
+về chuyển heartbeat, staging cách ly và rollback sau khi đã nhận đơn mới.
 
 ## 7. Xử lý lỗi
 

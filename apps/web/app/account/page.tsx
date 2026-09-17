@@ -29,6 +29,7 @@ import { useI18n } from '@/lib/i18n/client';
 import { cn } from '@/lib/cn';
 import { Badge, Card, Spinner } from '@/components/ui';
 import { StatCard } from '@/components/admin/stat-card';
+import { SupportPanel } from '@/components/support-panel';
 
 /* ---------- clipboard helper (Copy → Check swap, 1.5s) ---------- */
 
@@ -230,6 +231,7 @@ export default function AccountPage() {
           {t.nav.logout}
         </button>
       </Card>
+      <div className="mt-4"><SupportPanel reference={formatUserCode(user.code)} /></div>
     </div>
   );
 }

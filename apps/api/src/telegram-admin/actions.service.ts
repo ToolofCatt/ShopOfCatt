@@ -220,6 +220,9 @@ export class TelegramAdminActionsService {
     actor: TelegramAdmin,
     action: PreparedAction,
   ): Promise<AdminActionResult> {
+    // Callback prepare từ bản cũ có thể chỉ mang note. Chặn trước RUNNING/REVIEW
+    // để request đã biết không hợp lệ không khóa mọi action sau trên cùng đơn.
+    if (action.kind === 'order.markPaid') validateCommand(action.kind, action.payload);
     const spec = command(action.kind)!;
     const actorContext = telegramActor(actor);
     const atomicStock = action.kind.startsWith('stock.');
@@ -263,6 +266,11 @@ export class TelegramAdminActionsService {
           },
         });
         if (busy) throw new ConflictException(K.adminStorefrontVersionConflict);
+        if (action.kind === 'stock.import' || action.kind === 'stock.withdraw') {
+          // Advisory chỉ đồng bộ bot với bot; khóa dòng chung với web trước
+          // snapshot để không duyệt lượng kho cũ rồi mới chờ lượt nhập khác.
+          await this.admin.lockStockVariant(tx, action.targetId);
+        }
         if (
           (await this.snapshot(action.kind, action.targetId, tx)).hash !==
           action.expected
@@ -461,7 +469,9 @@ export class TelegramAdminActionsService {
         await this.admin.redeliverOrder(user, target);
         break;
       case 'order.markPaid':
-        await this.admin.markOrderPaid(user, target, String(data.note));
+        await this.admin.markOrderPaid(
+          user, target, String(data.note), String(data.incomingTransferId),
+        );
         break;
       case 'customer.lock':
         await this.customers.lock(user, target);

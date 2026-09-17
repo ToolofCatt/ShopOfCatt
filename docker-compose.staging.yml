@@ -1,0 +1,145 @@
+# Manifest ĐỘC LẬP, không ghép -f với docker-compose.yml và không chạy installer.
+# Chỉ dùng CSDL synthetic TEST-*, không import settings/token/dump production vào app.
+# Cần env-file staging riêng, STAGING_ID riêng cho từng candidate; xem runbook.
+name: "webcatt-staging-${STAGING_ID:?Dat STAGING_ID rieng cho candidate}"
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: "no"
+    environment:
+      POSTGRES_USER: stage_user
+      POSTGRES_PASSWORD: "${STAGING_POSTGRES_PASSWORD:?Tao mat khau staging chi chu va so}"
+      POSTGRES_DB: stage_store
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "127.0.0.1:${STAGING_POSTGRES_PORT:-15433}:5432"
+    volumes:
+      - stage_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stage_user -d stage_store"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+    networks: [isolated]
+    dns: [127.0.0.1]
+    mem_limit: 384m
+    shm_size: 64m
+    cpus: 0.5
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+
+  api:
+    profiles: [app]
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: "webcatt-staging-api:${STAGING_ID:?Dat STAGING_ID}"
+    restart: "no"
+    depends_on:
+      postgres: {condition: service_healthy}
+    environment:
+      DATABASE_URL: "postgresql://stage_user:${STAGING_POSTGRES_PASSWORD:?Thieu staging password}@postgres:5432/stage_store?schema=public"
+      PORT: "3001"
+      JWT_SECRET: "${STAGING_JWT_SECRET:?Tao JWT rieng cho staging}"
+      ADMIN_EMAIL: "${STAGING_ADMIN_EMAIL:?Dat email TEST rieng}"
+      ADMIN_PASSWORD: "${STAGING_ADMIN_PASSWORD:?Tao mat khau TEST rieng}"
+      WEB_URL: "http://127.0.0.1:${STAGING_WEB_PORT:-18400}"
+      API_PUBLIC_URL: "http://127.0.0.1:${STAGING_API_PORT:-18401}"
+      STORE_BOOTSTRAP_NAME: TEST Staging
+      BACKUP_HEARTBEAT_FILE: /backup-status/.last-success.json
+      SEED_ON_START: "true"
+      SEED_DEMO: "false"
+      PAYMENT_MOCK: "false"
+      BINANCE_PAY_API_KEY: ""
+      BINANCE_PAY_API_SECRET: ""
+      BINANCE_API_KEY: ""
+      BINANCE_SECRET_KEY: ""
+      ANTHROPIC_API_KEY: ""
+      # Dù nhập nhầm key qua DB, mạng internal không có đường tới provider thật.
+      BINANCE_PAY_BASE_URL: http://provider-fixture:8080
+      BINANCE_API_BASE_URL: http://provider-fixture:8080
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - stage_status:/backup-status:ro
+    ports:
+      - "127.0.0.1:${STAGING_API_PORT:-18401}:3001"
+    networks: [isolated]
+    dns: [127.0.0.1]
+    mem_limit: 512m
+    cpus: 0.75
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+
+  web:
+    profiles: [app]
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: "http://127.0.0.1:${STAGING_API_PORT:-18401}/api"
+        NEXT_PUBLIC_SITE_NAME: TEST Staging
+        NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:${STAGING_WEB_PORT:-18400}"
+    image: "webcatt-staging-web:${STAGING_ID:?Dat STAGING_ID}"
+    restart: "no"
+    depends_on:
+      api: {condition: service_healthy}
+    environment:
+      API_URL: http://api:3001/api
+      NEXT_PUBLIC_API_URL: "http://127.0.0.1:${STAGING_API_PORT:-18401}/api"
+      NEXT_PUBLIC_SITE_NAME: TEST Staging
+      NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:${STAGING_WEB_PORT:-18400}"
+    ports:
+      - "127.0.0.1:${STAGING_WEB_PORT:-18400}:3000"
+    networks: [isolated]
+    dns: [127.0.0.1]
+    mem_limit: 384m
+    cpus: 0.5
+    stop_grace_period: 20s
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+
+  backup:
+    profiles: [app]
+    image: postgres:17-alpine
+    restart: "no"
+    depends_on:
+      postgres: {condition: service_healthy}
+    environment:
+      PGPASSWORD: "${STAGING_POSTGRES_PASSWORD:?Thieu staging password}"
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: stage_user
+      POSTGRES_DB: stage_store
+      BACKUP_KEEP: "3"
+      BACKUP_INTERVAL: "86400"
+    volumes:
+      - ./docker/backup.sh:/usr/local/bin/backup.sh:ro
+      - stage_backups:/backups
+      - stage_status:/backup-status
+    entrypoint: ["/bin/sh", "/usr/local/bin/backup.sh"]
+    networks: [isolated]
+    dns: [127.0.0.1]
+    mem_limit: 128m
+    cpus: 0.25
+    logging:
+      driver: json-file
+      options: {max-size: "5m", max-file: "2"}
+
+# Không host network, external volume, production proxy hay container_name.
+# Chặn egress runtime; build/pull vẫn cần mạng và phải được phê duyệt riêng.
+networks:
+  isolated:
+    internal: true
+    # Internal mặc định còn IP bridge cho container gọi dịch vụ host. Chế độ
+    # isolated bỏ IP đó; cần Docker hỗ trợ gateway modes, không tự hạ về nat.
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: isolated
+      com.docker.network.bridge.gateway_mode_ipv6: isolated
+volumes:
+  stage_pgdata:
+  stage_backups:
+  stage_status:

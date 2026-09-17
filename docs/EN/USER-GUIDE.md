@@ -80,11 +80,22 @@ order, outbox event, or stock change.
 ./storectl doctor
 ./storectl doctor --json
 ./storectl backup
-./storectl restore backups/webcatt-YYYYMMDD-HHMMSS.sql.gz
+# Replace the example with exactly one trusted, existing dump.
+./storectl restore --rehearsal backups/webcatt-20260917-010000-AbCd1234.sql.gz
+# Destructive restore requires approved downtime; keep writers stopped for review.
+./storectl restore --no-start backups/webcatt-20260917-010000-AbCd1234.sql.gz
 ```
 
-The backup heartbeat is written only after a complete `pg_dump`, `gzip -t`, and
-dump-end marker check. Replicate backups off-host and rehearse restores.
+Backup runs once and returns its actual exit status. The heartbeat in
+`backup-status/.last-success.json` is written only after successful `pg_dump`,
+`gzip -t`, and dump-end checks. API mounts only this metadata, never the dumps.
+Keep the dump directory mode 700 and dump files 600; replicate them off-host.
+Restore rehearses SQL in a temporary database before stopping or dropping the
+target, and errors never automatically restart writers. Rehearsal is not a
+sandbox for untrusted SQL. Do not rerun the installer: preserve the original
+`.env`, credentials and volume, and resume the same Compose deployment after
+investigation. See the [deployment runbook](../TRIEN-KHAI.md) for heartbeat
+migration, isolated staging and rollback limitations after new transactions.
 
 For failures, rerun stale checks, inspect every fail row, check API/container
 logs and verify DNS/HTTPS. Read `AGENTS.md` and `docs/AGENT-GUIDE.md` before

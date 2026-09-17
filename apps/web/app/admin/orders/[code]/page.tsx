@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { use, useCallback, useEffect, useState, type ReactNode } from 'react';
+import { use, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import {
   ArrowLeft,
   BadgeCheck,
@@ -15,6 +15,7 @@ import {
   formatUsdt,
   formatUserCode,
   type AdminOrderDetailDto,
+  type IncomingTransferDto,
   type OrderItemDto,
   type PaymentInfoDto,
 } from '@webcatt/shared';
@@ -22,9 +23,11 @@ import { ApiError, apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useI18n } from '@/lib/i18n/client';
 import { formatCryptoAmount } from '@/lib/format';
+import { buildMarkPaidRequest, canMarkPaidManually } from '@/lib/admin-mark-paid';
 import { Badge, Button, Card, EmptyState, Spinner, buttonVariants } from '@/components/ui';
 import { OrderStatusBadge } from '@/components/order-status-badge';
 import { PAYMENT_STATUS_BADGE_VARIANT } from '@/components/admin/helpers';
+import { IncomingTransferList } from '@/components/admin/incoming-transfer-list';
 
 /** Admin order detail — API kèm email + mã khách hàng. */
 type AdminOrderDetail = AdminOrderDetailDto;
@@ -77,6 +80,15 @@ export default function AdminOrderDetailPage({
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [markingPaid, setMarkingPaid] = useState(false);
   const [markPaidError, setMarkPaidError] = useState<string | null>(null);
+  const [markPaidOpen, setMarkPaidOpen] = useState(false);
+  const [markPaidNote, setMarkPaidNote] = useState('');
+  const [transfers, setTransfers] = useState<IncomingTransferDto[]>([]);
+  const [transfersLoading, setTransfersLoading] = useState(false);
+  const [transfersError, setTransfersError] = useState<string | null>(null);
+  const [selectedTransferId, setSelectedTransferId] = useState('');
+  const [transferReload, setTransferReload] = useState(0);
+  const markPaidDialogRef = useRef<HTMLDialogElement>(null);
+  const markPaidInFlightRef = useRef(false);
 
   const loadOrder = useCallback(async (): Promise<AdminOrderDetail> => {
     return apiFetch<AdminOrderDetail>(`/admin/orders/${code}`, { token });
@@ -113,26 +125,53 @@ export default function AdminOrderDetailPage({
     }
   };
 
-  /**
-   * Xác nhận đã nhận tiền ngoài hệ thống (chuyển khoản ngân hàng, hoặc khách
-   * nạp USDT mà bộ đối soát tự động không khớp được). Ghi chú đi vào nhật ký để
-   * sau này còn truy được vì sao đơn này được duyệt tay.
-   */
-  const handleMarkPaid = async () => {
-    if (markingPaid) return;
-    const note = window.prompt(t.admin.markPaidPrompt, '');
-    if (note === null) return;
+  useEffect(() => {
+    const dialog = markPaidDialogRef.current;
+    if (markPaidOpen && dialog && !dialog.open) dialog.showModal();
+    if (!markPaidOpen && dialog?.open) dialog.close();
+  }, [markPaidOpen]);
+
+  const updateTransferList = useCallback((rows: IncomingTransferDto[], loading: boolean, listError: string | null) => {
+    setTransfers(rows);
+    setTransfersLoading(loading);
+    setTransfersError(listError);
+  }, []);
+
+  const openMarkPaid = () => {
+    if (!token || markPaidInFlightRef.current || !order || !canMarkPaidManually(order.payment?.mode ?? null) || (order.status !== 'PENDING' && order.status !== 'EXPIRED')) return;
+    setSelectedTransferId('');
+    setMarkPaidNote('');
+    setMarkPaidError(null);
+    setTransfers([]);
+    setTransfersError(null);
+    setTransfersLoading(true);
+    setMarkPaidOpen(true);
+  };
+
+  /** Không cho ghi chú tự biến thành bằng chứng: API phải nhận ID khoản tiền cụ thể. */
+  const handleMarkPaid = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!token || !markPaidOpen || markPaidInFlightRef.current || transfersLoading || transfersError || !order || (order.status !== 'PENDING' && order.status !== 'EXPIRED')) return;
+    const body = buildMarkPaidRequest(order.payment?.mode ?? null, markPaidNote, selectedTransferId, transfers);
+    if (!body) return;
+    markPaidInFlightRef.current = true;
     setMarkingPaid(true);
     setMarkPaidError(null);
     try {
       const updated = await apiFetch<AdminOrderDetail>(
         `/admin/orders/${code}/mark-paid`,
-        { method: 'POST', body: { note: note.trim() }, token },
+        { method: 'POST', body, token },
       );
       setOrder(updated);
+      setMarkPaidOpen(false);
     } catch (err) {
       setMarkPaidError(apiErrorMessage(err, t.common.connectionError));
+      // Có thể khoản tiền vừa được ghép ở nơi khác: không giữ lựa chọn cũ để gửi lại.
+      setSelectedTransferId('');
+      setTransfersLoading(true);
+      setTransferReload((value) => value + 1);
     } finally {
+      markPaidInFlightRef.current = false;
       setMarkingPaid(false);
     }
   };
@@ -220,11 +259,11 @@ export default function AdminOrderDetailPage({
         <div className="flex flex-wrap items-center gap-3">
           {/* Đơn chờ hoặc đã hết hạn vẫn xác nhận tay được: khách chuyển khoản
               ngân hàng, hoặc nạp USDT mà bộ đối soát không khớp. */}
-          {(order.status === 'PENDING' || order.status === 'EXPIRED') && (
+          {(order.status === 'PENDING' || order.status === 'EXPIRED') && canMarkPaidManually(payment?.mode ?? null) && (
             <Button
               size="sm"
               loading={markingPaid}
-              onClick={() => void handleMarkPaid()}
+              onClick={openMarkPaid}
             >
               {!markingPaid && (
                 <BadgeCheck strokeWidth={1.75} className="h-4 w-4" />
@@ -250,9 +289,45 @@ export default function AdminOrderDetailPage({
       </div>
 
       {cancelError && <p className="mb-4 text-sm text-red-600">{cancelError}</p>}
-      {markPaidError && (
-        <p className="mb-4 text-sm text-red-600">{markPaidError}</p>
-      )}
+      <dialog
+        ref={markPaidDialogRef}
+        aria-labelledby="mark-paid-title"
+        aria-describedby="mark-paid-hint"
+        className="m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-xl overflow-y-auto rounded-lg border border-neutral-200 bg-white p-6 text-neutral-950 shadow-xl backdrop:bg-black/40"
+        onCancel={(event) => {
+          event.preventDefault();
+          if (!markPaidInFlightRef.current) setMarkPaidOpen(false);
+        }}
+        onClose={() => setMarkPaidOpen(false)}
+      >
+        {markPaidOpen && (
+          <form onSubmit={(event) => void handleMarkPaid(event)} className="space-y-4">
+            <h2 id="mark-paid-title" className="text-lg font-semibold">{t.admin.markPaidAction} · {order.code}</h2>
+            <p id="mark-paid-hint" className="text-sm text-neutral-600">{t.admin.markPaidPrompt}</p>
+            <fieldset disabled={markingPaid} className="min-w-0 space-y-3">
+              <legend className="mb-2 text-sm font-medium">{t.admin.markPaidTransferLabel}</legend>
+              <IncomingTransferList value={selectedTransferId} onChange={setSelectedTransferId} onStateChange={updateTransferList} disabled={markingPaid} reloadKey={transferReload}/>
+            </fieldset>
+            <div className="space-y-1.5">
+              <label htmlFor="mark-paid-note" className="text-sm font-medium">{t.admin.markPaidNoteLabel}</label>
+              <textarea
+                id="mark-paid-note"
+                required
+                maxLength={300}
+                value={markPaidNote}
+                onChange={(event) => setMarkPaidNote(event.target.value)}
+                disabled={markingPaid}
+                className="min-h-24 w-full rounded-md border border-neutral-300 p-3 text-sm focus:outline-none focus:ring-2 focus:ring-neutral-950"
+              />
+            </div>
+            {markPaidError && <p role="alert" className="text-sm text-red-600">{markPaidError}</p>}
+            <div className="flex flex-wrap justify-end gap-2">
+              <Button variant="outline" autoFocus disabled={markingPaid} onClick={() => setMarkPaidOpen(false)}>{t.common.cancel}</Button>
+              <Button type="submit" loading={markingPaid} disabled={transfersLoading || Boolean(transfersError) || !buildMarkPaidRequest(payment?.mode ?? null, markPaidNote, selectedTransferId, transfers)}>{t.admin.markPaidAction}</Button>
+            </div>
+          </form>
+        )}
+      </dialog>
 
       {needsRedelivery && (
         <Card className="mb-6 border-neutral-300 p-5">

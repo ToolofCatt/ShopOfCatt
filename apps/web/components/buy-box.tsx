@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { Minus, Plus, Ticket, Wallet, Zap } from 'lucide-react';
 import {
@@ -20,8 +20,20 @@ import { useI18n } from '@/lib/i18n/client';
 import { Badge, Button, Card, Input, Label } from '@/components/ui';
 import { VariantSelector } from '@/components/variant-selector';
 import { PaymentMethodTabs } from '@/components/payment-method-tabs';
+import { SupportPanel } from '@/components/support-panel';
+import { useStorefront } from '@/lib/storefront';
+import { clearPurchaseDraft, readPurchaseDraft, revalidatePurchaseDraft, savePurchaseDraft } from '@/lib/customer-purchase-draft';
 
-export function BuyBox({ product }: { product: ProductDto }) {
+export function PurchaseChoices({ restoring, children }: { restoring: boolean; children: ReactNode }) {
+  // GET khôi phục chậm từng ghi đè lựa chọn vừa sửa; khoá native controls tới khi hoàn tất.
+  return <fieldset disabled={restoring} aria-busy={restoring} className="min-w-0 space-y-6">{children}</fieldset>;
+}
+
+export function BuyBox({ product: initialProduct, preview = false }: { product: ProductDto; preview?: boolean }) {
+  const [refreshedProduct, setProduct] = useState<ProductDto | null>(null);
+  const product = preview ? initialProduct : refreshedProduct?.id === initialProduct.id ? refreshedProduct : initialProduct;
+  const store = useStorefront();
+  const readOnly = !store.published || store.maintenanceMode;
   const router = useRouter();
   const { user, token, loading: authLoading } = useAuth();
   const { t } = useI18n();
@@ -81,20 +93,27 @@ export function BuyBox({ product }: { product: ProductDto }) {
    * `null` = đang tải; `[]` = cửa hàng chưa bật phương thức nào.
    */
   const [methods, setMethods] = useState<PaymentMethod[] | null>(null);
+  const [methodsError, setMethodsError] = useState(false);
+  const [methodAttempt, setMethodAttempt] = useState(0);
+  const [restoring, setRestoring] = useState(false);
+  const [draftError, setDraftError] = useState(false);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const restoredFor = useRef<string | null>(null);
   useEffect(() => {
+    if (preview || readOnly) return;
+    setMethodsError(false);
     let active = true;
     apiFetch<PaymentMethodDto[]>('/payment-methods')
       .then((list) => {
         if (active) setMethods(list.map((entry) => entry.method));
       })
       .catch(() => {
-        // Không đọc được thì im lặng: chỉ ẩn dòng gợi ý, không chặn việc mua.
-        if (active) setMethods(null);
+        if (active) { setMethods(null); setMethodsError(true); }
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [methodAttempt, readOnly, preview]);
 
   /** Tên các phương thức, gộp BEP20/TRC20 thành một nhãn "USDT (BEP20, TRC20)". */
   const paymentLabels = useMemo(() => {
@@ -124,7 +143,7 @@ export function BuyBox({ product }: { product: ProductDto }) {
    */
   const [payMethod, setPayMethod] = useState<PaymentMethod | null>(null);
   useEffect(() => {
-    if (methods && methods.length > 0) setPayMethod((cur) => cur ?? methods[0]);
+    if (methods) setPayMethod((cur) => cur && methods.includes(cur) ? cur : methods[0] ?? null);
   }, [methods]);
 
   // Mã giảm giá: giữ mã đã áp dụng, số tiền giảm luôn do máy chủ tính lại
@@ -134,6 +153,40 @@ export function BuyBox({ product }: { product: ProductDto }) {
   const [coupon, setCoupon] = useState<CouponPreviewDto | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [checkingCoupon, setCheckingCoupon] = useState(false);
+  const couponGeneration = useRef(0);
+
+  useEffect(() => {
+    if (preview || readOnly || authLoading || !token || !methods || restoredFor.current === `${product.id}:${token}`) return;
+    const draft = readPurchaseDraft(() => window.sessionStorage, product.id);
+    if (!draft) { restoredFor.current = `${product.id}:${token}`; return; }
+    let active = true;
+    setRestoring(true);
+    setDraftError(false);
+    apiFetch<ProductDto>(`/products/${product.slug}`).then((fresh) => {
+      if (!active) return;
+      const selection = revalidatePurchaseDraft(draft, fresh.variants, methods);
+      restoredFor.current = `${product.id}:${token}`;
+      setProduct(fresh);
+      setSelectedId(selection.variantId);
+      setQuantity(selection.quantity);
+      setInputValue(String(selection.quantity));
+      setPayMethod(selection.method);
+      setCouponInput(selection.coupon);
+      setCoupon(null);
+      setCouponError(null);
+      setCheckingCoupon(Boolean(selection.coupon && selection.variantId));
+      setAppliedCode(selection.coupon || null);
+      setDraftNotice(selection.changed ? t.customerUx.draftChanged : t.customerUx.draftRestored);
+    }).catch(() => { if (active) setDraftError(true); }).finally(() => { if (active) setRestoring(false); });
+    return () => { active = false; };
+  }, [authLoading, token, methods, product.id, product.slug, readOnly, methodAttempt, t.customerUx, preview]);
+
+  const rememberAndLogin = () => {
+    if (preview || !selected) return;
+    const saved = savePurchaseDraft(() => window.sessionStorage, { productId: product.id, variantId: selected.id, quantity, coupon: appliedCode ?? couponInput.trim(), method: payMethod });
+    if (!saved) setDraftNotice(t.customerUx.draftNotSaved);
+    router.push(`/login?next=${encodeURIComponent(`/products/${product.slug}`)}`);
+  };
 
   /*
     Làm tròn SÁU chữ số, không phải hai.
@@ -148,39 +201,44 @@ export function BuyBox({ product }: { product: ProductDto }) {
   const payable = Math.max(0, roundUsdt(subtotal - discount));
 
   const clearCoupon = () => {
+    couponGeneration.current += 1;
     setAppliedCode(null);
     setCoupon(null);
     setCouponError(null);
     setCouponInput('');
+    setCheckingCoupon(false);
   };
 
   const checkCoupon = useCallback(
-    async (code: string, silent: boolean) => {
-      if (!selected || !token) return;
-      if (!silent) setCheckingCoupon(true);
+    async (code: string) => {
+      if (preview || !selected || !token || readOnly) return;
+      const generation = ++couponGeneration.current;
+      setCheckingCoupon(true);
       try {
         const preview = await apiFetch<CouponPreviewDto>('/coupons/preview', {
           method: 'POST',
           body: { code, items: [{ variantId: selected.id, quantity }] },
           token,
         });
+        if (generation !== couponGeneration.current) return;
         setCoupon(preview);
         setAppliedCode(preview.code);
         setCouponError(null);
       } catch (err) {
+        if (generation !== couponGeneration.current) return;
         setCoupon(null);
         setAppliedCode(null);
         setCouponError(apiErrorMessage(err, t.common.connectionError));
       } finally {
-        if (!silent) setCheckingCoupon(false);
+        if (generation === couponGeneration.current) setCheckingCoupon(false);
       }
     },
-    [selected, token, quantity, t],
+    [selected, token, quantity, t, readOnly, preview],
   );
 
   // Đổi loại/số lượng → tính lại số tiền giảm cho đúng đơn hiện tại.
   useEffect(() => {
-    if (appliedCode) void checkCoupon(appliedCode, true);
+    if (appliedCode) void checkCoupon(appliedCode);
     // checkCoupon đã phụ thuộc selected.id + quantity
   }, [appliedCode, checkCoupon]);
 
@@ -188,10 +246,10 @@ export function BuyBox({ product }: { product: ProductDto }) {
     const code = couponInput.trim();
     if (!code || checkingCoupon) return;
     if (!user || !token) {
-      router.push(`/login?next=${encodeURIComponent(`/products/${product.slug}`)}`);
+      rememberAndLogin();
       return;
     }
-    void checkCoupon(code, false);
+    void checkCoupon(code);
   };
 
   const clamp = (value: number) => Math.min(Math.max(1, value), maxQuantity);
@@ -218,9 +276,9 @@ export function BuyBox({ product }: { product: ProductDto }) {
   };
 
   const handleBuy = async () => {
-    if (authLoading || submitting || outOfStock || !selected) return;
+    if (preview || readOnly || authLoading || submitting || restoring || draftError || methodsError || !methods?.length || checkingCoupon || outOfStock || !selected || selected.availableStock < quantity) return;
     if (!user || !token) {
-      router.push(`/login?next=${encodeURIComponent(`/products/${product.slug}`)}`);
+      rememberAndLogin();
       return;
     }
     setSubmitting(true);
@@ -234,6 +292,7 @@ export function BuyBox({ product }: { product: ProductDto }) {
         },
         token,
       });
+      clearPurchaseDraft(() => window.sessionStorage, product.id);
       /*
        * Chốt phương thức ngay, trước khi chuyển trang. Lỗi ở bước này KHÔNG
        * chặn: đơn đã tạo và trang thanh toán vẫn cho chọn lại, chặn ở đây chỉ
@@ -257,8 +316,10 @@ export function BuyBox({ product }: { product: ProductDto }) {
     }
   };
 
+  if (readOnly && !preview) return <SupportPanel reference={product.slug} title={t.customerUx.maintenanceTitle} hint={t.customerUx.maintenanceHint} />;
+
   return (
-    <Card className="space-y-6 rounded-lg border-neutral-300 p-5 shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:p-6">
+    <Card inert={preview} className="space-y-6 rounded-lg border-neutral-300 p-5 shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:p-6">
       {/*
         Tổng đã bán nằm cạnh tiêu đề sản phẩm; hộp mua chỉ nêu trạng thái của
         loại đang chọn để khách không hiểu nhầm tổng kho là kho của một loại.
@@ -270,6 +331,11 @@ export function BuyBox({ product }: { product: ProductDto }) {
         </Badge>
       </div>
 
+      {draftNotice && <p role="status" className="text-sm text-neutral-600">{draftNotice}</p>}
+      {restoring && <p role="status" className="text-sm text-neutral-600">{t.customerUx.draftChecking}</p>}
+      {(draftError || methodsError) && <div role="alert" className="space-y-2 text-sm text-neutral-600"><p>{t.customerUx.draftLoadError}</p><Button variant="outline" onClick={() => setMethodAttempt((value) => value + 1)}>{t.common.retry}</Button></div>}
+
+      <PurchaseChoices restoring={restoring}>
       {variants.length > 1 && (
         <VariantSelector
           variants={variants}
@@ -387,7 +453,7 @@ export function BuyBox({ product }: { product: ProductDto }) {
         <Button
           className="h-12 w-full text-base"
           loading={submitting}
-          disabled={outOfStock || noPaymentMethod}
+          disabled={outOfStock || availableStock < quantity || noPaymentMethod || methods === null || restoring || draftError || methodsError || checkingCoupon}
           onClick={() => void handleBuy()}
         >
           {outOfStock ? (
@@ -440,6 +506,8 @@ export function BuyBox({ product }: { product: ProductDto }) {
           </div>
         )
       )}
+      </PurchaseChoices>
+      {outOfStock && !preview && <SupportPanel reference={product.slug} title={t.customerUx.outOfStockHelp} />}
     </Card>
   );
 }

@@ -13,13 +13,15 @@ export interface TabsProps<T extends string> {
   value: T;
   onChange: (value: T) => void;
   className?: string;
+  idPrefix?: string;
+  label?: string;
 }
 
 /**
  * Tab phụ dùng chung cũng đi theo ngôn ngữ gạch chân của tab cấp trang.
  * Cuộn ngang thay vì xuống dòng để thứ tự lựa chọn không bị đảo trên màn hình hẹp.
  */
-export function Tabs<T extends string>({ items, value, onChange, className }: TabsProps<T>) {
+export function Tabs<T extends string>({ items, value, onChange, className, idPrefix, label }: TabsProps<T>) {
   const listRef = useRef<HTMLDivElement | null>(null);
   const refs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -58,6 +60,7 @@ export function Tabs<T extends string>({ items, value, onChange, className }: Ta
     <div
       ref={listRef}
       role="tablist"
+      aria-label={label}
       aria-orientation="horizontal"
       className={cn(
         'inline-flex max-w-full flex-nowrap items-center overflow-x-auto border-b border-neutral-200',
@@ -75,6 +78,8 @@ export function Tabs<T extends string>({ items, value, onChange, className }: Ta
             }}
             type="button"
             role="tab"
+            id={idPrefix ? `${idPrefix}-tab-${item.value}` : undefined}
+            aria-controls={idPrefix ? `${idPrefix}-panel-${item.value}` : undefined}
             aria-selected={active}
             tabIndex={active ? 0 : -1}
             onClick={() => onChange(item.value)}

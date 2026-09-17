@@ -2,10 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { OrderStatus, StockDrawMode } from '@webcatt/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/financial-lock';
+import { markOrderPaid } from '../common/order-settlement';
 
 export interface MarkPaidResult {
   status: OrderStatus;
   delivered: boolean;
+}
+
+export interface ExpectedMerchantSession {
+  merchantTradeNo: string;
+  sessionVersion: number;
 }
 
 /**
@@ -97,46 +104,29 @@ export class FulfillmentService {
       return;
     }
 
+    await lockFinancialArbitration(tx);
     const now = new Date();
+    // Đọc ứng viên SAU arbitration. Bản cũ đọc cùng snapshot rồi tìm lại mọi
+    // EXPIRED nên sweep thua cũng trừ coupon của đơn đã được sweep thắng nhả.
+    // Prisma giữ timestamp UTC đúng kiểu cột; raw Date có thể bị ép timestamptz
+    // và chọn nhầm đơn còn hạn nếu PostgreSQL chạy ở múi giờ địa phương.
     const candidates = await tx.order.findMany({
       where: { status: 'PENDING', expiresAt: { lt: now } },
       select: { id: true },
+      orderBy: { id: 'asc' },
     });
-    if (candidates.length === 0) return;
-    const candidateIds = candidates.map((o) => o.id);
-
-    await tx.order.updateMany({
-      where: { id: { in: candidateIds }, status: 'PENDING' },
-      data: { status: 'EXPIRED' },
-    });
-
-    // Chỉ nhả kho của những đơn THỰC SỰ đang EXPIRED sau guard ở trên —
-    // một đơn trong danh sách quét có thể vừa được thanh toán (webhook/polling)
-    // giữa lúc quét và lúc update; nhả kho của đơn đó sẽ làm mất dòng đã bán.
-    const expiredNow = await tx.order.findMany({
-      where: { id: { in: candidateIds }, status: 'EXPIRED' },
-      select: { id: true },
-    });
-    if (expiredNow.length === 0) return;
-    const orderIds = expiredNow.map((o) => o.id);
-
-    const orderItems = await tx.orderItem.findMany({
-      where: { orderId: { in: orderIds } },
-      select: { id: true },
-    });
-    const orderItemIds = orderItems.map((i) => i.id);
-
-    await tx.payment.updateMany({
-      where: { orderId: { in: orderIds }, status: 'PENDING' },
-      data: { status: 'EXPIRED' },
-    });
-    if (orderItemIds.length > 0) {
-      await tx.stockItem.updateMany({
-        where: { status: 'RESERVED', orderItemId: { in: orderItemIds } },
-        data: { status: 'AVAILABLE', orderItemId: null },
-      });
+    const orderIds: string[] = [];
+    for (const candidate of candidates) {
+      if (await this.closePendingOrder(tx, candidate.id, 'EXPIRED')) {
+        orderIds.push(candidate.id);
+      }
     }
+    if (orderIds.length === 0) return;
+
+    // Chỉ trả tài nguyên cho CAS thắng trong CHÍNH transaction này; Coupon
+    // trước Stock để không đảo khóa với reservation lúc tạo đơn.
     await this.releaseCoupons(tx, orderIds);
+    for (const orderId of orderIds) await this.releaseReservedStock(tx, orderId);
   }
 
   /**
@@ -152,12 +142,21 @@ export class FulfillmentService {
       where: { id: { in: orderIds }, couponId: { not: null } },
       select: { couponId: true },
     });
+    const releases = new Map<string, number>();
     for (const order of orders) {
-      if (!order.couponId) continue;
-      await tx.coupon.updateMany({
-        where: { id: order.couponId, usedCount: { gt: 0 } },
-        data: { usedCount: { decrement: 1 } },
-      });
+      if (order.couponId) {
+        releases.set(order.couponId, (releases.get(order.couponId) ?? 0) + 1);
+      }
+    }
+    for (const couponId of [...releases.keys()].sort()) {
+      // Cùng thứ tự Coupon ở mọi batch; GREATEST chỉ bảo vệ dữ liệu legacy âm,
+      // không được dùng để che double-release (orderIds chỉ chứa CAS thắng).
+      await tx.$executeRaw`
+        UPDATE "Coupon"
+        SET "usedCount" = GREATEST(0, "usedCount" - ${releases.get(couponId)!}),
+            "updatedAt" = NOW()
+        WHERE "id" = ${couponId}
+      `;
     }
   }
 
@@ -181,29 +180,21 @@ export class FulfillmentService {
     }
     if (!orderId) return null;
 
-    const gate = await this.prisma.order.updateMany({
-      where: { id: orderId, status: { in: ['PENDING', 'EXPIRED'] } },
-      data: { status: 'PAID', paidAt: new Date() },
-    });
-    if (gate.count === 0) {
-      // Đã được xử lý trước đó — trả về trạng thái hiện tại.
-      const existing = await this.prisma.order.findUnique({
-        where: { id: orderId },
-        select: { status: true },
-      });
-      if (!existing) return null;
+    const targetId = orderId;
+    const settled = await this.prisma.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      return markOrderPaid(tx, targetId);
+    }, FINANCIAL_TRANSACTION);
+    if (!settled) return null;
+    if (!settled.changed) {
       return {
-        status: existing.status,
-        delivered: existing.status === 'DELIVERED',
+        status: settled.status,
+        delivered: settled.status === 'DELIVERED',
       };
     }
 
-    await this.prisma.payment.updateMany({
-      where: { orderId },
-      data: { status: 'SUCCESS' },
-    });
-
-    const delivered = await this.deliverOrder(orderId);
+    // Không giao trước commit: lỗi ghi Payment phải rollback luôn Order/coupon.
+    const delivered = await this.deliverOrder(targetId);
     return { status: delivered ? 'DELIVERED' : 'PAID', delivered };
   }
 
@@ -229,12 +220,26 @@ export class FulfillmentService {
          *    tới StockItem; nếu ở đây làm ngược lại thì hai bên ôm khóa của nhau
          *    và Postgres phải hủy một bên (deadlock).
          */
-        await tx.$queryRaw`SELECT "id" FROM "Order" WHERE "id" = ${orderId} FOR UPDATE`;
+        const [order] = await tx.$queryRaw<Array<{ status: OrderStatus }>>`
+          SELECT "status" FROM "Order" WHERE "id" = ${orderId} FOR UPDATE
+        `;
+        if (!order || (order.status !== 'PAID' && order.status !== 'DELIVERED')) return false;
+        if (order.status === 'DELIVERED') return true;
 
         const items = await tx.orderItem.findMany({
           where: { orderId },
           orderBy: { id: 'asc' },
         });
+        const variantIds = [...new Set(items.flatMap((item) => item.variantId ? [item.variantId] : []))].sort();
+        if (variantIds.length > 0) {
+          // Chặn xóa loại trước khi chạm kho nhưng tương thích khóa FK của import.
+          // FOR UPDATE ở đây sẽ tạo vòng Variant ↔ Stock với writer giữ Stock
+          // rồi kiểm FK; lấy tất cả variant theo id trước khi lấy dòng kho đầu.
+          await tx.$queryRaw(Prisma.sql`
+            SELECT "id" FROM "ProductVariant" WHERE "id" IN (${Prisma.join(variantIds)})
+            ORDER BY "id" FOR KEY SHARE
+          `);
+        }
         const now = new Date();
         let fullyDelivered = true;
 
@@ -252,7 +257,7 @@ export class FulfillmentService {
             SELECT "id" FROM "StockItem"
             WHERE "orderItemId" = ${item.id}
               AND "status" = 'RESERVED'::"StockStatus"
-            ORDER BY "createdAt" ASC
+            ORDER BY "createdAt" ASC, "id" ASC
             LIMIT ${needed}
             FOR UPDATE
           `;
@@ -281,8 +286,8 @@ export class FulfillmentService {
         }
 
         if (fullyDelivered) {
-          await tx.order.update({
-            where: { id: orderId },
+          await tx.order.updateMany({
+            where: { id: orderId, status: 'PAID' },
             data: { status: 'DELIVERED' },
           });
         }
@@ -298,20 +303,16 @@ export class FulfillmentService {
    * Đóng đơn (webhook PAY_CLOSED / Binance báo CANCELED-EXPIRED):
    * đơn PENDING → EXPIRED, payment → EXPIRED, nhả kho RESERVED.
    */
-  async expireOrder(orderId: string): Promise<void> {
+  async expireOrder(
+    orderId: string,
+    expectedPayment?: ExpectedMerchantSession,
+  ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const gate = await tx.order.updateMany({
-        where: { id: orderId, status: 'PENDING' },
-        data: { status: 'EXPIRED' },
-      });
-      if (gate.count === 0) return;
-      await tx.payment.updateMany({
-        where: { orderId, status: 'PENDING' },
-        data: { status: 'EXPIRED' },
-      });
-      await this.releaseReservedStock(tx, orderId);
+      await lockFinancialArbitration(tx);
+      if (!(await this.closePendingOrder(tx, orderId, 'EXPIRED', expectedPayment))) return;
       await this.releaseCoupons(tx, [orderId]);
-    });
+      await this.releaseReservedStock(tx, orderId);
+    }, FINANCIAL_TRANSACTION);
   }
 
   /**
@@ -320,18 +321,56 @@ export class FulfillmentService {
    */
   async cancelOrderInternal(orderId: string): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
-      const gate = await tx.order.updateMany({
-        where: { id: orderId, status: 'PENDING' },
-        data: { status: 'CANCELLED' },
-      });
-      if (gate.count === 0) return;
-      await tx.payment.updateMany({
-        where: { orderId },
-        data: { status: 'FAILED' },
-      });
-      await this.releaseReservedStock(tx, orderId);
+      await lockFinancialArbitration(tx);
+      if (!(await this.closePendingOrder(tx, orderId, 'CANCELLED'))) return;
       await this.releaseCoupons(tx, [orderId]);
+      await this.releaseReservedStock(tx, orderId);
+    }, FINANCIAL_TRANSACTION);
+  }
+
+  /** Trả true chỉ khi transaction này thật sự đóng PENDING và được quyền nhả. */
+  private async closePendingOrder(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    status: 'EXPIRED' | 'CANCELLED',
+    expectedPayment?: ExpectedMerchantSession,
+  ): Promise<boolean> {
+    const [order] = await tx.$queryRaw<Array<{ status: OrderStatus }>>`
+      SELECT "status" FROM "Order" WHERE "id" = ${orderId} FOR UPDATE
+    `;
+    if (order?.status !== 'PENDING') return false;
+    const [payment] = await tx.$queryRaw<Array<{
+      status: string;
+      mode: string;
+      merchantTradeNo: string;
+      sessionVersion: number;
+    }>>`
+      SELECT "status", "mode", "merchantTradeNo", "sessionVersion"
+      FROM "Payment" WHERE "orderId" = ${orderId} FOR UPDATE
+    `;
+    // Poll/webhook có thể đọc phiên cũ rồi chờ đổi phương thức commit. Kiểm
+    // lại đủ mode/ref/version DƯỚI khóa để không nhả kho của phiên mới.
+    if (expectedPayment && (
+      payment?.mode !== 'BINANCE' ||
+      payment.merchantTradeNo !== expectedPayment.merchantTradeNo ||
+      payment.sessionVersion !== expectedPayment.sessionVersion
+    )) return false;
+    if (payment?.status === 'SUCCESS') {
+      // Legacy từng commit Payment trước Order: không biến khoản tiền đã nhận
+      // thành FAILED và trả key/coupon cho người khác khi đóng đơn bị lệch.
+      await markOrderPaid(tx, orderId);
+      return false;
+    }
+    const changed = await tx.order.updateMany({
+      where: { id: orderId, status: 'PENDING' },
+      data: { status },
     });
+    if (changed.count === 0) return false;
+    await tx.payment.updateMany({
+      where: { orderId, status: { not: 'SUCCESS' } },
+      data: { status: status === 'CANCELLED' ? 'FAILED' : 'EXPIRED' },
+    });
+    return true;
   }
 
   private async releaseReservedStock(

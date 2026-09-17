@@ -7,6 +7,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
+import { recalculateAnchoredPrices } from './anchored-prices';
 
 /**
  * Tỉ giá USD → VND / CNY, lấy mỗi ngày từ một nguồn công khai.
@@ -152,8 +153,8 @@ export class ExchangeRateService implements OnModuleInit, OnModuleDestroy {
       giá mới. Tách làm hai bước là có một khoảng thời gian tỉ giá đã mới mà giá
       còn cũ — khách mở trang đúng lúc đó thấy 100.550 ₫ thay vì 100.000 ₫.
     */
-    await this.prisma.$transaction([
-      this.prisma.storeSetting.update({
+    await this.prisma.$transaction(async (tx) => {
+      await tx.storeSetting.update({
         where: { id: setting.id },
         data: {
           vndPerUsdt: new Prisma.Decimal(vnd.toFixed(2)),
@@ -161,9 +162,9 @@ export class ExchangeRateService implements OnModuleInit, OnModuleDestroy {
           rateUpdatedAt: new Date(),
           rateSource: `open.er-api.com — VND ${tho.vnd}, CNY ${tho.cny}, biên ${bien}%`,
         },
-      }),
-      ...tinhLaiGiaNeo(this.prisma, vnd, cny),
-    ]);
+      });
+      await recalculateAnchoredPrices(tx, vnd, cny);
+    });
     this.logger.log(
       `Tỉ giá mới: 1 USDT = ${vnd} VND / ${cny} CNY (thô ${tho.vnd} / ${tho.cny}, biên ${bien}%)`,
     );
@@ -242,33 +243,4 @@ export function denGioLay(
 /** Giờ ngoài 0–23 (sửa tay dưới CSDL) quy về 7 thay vì sinh hành vi lạ. */
 function clampGio(hour: number): number {
   return Number.isInteger(hour) && hour >= 0 && hour <= 23 ? hour : 7;
-}
-
-/**
- * Tính lại cột `price` (USDT) của những loại hàng neo theo ₫ / ¥.
- *
- * Làm bằng SQL chứ không nạp từng dòng ra JavaScript: cửa hàng có bao nhiêu loại
- * hàng cũng chỉ là hai câu lệnh, và phép chia của Postgres trên `numeric` là
- * chính xác chứ không phải số thực.
- *
- * `FLOOR(... * 1e6) / 1e6` là làm tròn XUỐNG về sáu chữ số, đúng như `floorUsdt`
- * ở tầng ứng dụng: số ₫ hiển thị dùng `Math.ceil`, nên làm tròn lên ở đây là
- * khách thấy 100.001 ₫ thay vì 100.000.
- *
- * Neo theo USD và USDT không cần tính lại — chúng là 1:1 với nhau.
- */
-function tinhLaiGiaNeo(
-  prisma: PrismaService,
-  vndPerUsdt: number,
-  cnyPerUsdt: number,
-) {
-  const cau = (donVi: 'VND' | 'CNY', tiGia: number) =>
-    prisma.$executeRaw(Prisma.sql`
-      UPDATE "ProductVariant"
-      SET "price" = FLOOR("priceAmount" / ${new Prisma.Decimal(
-        tiGia,
-      )} * 1000000) / 1000000
-      WHERE "priceCurrency" = ${donVi}
-    `);
-  return [cau('VND', vndPerUsdt), cau('CNY', cnyPerUsdt)];
 }

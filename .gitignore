@@ -19,6 +19,7 @@ apps/api/pgdata/
 # Bản sao lưu dữ liệu — chứa key sản phẩm dạng rõ, email khách và hash mật khẩu.
 # TUYỆT ĐỐI không đưa vào version control.
 backups/
+backup-status/
 *.dump
 *.sql.gz
 

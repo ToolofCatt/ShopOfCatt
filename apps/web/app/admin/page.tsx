@@ -23,6 +23,7 @@ import {
   type AdminStatsDto,
   type OrderSummaryDto,
   type Paginated,
+  type ReconciliationSummaryDto,
 } from '@webcatt/shared';
 import { apiErrorMessage, apiFetch } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -34,6 +35,7 @@ import { PageHeader } from '@/components/admin/page-header';
 import { StatCard } from '@/components/admin/stat-card';
 import { RevenueChart } from '@/components/admin/revenue-chart';
 import { ReadinessBanner } from '@/components/admin/readiness-banner';
+import { ReconciliationEntry, type ReconciliationSummaryState } from '@/components/admin/reconciliation-entry';
 import { InsightsPanels } from '@/components/admin/insights';
 import { formatAmount } from '@/components/admin/helpers';
 
@@ -55,7 +57,7 @@ function PanelHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3">
+    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
       <div className="min-w-0">
         <h2 className="text-lg font-semibold tracking-tight text-neutral-950">{title}</h2>
         {subtitle && <p className="mt-1 text-sm text-neutral-500">{subtitle}</p>}
@@ -107,6 +109,22 @@ export default function AdminDashboardPage() {
   const [stats, setStats] = useState<AdminStatsDto | null>(null);
   const [recent, setRecent] = useState<OrderSummaryDto[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [reconciliation, setReconciliation] = useState<ReconciliationSummaryState>({ status: 'loading' });
+  const [reconciliationReload, setReconciliationReload] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    setReconciliation({ status: 'loading' });
+    // Summary là dữ liệu phụ: lỗi endpoint không được làm biến mất lối vào đối soát.
+    apiFetch<ReconciliationSummaryDto>('/admin/reconciliation/incoming-transfers/summary', { token })
+      .then((data) => {
+        if (active) setReconciliation({ ...data, status: 'ready' });
+      })
+      .catch(() => {
+        if (active) setReconciliation({ status: 'error' });
+      });
+    return () => { active = false; };
+  }, [token, reconciliationReload]);
 
   useEffect(() => {
     let active = true;
@@ -161,7 +179,9 @@ export default function AdminDashboardPage() {
 
   const topRevenueMax = Math.max(1, ...stats.topProducts.map((p) => p.revenue));
   const stockAlerts = stats.lowStock.slice(0, MAX_STOCK_ALERTS);
-  const alertCount = stats.ordersPending + stats.lowStock.length;
+  // conflicts là tập con của unresolved; không cộng lần hai vào tổng cần xử lý.
+  const alertCount = stats.ordersPending + stats.lowStock.length +
+    (reconciliation.status === 'ready' ? reconciliation.unresolved : 0);
 
   return (
     <>
@@ -192,7 +212,7 @@ export default function AdminDashboardPage() {
 
       {/* Bốn chỉ số nền tảng. "Tổng doanh thu" = mọi thời gian, khác với
           con số theo kỳ trong biểu đồ bên dưới nên nhãn phải nói rõ. */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 [&>*]:min-w-0 [&>*]:break-words">
         <StatCard
           accent
           icon={Wallet}
@@ -221,12 +241,12 @@ export default function AdminDashboardPage() {
 
       {/* Biểu đồ (2/3) + việc cần xử lý (1/3). Cảnh báo kho nằm HẲN ở đây,
           không lặp lại thành thẻ riêng ở dưới. */}
-      <div className="mt-4 grid items-start gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+      <div className="mt-4 grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-3">
+        <div className="min-w-0 lg:col-span-2">
           <RevenueChart />
         </div>
 
-        <Card className="p-6">
+        <Card className="min-w-0 p-4 sm:p-6">
           <PanelHeader
             title={t.admin.attentionTitle}
             subtitle={t.admin.attentionSubtitle}
@@ -234,7 +254,7 @@ export default function AdminDashboardPage() {
             action={alertCount > 0 ? <Badge variant="solid">{alertCount}</Badge> : undefined}
           />
 
-          {alertCount === 0 ? (
+          {alertCount === 0 && reconciliation.status === 'ready' ? (
             <div className="mt-4 flex flex-col items-center gap-2 rounded-lg border border-dashed border-neutral-300 px-4 py-10 text-center">
               <CheckCircle2 strokeWidth={1.75} className="h-6 w-6 text-neutral-400" />
               <p className="text-sm text-neutral-500">{t.admin.attentionAllClear}</p>
@@ -274,12 +294,18 @@ export default function AdminDashboardPage() {
               )}
             </div>
           )}
+          <ReconciliationEntry
+            state={reconciliation}
+            copy={t.adminUx}
+            retryLabel={t.common.retry}
+            onRetry={() => setReconciliationReload((key) => key + 1)}
+          />
         </Card>
       </div>
 
-      <div className="mt-4 grid items-start gap-4 lg:grid-cols-2">
+      <div className="mt-4 grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-2">
         {/* Đơn hàng gần đây — "chuyện gì vừa xảy ra", thứ thiếu nhất trước đây. */}
-        <Card className="p-6">
+        <Card className="min-w-0 p-4 sm:p-6">
           <PanelHeader
             title={t.admin.recentOrdersTitle}
             subtitle={t.admin.recentOrdersSubtitle}
@@ -313,8 +339,8 @@ export default function AdminDashboardPage() {
                       className="group flex items-center gap-3 py-2.5"
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="flex items-center gap-2">
-                          <span className="font-mono text-sm font-medium text-neutral-950 underline-offset-4 group-hover:underline">
+                        <span className="flex min-w-0 flex-wrap items-center gap-2">
+                          <span className="min-w-0 break-all font-mono text-sm font-medium text-neutral-950 underline-offset-4 group-hover:underline">
                             {order.code}
                           </span>
                           <OrderStatusBadge status={order.status} />
@@ -338,7 +364,7 @@ export default function AdminDashboardPage() {
         </Card>
 
         {/* Top sản phẩm — thanh tỉ lệ để so sánh bằng mắt. */}
-        <Card className="p-6">
+        <Card className="min-w-0 p-4 sm:p-6">
           <PanelHeader
             title={t.admin.topProductsTitle}
             subtitle={t.admin.topProductsSubtitle}
@@ -398,7 +424,9 @@ export default function AdminDashboardPage() {
         {t.admin.lowStockHint(LOW_STOCK_THRESHOLD)}
       </p>
 
-      <InsightsPanels />
+      <div className="min-w-0 [&>div]:min-w-0 [&>div]:grid-cols-1 lg:[&>div]:grid-cols-2 [&>div>div]:min-w-0 [&>div>div]:overflow-x-auto">
+        <InsightsPanels />
+      </div>
     </>
   );
 }

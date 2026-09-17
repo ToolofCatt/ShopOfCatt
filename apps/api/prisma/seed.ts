@@ -342,13 +342,16 @@ async function ensureUser(
 /** Mật khẩu mẫu đi kèm mã nguồn — không được phép dùng thật. */
 const PLACEHOLDER_PASSWORDS = new Set([
   'dat-mat-khau-manh-cua-ban',
+  // README cũng công khai mật khẩu ví dụ và mật khẩu demo, không chỉ file .env.
+  'mat-khau-manh-cua-ban',
+  'user@123',
   'admin@123',
   'change-me',
   'changeme',
   'password',
 ]);
 
-async function seedUsers(): Promise<void> {
+export async function seedUsers(): Promise<void> {
   const adminEmail = (process.env.ADMIN_EMAIL ?? 'admin@digital-store.local')
     .trim()
     .toLowerCase();
@@ -507,9 +510,12 @@ async function main(): Promise<void> {
   console.log('Hoàn tất seed dữ liệu.');
 }
 
-main()
-  .catch((error) => {
-    console.error('Seed thất bại:', error);
-    process.exitCode = 1;
-  })
-  .finally(() => prisma.$disconnect());
+// Import để kiểm thử guard không được tự chạy seed hay đọc/ghi CSDL.
+if (require.main === module) {
+  main()
+    .catch((error) => {
+      console.error('Seed thất bại:', error);
+      process.exitCode = 1;
+    })
+    .finally(() => prisma.$disconnect());
+}
