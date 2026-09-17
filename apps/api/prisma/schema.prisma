@@ -93,6 +93,61 @@ model User {
   deposits          Deposit[]
   balanceEntries    BalanceEntry[]
   telegramStockAlertRecipients TelegramStockAlertRecipient[]
+  apiAccess ApiAccess?
+  apiKeys ApiKey[]
+  apiReceipts ApiOperationReceipt[]
+}
+
+/// Quyền API tách khỏi vai trò quản trị, mặc định không cấp cho tài khoản có sẵn.
+model ApiAccess {
+  userId String @id
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  enabled Boolean @default(false)
+  approvedAt DateTime?
+  disabledAt DateTime?
+  approvedById String?
+  updatedAt DateTime @updatedAt
+}
+
+model ApiKey {
+  id String @id @default(cuid())
+  ownerId String
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  name String
+  prefix String
+  digest String
+  scopes String[]
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  revokedAt DateTime?
+  lastUsedAt DateTime?
+
+  @@index([ownerId, revokedAt, expiresAt])
+}
+
+/// Receipt không giữ secret/key hàng, chỉ giữ đích nghiệp vụ để retry trả cùng resource.
+model ApiOperationReceipt {
+  id String @id @default(cuid())
+  ownerId String
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  operation String
+  idempotencyKey String
+  requestHash String
+  orderId String? @unique
+  order Order? @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  depositId String? @unique
+  deposit Deposit? @relation(fields: [depositId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@unique([ownerId, operation, idempotencyKey])
+  @@index([ownerId, operation, createdAt])
+}
+
+model ApiRateBucket {
+  id String @id
+  hits Int @default(0)
+  expiresAt DateTime
+  @@index([expiresAt])
 }
 
 enum DepositStatus {
@@ -149,6 +204,7 @@ model Deposit {
   /// sau khi API restart; cùng một cú bấm không được tạo hai mã nạp.
   telegramCallbackId String?       @unique
   incomingTransfer IncomingTransfer?
+  apiReceipt ApiOperationReceipt?
 
   @@index([status, expiresAt])
   @@index([userId, createdAt])
@@ -451,6 +507,7 @@ model Order {
   telegramOwnerStuckNotifiedAt    DateTime?
   items      OrderItem[]
   payment    Payment?
+  apiReceipt ApiOperationReceipt?
 
   @@index([userId, createdAt])
   @@index([status, expiresAt])

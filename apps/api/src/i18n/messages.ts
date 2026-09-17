@@ -8,6 +8,18 @@ type Template = string | ((params: MessageParams) => string);
  * người dùng (theo header Accept-Language) trước khi trả về.
  */
 export const K = {
+  apiKeyInvalid: 'api.key_invalid',
+  apiAccessDisabled: 'api.access_disabled',
+  apiScopeRequired: 'api.scope_required',
+  apiKeyLimit: 'api.key_limit',
+  apiKeyNotFound: 'api.key_not_found',
+  apiKeyInvalidInput: 'api.key_invalid_input',
+  apiAccountNotFound: 'api.account_not_found',
+  apiIdempotencyRequired: 'api.idempotency_required',
+  apiIdempotencyConflict: 'api.idempotency_conflict',
+  apiPriceLimit: 'api.price_limit',
+  apiStoreUnavailable: 'api.store_unavailable',
+  apiRequestInvalid: 'api.request_invalid',
   adminTelegramMembershipInvalid: 'admin.telegram_membership_invalid',
   adminTelegramMembershipUnavailable: 'admin.telegram_membership_unavailable',
   // --- auth ---
@@ -307,6 +319,18 @@ const MESSAGES: Record<string, Record<Locale, Template>> = {
     en: 'You do not have permission to access this area',
     zh: '您没有访问该区域的权限',
   },
+  [K.apiKeyInvalid]: { vi: 'API key không hợp lệ, đã hết hạn hoặc bị thu hồi', en: 'API key is invalid, expired or revoked', zh: 'API 密钥无效、已过期或已撤销' },
+  [K.apiAccessDisabled]: { vi: 'Tài khoản chưa được phép dùng API đối tác', en: 'Partner API access is not enabled for this account', zh: '此账户尚未获准使用合作方 API' },
+  [K.apiScopeRequired]: { vi: 'API key không có quyền thực hiện thao tác này', en: 'This API key does not have the required scope', zh: '此 API 密钥没有所需权限' },
+  [K.apiKeyLimit]: { vi: 'Mỗi tài khoản chỉ được có tối đa 5 API key còn hiệu lực', en: 'An account can have at most 5 active API keys', zh: '每个账户最多可拥有 5 个有效 API 密钥' },
+  [K.apiKeyNotFound]: { vi: 'Không tìm thấy API key', en: 'API key not found', zh: '未找到 API 密钥' },
+  [K.apiKeyInvalidInput]: { vi: 'Tên, quyền hoặc hạn API key không hợp lệ', en: 'Invalid API key name, scopes or expiration', zh: 'API 密钥名称、权限或有效期无效' },
+  [K.apiAccountNotFound]: { vi: 'Không tìm thấy tài khoản API', en: 'API account not found', zh: '未找到 API 账户' },
+  [K.apiIdempotencyRequired]: { vi: 'Cần Idempotency-Key hợp lệ từ 8 đến 128 ký tự', en: 'A valid Idempotency-Key of 8 to 128 characters is required', zh: '必须提供 8 至 128 个字符的有效 Idempotency-Key' },
+  [K.apiIdempotencyConflict]: { vi: 'Idempotency-Key này đã được dùng với nội dung khác', en: 'This Idempotency-Key was already used with a different request', zh: '此 Idempotency-Key 已用于不同请求' },
+  [K.apiPriceLimit]: { vi: 'Tổng đơn vượt trần chi tiêu đã đặt', en: 'The order total exceeds the requested spending limit', zh: '订单总额超过指定支出上限' },
+  [K.apiStoreUnavailable]: { vi: 'Cửa hàng đang tạm dừng nhận yêu cầu mới', en: 'The store is not accepting new operations', zh: '商店暂不接受新的操作' },
+  [K.apiRequestInvalid]: { vi: 'Nội dung yêu cầu API không hợp lệ', en: 'Invalid API request', zh: 'API 请求内容无效' },
   [K.accountLocked]: {
     vi: 'Tài khoản của bạn đã bị khóa',
     en: 'Your account has been locked',

@@ -219,6 +219,8 @@ export default function AccountPage() {
       <Card className="mt-3 divide-y divide-neutral-100 overflow-hidden">
         <QuickLink href="/orders" icon={ReceiptText} label={t.nav.myOrders} />
         <QuickLink href="/account/password" icon={KeyRound} label={t.nav.changePassword} />
+        <QuickLink href="/account/api" icon={KeyRound} label={t.partnerApi.nav} />
+        <QuickLink href="/docs/api" icon={ReceiptText} label={t.partnerApi.docsNav} />
         {isAdminRole(user.role) && (
           <QuickLink href="/admin" icon={LayoutDashboard} label={t.nav.adminPanel} />
         )}

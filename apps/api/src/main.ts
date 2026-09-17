@@ -1,4 +1,4 @@
-import { ValidationPipe } from '@nestjs/common';
+import { ApplicationValidationPipe } from './common/application-validation.pipe';
 import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
@@ -48,7 +48,7 @@ async function bootstrap(): Promise<void> {
 
   app.setGlobalPrefix('api');
   app.enableCors({ origin: config.get<string>('WEB_URL') ?? 'http://localhost:3000' });
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalPipes(new ApplicationValidationPipe());
   // Dịch thông báo lỗi sang ngôn ngữ người dùng (header Accept-Language)
   app.useGlobalFilters(new I18nExceptionFilter());
 

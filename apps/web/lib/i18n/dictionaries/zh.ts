@@ -5,6 +5,7 @@ import { adminUxZh } from './admin-ux';
 import { settingsUxZh } from './settings-ux';
 import { builderUxZh } from './builder-ux';
 import { reconciliationUxZh } from './reconciliation-ux';
+import { partnerUxZh } from './partner-ux';
 
 export const zh: Dictionary = {
   customerUx: customerUxZh,
@@ -12,6 +13,7 @@ export const zh: Dictionary = {
   settingsUx: settingsUxZh,
   builderUx: builderUxZh,
   reconciliationUx: reconciliationUxZh,
+  partnerApi: partnerUxZh,
   meta: {
     description: '数字商品商店 —— 正版密钥、礼品卡、激活码。全天候自动发货，支持使用 USDT 付款。',
   },
@@ -754,6 +756,10 @@ export const zh: Dictionary = {
     colDetails: '详情',
     auditAddedLines: (n: number) => `添加 ${n} 行`,
     auditActions: {
+      'api_key.create': '创建 API 密钥',
+      'api_key.revoke': '撤销 API 密钥',
+      'api_access.enable': '批准 API 权限',
+      'api_access.disable': '停用 API 权限',
       'product.create': '创建商品',
       'product.update': '更新商品',
       'product.delete': '删除商品',

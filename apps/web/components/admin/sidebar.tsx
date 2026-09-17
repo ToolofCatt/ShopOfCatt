@@ -66,6 +66,7 @@ export function AdminSidebar() {
     { href: '/admin/orders', label: t.admin.navOrders, icon: ReceiptText },
     { href: '/admin/reconciliation', label: t.adminUx.reconciliation, icon: ArrowLeftRight },
     { href: '/admin/customers', label: t.admin.navCustomers, icon: Users },
+    { href: '/admin/api', label: t.partnerApi.nav, icon: KeyRound },
     { href: '/admin/coupons', label: t.admin.navCoupons, icon: Ticket },
     { href: '/admin/audit', label: t.admin.navAudit, icon: ScrollText },
     { href: '/admin/settings', label: t.admin.navSettings, icon: Settings },

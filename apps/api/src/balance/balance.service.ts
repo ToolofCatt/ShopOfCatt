@@ -7,7 +7,7 @@ import {
   type OnModuleDestroy,
   type OnModuleInit,
 } from '@nestjs/common';
-import { Prisma, type Deposit, type User } from '@prisma/client';
+import { Prisma, type Deposit, type StoreSetting, type User } from '@prisma/client';
 import { floorUsdt, type CryptoNetwork, type PaymentMethod } from '@webcatt/shared';
 import { generateDepositCode } from '../common/codes';
 import { K } from '../i18n/messages';
@@ -17,6 +17,12 @@ import { SettingsService } from '../settings/settings.service';
 import { pickUniqueUsdt } from './unique-amount';
 import { WalletCreditService } from './wallet-credit.service';
 import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/financial-lock';
+import {
+  payOrderInTransaction,
+  type BalancePaymentOptions,
+  type BalancePaymentResult,
+  type PreparedDeposit,
+} from './balance-transaction';
 
 /** Chặn dưới/trên một lần nạp (VND) — dưới 10k phí chuyển ăn hết ý nghĩa,
  *  trên 100tr thì chắc chắn là gõ nhầm. */
@@ -118,10 +124,10 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
    * toán đang bật (fail-closed sẵn trong getEnabledMethods) với DEPOSIT_METHODS.
    * Không có tỉ giá VND thì không kênh nào mở: mọi mức nạp đều nhập bằng VND.
    */
-  async listDepositMethods(): Promise<DepositMethod[]> {
-    const rates = await this.settings.getPublicRates();
+  async listDepositMethods(snapshot?: StoreSetting): Promise<DepositMethod[]> {
+    const rates = await this.settings.getPublicRates(snapshot);
     if (rates.vndPerUsdt <= 0) return [];
-    const enabled = await this.settings.getEnabledMethods();
+    const enabled = await this.settings.getEnabledMethods(snapshot);
     return DEPOSIT_METHODS.filter((m) => enabled.some((e) => e.method === m));
   }
 
@@ -145,6 +151,28 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
       const replay = await this.loadTelegramDepositReplay(user.id, callbackId);
       if (replay) return replay;
     }
+    const prepared = await this.prepareDeposit(user.id, vndAmount, method);
+    try {
+      const deposit = await this.prisma.$transaction(
+        (tx) => this.createDepositInTransaction(tx, user.id, prepared, { telegramCallbackId: callbackId ?? undefined }),
+        FINANCIAL_TRANSACTION,
+      );
+      return this.depositResult(deposit);
+    } catch (error) {
+      const replay = await this.replayAfterUniqueRace(user.id, callbackId, error);
+      if (replay) return replay;
+      throw error;
+    }
+  }
+
+  /** Không cấp số/ghi CSDL. API truyền snapshot đã khóa trong tx để phương thức,
+   * receiver và tỉ giá không đổi giữa admission và lúc receipt được commit. */
+  async prepareDeposit(
+    userId: string,
+    vndAmount: number,
+    method: DepositMethod = 'sepay',
+    snapshot?: StoreSetting,
+  ): Promise<PreparedDeposit> {
     if (
       !Number.isInteger(vndAmount) ||
       vndAmount < DEPOSIT_MIN_VND ||
@@ -154,13 +182,13 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
     }
     // Fail-closed: phương thức không nằm trong danh sách đang mở thì từ chối
     // — callback_data là dữ liệu client, khách sửa được tuỳ ý.
-    const open = await this.listDepositMethods();
+    const open = await this.listDepositMethods(snapshot);
     if (!open.includes(method)) {
       throw new ServiceUnavailableException(K.paymentMethodUnavailable);
     }
 
     if (method === 'sepay') {
-      const cfg = await this.settings.getSepayConfig();
+      const cfg = await this.settings.getSepayConfig(snapshot);
       // Đường đối soát là webhook SePay — chưa sẵn sàng thì không tạo mã.
       if (!cfg.ready || cfg.vndPerUsdt <= 0) {
         throw new ServiceUnavailableException(K.paymentMethodUnavailable);
@@ -169,53 +197,13 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
       if (amountUsdt <= 0) {
         throw new BadRequestException(K.depositAmountInvalid);
       }
-      let deposit: Deposit;
-      try {
-        deposit = await this.prisma.$transaction(async (tx) => {
-          await this.lockDepositAllocation(tx);
-          if (callbackId) {
-            const replay = await tx.deposit.findUnique({
-              where: { telegramCallbackId: callbackId },
-            });
-            if (replay) {
-              if (replay.userId !== user.id) {
-                throw new NotFoundException(K.orderNotFound);
-              }
-              return replay;
-            }
-          }
-          await this.assertDepositCapacity(tx, user.id);
-          return tx.deposit.create({
-            data: {
-              code: await this.freshCode(tx),
-              userId: user.id,
-              mode: 'SEPAY',
-              amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
-              vndAmount: new Prisma.Decimal(vndAmount),
-              cryptoAddress: cfg.accountNumber,
-              sepayBank: cfg.bank,
-              sepayAccountHolder: cfg.accountHolder,
-              expiresAt: new Date(Date.now() + DEPOSIT_EXPIRE_MINUTES * 60_000),
-              telegramCallbackId: callbackId,
-            },
-          });
-        });
-      } catch (error) {
-        const replay = await this.replayAfterUniqueRace(
-          user.id,
-          callbackId,
-          error,
-        );
-        if (replay) return replay;
-        throw error;
-      }
       return {
-        deposit,
-        bank: {
-          accountNumber: cfg.accountNumber,
-          bank: cfg.bank,
-          accountHolder: cfg.accountHolder,
-        },
+        userId, method, mode: 'SEPAY',
+        amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
+        vndAmount: new Prisma.Decimal(vndAmount),
+        cryptoNetwork: null, cryptoAddress: cfg.accountNumber,
+        bank: { accountNumber: cfg.accountNumber, bank: cfg.bank, accountHolder: cfg.accountHolder },
+        expireMinutes: DEPOSIT_EXPIRE_MINUTES,
       };
     }
 
@@ -228,69 +216,60 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
           : null;
     const address =
       network !== null
-        ? await this.settings.getCryptoAddress(network)
-        : await this.settings.getBinanceId();
+        ? await this.settings.getCryptoAddress(network, snapshot)
+        : await this.settings.getBinanceId(snapshot);
     if (address === '') {
       throw new ServiceUnavailableException(K.paymentMethodUnavailable);
     }
 
-    const rates = await this.settings.getPublicRates();
+    const rates = await this.settings.getPublicRates(snapshot);
     const base = floorUsdt(vndAmount / rates.vndPerUsdt);
     if (base <= 0) {
       throw new BadRequestException(K.depositAmountInvalid);
     }
-    let deposit: Deposit;
-    try {
-      deposit = await this.prisma.$transaction(async (tx) => {
-        await this.lockDepositAllocation(tx);
-        if (callbackId) {
-          const replay = await tx.deposit.findUnique({
-            where: { telegramCallbackId: callbackId },
-          });
-          if (replay) {
-            if (replay.userId !== user.id) {
-              throw new NotFoundException(K.orderNotFound);
-            }
-            return replay;
-          }
-        }
-        await this.assertDepositCapacity(tx, user.id);
-        const amountUsdt = pickUniqueUsdt(
-          base,
-          await this.walletCredit.takenUsdtAmounts(tx),
-        );
-        if (amountUsdt === null) {
-          // 200 khoản chờ chen chúc quanh cùng một số tiền — từ chối thay vì tạo
-          // mã mà matcher sẽ không bao giờ dám nhận.
-          this.logger.error('Hết chỗ chọn số USDT duy nhất cho mã nạp crypto');
-          throw new ServiceUnavailableException(K.paymentMethodUnavailable);
-        }
-        return tx.deposit.create({
-          data: {
-            code: await this.freshCode(tx),
-            userId: user.id,
-            mode: network !== null ? 'CRYPTO' : 'BINANCE_ID',
-            amountUsdt: new Prisma.Decimal(amountUsdt.toFixed(6)),
-            vndAmount: new Prisma.Decimal(vndAmount),
-            cryptoNetwork: network,
-            cryptoAddress: address,
-            expiresAt: new Date(
-              Date.now() + DEPOSIT_EXPIRE_MINUTES_CRYPTO * 60_000,
-            ),
-            telegramCallbackId: callbackId,
-          },
-        });
-      });
-    } catch (error) {
-      const replay = await this.replayAfterUniqueRace(
-        user.id,
-        callbackId,
-        error,
-      );
-      if (replay) return replay;
-      throw error;
+    return {
+      userId, method, mode: network !== null ? 'CRYPTO' : 'BINANCE_ID',
+      amountUsdt: new Prisma.Decimal(base.toFixed(6)), vndAmount: new Prisma.Decimal(vndAmount),
+      cryptoNetwork: network, cryptoAddress: address, bank: null,
+      expireMinutes: DEPOSIT_EXPIRE_MINUTES_CRYPTO,
+    };
+  }
+
+  /** Caller có thể ghi receipt ngay sau INSERT, cùng commit. Không đọc settings,
+   * không mở tx con; khóa cấp số phải bao cả query pool lẫn INSERT để tránh trùng. */
+  async createDepositInTransaction(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    prepared: PreparedDeposit,
+    options: { telegramCallbackId?: string } = {},
+  ): Promise<Deposit> {
+    if (prepared.userId !== userId) throw new NotFoundException(K.orderNotFound);
+    await this.lockDepositAllocation(tx);
+    const callbackId = options.telegramCallbackId?.trim() || null;
+    if (callbackId) {
+      const replay = await tx.deposit.findUnique({ where: { telegramCallbackId: callbackId } });
+      if (replay) {
+        if (replay.userId !== userId) throw new NotFoundException(K.orderNotFound);
+        return replay;
+      }
     }
-    return { deposit, bank: null };
+    await this.assertDepositCapacity(tx, userId);
+    let amountUsdt = prepared.amountUsdt;
+    if (prepared.mode !== 'SEPAY') {
+      const unique = pickUniqueUsdt(Number(amountUsdt), await this.walletCredit.takenUsdtAmounts(tx));
+      // Không nới matcher khi vùng số đã đầy: từ chối để không nhận nhầm tiền.
+      if (unique === null) throw new ServiceUnavailableException(K.paymentMethodUnavailable);
+      amountUsdt = new Prisma.Decimal(unique.toFixed(6));
+    }
+    return tx.deposit.create({
+      data: {
+        code: await this.freshCode(tx), userId, mode: prepared.mode,
+        amountUsdt, vndAmount: prepared.vndAmount, cryptoNetwork: prepared.cryptoNetwork,
+        cryptoAddress: prepared.cryptoAddress, sepayBank: prepared.bank?.bank ?? null,
+        sepayAccountHolder: prepared.bank?.accountHolder ?? null,
+        expiresAt: new Date(Date.now() + prepared.expireMinutes * 60_000), telegramCallbackId: callbackId,
+      },
+    });
   }
 
   private async replayAfterUniqueRace(
@@ -319,6 +298,10 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
     if (deposit.userId !== userId) {
       throw new NotFoundException(K.orderNotFound);
     }
+    return this.depositResult(deposit);
+  }
+
+  private depositResult(deposit: Deposit): CreateDepositResult {
     if (deposit.mode !== 'SEPAY') return { deposit, bank: null };
     // Replay dùng đúng nơi nhận đã công bố, không dựng QR sang tài khoản mới sau khi đổi cấu hình.
     if (!deposit.cryptoAddress || !deposit.sepayBank) throw new BadRequestException(K.paymentReviewRequired);
@@ -415,59 +398,25 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
       await lockFinancialArbitration(tx);
       const order = await tx.order.findFirst({
         where: { code: orderCode, userId },
-        select: { id: true, totalAmount: true },
+        select: { id: true },
       });
       if (!order) throw new NotFoundException(K.orderNotFound);
-
-      await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${order.id} FOR UPDATE`;
-      await tx.$queryRaw`SELECT id FROM "Payment" WHERE "orderId" = ${order.id} FOR UPDATE`;
-      const payment = await tx.payment.findUnique({ where: { orderId: order.id } });
-      if (!payment || payment.status === 'SUCCESS' || payment.cryptoTxId || payment.sepayRef) throw new BadRequestException(K.balanceOrderNotPending);
-      // Chốt trạng thái TRƯỚC — bấm đúp thì lần hai trượt ngay tại đây,
-      // không bao giờ trừ ví hai lần cho một đơn.
-      const gate = await tx.order.updateMany({
-        where: { id: order.id, status: 'PENDING' },
-        data: { status: 'PAID', paidAt: new Date() },
-      });
-      if (gate.count === 0) {
-        throw new BadRequestException(K.balanceOrderNotPending);
-      }
-
-      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
-      const user = await tx.user.findUniqueOrThrow({
-        where: { id: userId },
-        select: { balance: true },
-      });
-      if (user.balance.lessThan(order.totalAmount)) {
-        // Ném lỗi để transaction LĂN NGƯỢC — gate ở trên tự hoàn tác, đơn
-        // quay về PENDING cho khách chọn cách trả khác.
-        throw new BadRequestException(K.balanceInsufficient);
-      }
-      const balanceAfter = user.balance.sub(order.totalAmount);
-      await tx.user.update({
-        where: { id: userId },
-        data: { balance: balanceAfter },
-      });
-      await tx.balanceEntry.create({
-        data: {
-          userId,
-          amount: order.totalAmount.neg(),
-          balanceAfter,
-          reason: 'purchase',
-          refCode: orderCode,
-        },
-      });
-      await tx.payment.updateMany({
-        where: { orderId: order.id },
-        data: { status: 'SUCCESS', mode: 'BALANCE' },
-      });
-      return order.id;
+      return (await this.payOrderInTransaction(tx, userId, order.id)).orderId;
     }, FINANCIAL_TRANSACTION);
 
     // Giao hàng NGOÀI transaction ví — deliverOrder tự khoá Order → StockItem
     // và idempotent; thất bại giữa chừng thì DeliverySweeper cứu (đơn PAID).
     const delivered = await this.fulfillment.deliverOrder(orderId);
     return { delivered };
+  }
+
+  payOrderInTransaction(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    orderId: string,
+    options: BalancePaymentOptions = {},
+  ): Promise<BalancePaymentResult> {
+    return payOrderInTransaction(tx, userId, orderId, options);
   }
 
   /** Mã nạp của CHÍNH khách đó — code lạ/của người khác đều ra null. */

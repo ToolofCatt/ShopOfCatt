@@ -45,6 +45,7 @@ export function Header() {
         </Link>
 
         <nav className="flex items-center gap-1 sm:gap-2">
+          <Link href="/docs/api" aria-label={t.partnerApi.docsNav} title={t.partnerApi.docsNav} className="inline-flex min-h-11 items-center rounded-lg px-1 text-xs font-medium text-neutral-600 hover:bg-neutral-100 focus-visible:outline-2 focus-visible:outline-neutral-950 sm:px-2 sm:text-sm">API</Link>
           {user && (
             <Link
               href="/orders"
@@ -185,6 +186,15 @@ function UserMenu({ user }: { user: PublicUser }) {
               {t.nav.adminPanel}
             </Link>
           )}
+          <Link
+            role="menuitem"
+            href="/account/api"
+            onClick={() => setOpen(false)}
+            className="flex min-h-11 items-center gap-2 px-3 py-2 text-sm text-neutral-600 transition-colors hover:bg-neutral-50 hover:text-neutral-950"
+          >
+            <KeyRound className="h-4 w-4" strokeWidth={1.75} />
+            {t.partnerApi.nav}
+          </Link>
           <Link
             role="menuitem"
             href="/account/password"

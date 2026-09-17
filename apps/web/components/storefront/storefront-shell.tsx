@@ -67,6 +67,7 @@ function routeTemplate(pathname: string): { page: StorefrontPageKind; block: Sto
   if (pathname.startsWith('/checkout/')) return { page: 'checkout', block: 'checkoutPanel' };
   if (pathname === '/orders') return { page: 'orders', block: 'ordersList' };
   if (pathname.startsWith('/orders/')) return { page: 'orderDetail', block: 'orderDetailPanel' };
+  if (pathname === '/account/api') return null;
   if (pathname.startsWith('/account')) return { page: 'account', block: 'accountPanel' };
   if (pathname.startsWith('/legal/')) return { page: 'legal', block: 'legalContent' };
   return null;

@@ -4,6 +4,8 @@ export * from './storefront';
 export * from './telegram-admin';
 export * from './telegram-admin-copy';
 export * from './stock-import';
+export * from './partner-api';
+export * from './partner-openapi';
 
 export type Role = 'USER' | 'ADMIN' | 'SUPERADMIN';
 
@@ -830,6 +832,10 @@ export const AUDIT_ACTIONS = [
   'storefront.media.delete',
   'storefront.maintenance',
   'setup.check',
+  'api_key.create',
+  'api_key.revoke',
+  'api_access.enable',
+  'api_access.disable',
 ] as const;
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 

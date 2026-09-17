@@ -22,6 +22,7 @@ import { SettingsModule } from './settings/settings.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { TranslationModule } from './translation/translation.module';
 import { StorefrontModule } from './storefront/storefront.module';
+import { ApiV1Module } from './api-v1/api-v1.module';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { StorefrontModule } from './storefront/storefront.module';
     CustomersModule,
     AnalyticsModule,
     StorefrontModule,
+    ApiV1Module,
   ],
 })
 export class AppModule {}

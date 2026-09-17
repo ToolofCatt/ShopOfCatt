@@ -5,6 +5,7 @@ import { adminUxEn } from './admin-ux';
 import { settingsUxEn } from './settings-ux';
 import { builderUxEn } from './builder-ux';
 import { reconciliationUxEn } from './reconciliation-ux';
+import { partnerUxEn } from './partner-ux';
 
 export const en: Dictionary = {
   customerUx: customerUxEn,
@@ -12,6 +13,7 @@ export const en: Dictionary = {
   settingsUx: settingsUxEn,
   builderUx: builderUxEn,
   reconciliationUx: reconciliationUxEn,
+  partnerApi: partnerUxEn,
   meta: {
     description:
       'Digital goods store — license keys, gift cards and activation codes. Automatic 24/7 delivery, pay with USDT.',
@@ -775,6 +777,10 @@ export const en: Dictionary = {
     colDetails: 'Details',
     auditAddedLines: (n: number) => `Added ${n} ${n === 1 ? 'line' : 'lines'}`,
     auditActions: {
+      'api_key.create': 'Create API key',
+      'api_key.revoke': 'Revoke API key',
+      'api_access.enable': 'Approve API access',
+      'api_access.disable': 'Disable API access',
       'product.create': 'Create product',
       'product.update': 'Update product',
       'product.delete': 'Delete product',

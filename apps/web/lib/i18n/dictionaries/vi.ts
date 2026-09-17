@@ -10,6 +10,7 @@ import { adminUxVi } from './admin-ux';
 import { settingsUxVi } from './settings-ux';
 import { builderUxVi } from './builder-ux';
 import { reconciliationUxVi } from './reconciliation-ux';
+import { partnerUxVi } from './partner-ux';
 
 export const vi = {
   customerUx: customerUxVi,
@@ -17,6 +18,7 @@ export const vi = {
   settingsUx: settingsUxVi,
   builderUx: builderUxVi,
   reconciliationUx: reconciliationUxVi,
+  partnerApi: partnerUxVi,
   meta: {
     description:
       'Cửa hàng sản phẩm số — key bản quyền, thẻ quà tặng, mã kích hoạt. Giao hàng tự động 24/7, thanh toán bằng USDT.',
@@ -781,6 +783,10 @@ export const vi = {
     colDetails: 'Chi tiết',
     auditAddedLines: (n: number) => `Thêm ${n} dòng`,
     auditActions: {
+      'api_key.create': 'Tạo API key',
+      'api_key.revoke': 'Thu hồi API key',
+      'api_access.enable': 'Duyệt quyền API',
+      'api_access.disable': 'Tắt quyền API',
       'product.create': 'Tạo sản phẩm',
       'product.update': 'Cập nhật sản phẩm',
       'product.delete': 'Xóa sản phẩm',

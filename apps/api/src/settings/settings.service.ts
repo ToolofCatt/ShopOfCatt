@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type StoreSetting } from '@prisma/client';
 import {
@@ -111,6 +111,15 @@ export class SettingsService {
     });
   }
 
+  /** Giữ cấu hình từ lúc admission tới commit. Dùng tx của caller để không
+   * xin thêm connection khi các request khác đã chiếm pool và đang đợi arbitration. */
+  async lockPaymentSetting(tx: Prisma.TransactionClient): Promise<StoreSetting> {
+    await tx.$queryRaw`SELECT id FROM "StoreSetting" WHERE id = ${SETTING_ID} FOR SHARE`;
+    const setting = await tx.storeSetting.findUnique({ where: { id: SETTING_ID } });
+    if (!setting) throw new ServiceUnavailableException(K.paymentNoMethodConfigured);
+    return setting;
+  }
+
   /**
    * Các phương thức thanh toán ĐANG BẬT, theo thứ tự cố định:
    * binance_pay → binance_id → crypto_bep20 → crypto_trc20 → mock.
@@ -123,8 +132,8 @@ export class SettingsService {
    * 3. Không có phương thức nào thì trả về mảng RỖNG — khâu đặt hàng báo lỗi rõ
    *    ràng, thay vì âm thầm quay về mock như trước.
    */
-  async getEnabledMethods(): Promise<PaymentMethodDto[]> {
-    const setting = await this.getSetting();
+  async getEnabledMethods(snapshot?: StoreSetting): Promise<PaymentMethodDto[]> {
+    const setting = snapshot ?? await this.getSetting();
     const methods: PaymentMethodDto[] = [];
 
     const binancePayKey = (this.config.get<string>('BINANCE_PAY_API_KEY') ?? '').trim();
@@ -212,14 +221,14 @@ export class SettingsService {
   }
 
   /** Địa chỉ ví nhận theo mạng — chuỗi rỗng khi chưa cấu hình. */
-  async getCryptoAddress(network: CryptoNetwork): Promise<string> {
-    const setting = await this.getSetting();
+  async getCryptoAddress(network: CryptoNetwork, snapshot?: StoreSetting): Promise<string> {
+    const setting = snapshot ?? await this.getSetting();
     return (network === 'BEP20' ? setting.bep20Address : setting.trc20Address).trim();
   }
 
   /** Binance ID nhận tiền (rỗng = chưa cấu hình). */
-  async getBinanceId(): Promise<string> {
-    return (await this.getSetting()).binanceId.trim();
+  async getBinanceId(snapshot?: StoreSetting): Promise<string> {
+    return (snapshot ?? await this.getSetting()).binanceId.trim();
   }
 
   /** Ảnh QR Binance Pay chủ shop đã tải lên (rỗng = chưa có). */
@@ -420,7 +429,7 @@ export class SettingsService {
    *
    * Khoá API là bí mật nên chỉ webhook gọi hàm này; nó không đi qua DTO nào.
    */
-  async getSepayConfig(): Promise<{
+  async getSepayConfig(snapshot?: StoreSetting): Promise<{
     ready: boolean;
     accountNumber: string;
     bank: string;
@@ -429,7 +438,7 @@ export class SettingsService {
     apiKey: string;
     webhookSecret: string;
   }> {
-    const setting = await this.getSetting();
+    const setting = snapshot ?? await this.getSetting();
     return {
       ready: setting.sepayEnabled && sepayReady(setting),
       accountNumber: setting.sepayAccountNumber.trim(),
@@ -450,8 +459,8 @@ export class SettingsService {
    *
    * Công khai được: tỉ giá vốn đã hiện ngay trên thẻ sản phẩm.
    */
-  async getPublicRates(): Promise<StoreRatesDto> {
-    const setting = await this.getSetting();
+  async getPublicRates(snapshot?: StoreSetting): Promise<StoreRatesDto> {
+    const setting = snapshot ?? await this.getSetting();
     return {
       vndPerUsdt: Number(setting.vndPerUsdt),
       cnyPerUsdt: Number(setting.cnyPerUsdt),
