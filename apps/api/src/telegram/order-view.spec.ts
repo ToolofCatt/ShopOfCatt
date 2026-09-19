@@ -314,6 +314,13 @@ describe('renderOrderView', () => {
 });
 
 describe('renderMethodChooser / renderOrderList', () => {
+  it.each(['vi','en','zh'] as const)('quotes method discount without compounding an existing discount in %s',lang=>{
+    const view=renderMethodChooser(order({subtotalAmount:10,discountAmount:1,paymentDiscountAmount:1,paymentDiscountPercent:10,totalAmount:9}),[{method:'binance_pay',discountPercent:10}],lang,null,10,9);
+    const buttons=view.keyboard.flat();
+    expect(buttons.find(b=>b.callback_data==='m:DH-ABC123:bp')?.text).toContain('−10%');
+    expect(buttons.find(b=>b.callback_data==='m:DH-ABC123:bp')?.text).toContain('9.00');
+    expect(buttons.some(b=>b.callback_data==='mb:DH-ABC123')).toBe(false);
+  });
   it('mỗi phương thức một nút + nút huỷ', () => {
     const view = renderMethodChooser(
       order(),

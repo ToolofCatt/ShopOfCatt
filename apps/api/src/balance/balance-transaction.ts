@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import type { CryptoNetwork } from '@webcatt/shared';
 import { K } from '../i18n/messages';
 import type { DepositMethod } from './balance.service';
+import { paymentQuote } from '../orders/payment-discount';
 
 export interface PreparedDeposit {
   readonly userId: string;
@@ -37,7 +38,7 @@ export async function payOrderInTransaction(
 ): Promise<BalancePaymentResult> {
   await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
   const order = await tx.order.findFirst({
-    where: { id: orderId, userId }, select: { id: true, code: true, totalAmount: true },
+    where: { id: orderId, userId },
   });
   if (!order) throw new NotFoundException(K.orderNotFound);
   await tx.$queryRaw`SELECT id FROM "Payment" WHERE "orderId" = ${orderId} FOR UPDATE`;
@@ -45,9 +46,10 @@ export async function payOrderInTransaction(
   if (!payment || payment.status === 'SUCCESS' || payment.cryptoTxId || payment.sepayRef) {
     throw new BadRequestException(K.balanceOrderNotPending);
   }
+  const quote = paymentQuote(order, 0);
   const gate = await tx.order.updateMany({
     where: { id: orderId, userId, status: 'PENDING' },
-    data: { status: 'PAID', paidAt: new Date() },
+    data: { status: 'PAID', paidAt: new Date(), ...quote },
   });
   if (gate.count === 0) throw new BadRequestException(K.balanceOrderNotPending);
 
@@ -56,16 +58,16 @@ export async function payOrderInTransaction(
     where: { id: userId }, select: { balance: true, lockedAt: true },
   });
   if (options.requireUnlockedUser && user.lockedAt) throw new ForbiddenException(K.accountLocked);
-  if (user.balance.lessThan(order.totalAmount)) throw new BadRequestException(K.balanceInsufficient);
-  const balanceAfter = user.balance.sub(order.totalAmount);
+  if (user.balance.lessThan(quote.totalAmount)) throw new BadRequestException(K.balanceInsufficient);
+  const balanceAfter = user.balance.sub(quote.totalAmount);
   await tx.user.update({ where: { id: userId }, data: { balance: balanceAfter } });
   await tx.balanceEntry.create({
-    data: { userId, amount: order.totalAmount.neg(), balanceAfter, reason: 'purchase', refCode: order.code },
+    data: { userId, amount: quote.totalAmount.neg(), balanceAfter, reason: 'purchase', refCode: order.code },
   });
   const paid = await tx.payment.updateMany({
     where: { id: payment.id, orderId, status: payment.status, cryptoTxId: null, sepayRef: null },
-    data: { status: 'SUCCESS', mode: 'BALANCE' },
+    data: { status: 'SUCCESS', mode: 'BALANCE', amount: quote.totalAmount },
   });
   if (paid.count !== 1) throw new BadRequestException(K.balanceOrderNotPending);
-  return { orderId, total: order.totalAmount, balanceAfter };
+  return { orderId, total: quote.totalAmount, balanceAfter };
 }

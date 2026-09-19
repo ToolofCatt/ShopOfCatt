@@ -8,6 +8,7 @@ import { createDraft, editDraft, isDraftDirty, mergeSettingsSection, SETTINGS_TA
 import { Plus, PlugZap, ServerCrash, ShieldAlert, Trash2 } from 'lucide-react';
 import {
   AI_DEFAULT_MODEL,
+  DISCOUNT_PAYMENT_METHODS,
   AI_PROVIDERS,
   SUPPORT_CHANNELS_MAX,
   SUPPORT_FIELD_MAX_LENGTH,
@@ -410,6 +411,22 @@ function SettingsContent() {
                 }
               />
             </div>
+
+            <section className="space-y-3 rounded-lg border border-neutral-200 p-4">
+              <h3 className="font-semibold">{t.admin.paymentDiscountTitle}</h3>
+              <p className="text-sm text-neutral-500">{t.admin.paymentDiscountHint}</p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {DISCOUNT_PAYMENT_METHODS.map(method => (
+                  <Field key={method} htmlFor={`discount-${method}`} label={t.checkout.methods[method] + ' (%)'}>
+                    <Input id={`discount-${method}`} type="number" min={0} max={99} step="0.01"
+                      value={groups.payments.draft.paymentDiscounts?.[method] ?? 0}
+                      onChange={event => edit('payments', { paymentDiscounts: {
+                        ...groups.payments.draft.paymentDiscounts, [method]: event.target.value === '' ? 0 : Number(event.target.value),
+                      } })} />
+                  </Field>
+                ))}
+              </div>
+            </section>
 
             {binanceIdEnabled && (
               <div className="space-y-2 rounded-lg border border-neutral-200 bg-neutral-50 p-4">

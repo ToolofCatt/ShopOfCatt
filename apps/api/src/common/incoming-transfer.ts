@@ -81,7 +81,7 @@ export async function settleOrderTransfer(tx: Prisma.TransactionClient, paymentI
     const expected = mode === 'SEPAY' ? payment.vndAmount : payment.amount;
     const merchant = mode === 'BINANCE' ? await tx.merchantPaymentSession.findUnique({ where: { merchantTradeNo: transfer.reference } }) : null;
     const acceptable = mode === 'BINANCE'
-      ? merchant?.paymentId === paymentId && payment.amount.equals(transfer.amount)
+      ? merchant?.paymentId === paymentId && (merchant.orderTotalAmount ?? payment.amount).equals(transfer.amount)
       : snapshots.some((i) => i.amount.equals(transfer.amount) && (!i.receiver || !transfer.receiver || i.receiver === transfer.receiver)
         && (mode !== 'CRYPTO' || transfer.source === `CRYPTO:${i.network}`))
         || (payment.mode === mode && expected?.equals(transfer.amount)
@@ -90,7 +90,31 @@ export async function settleOrderTransfer(tx: Prisma.TransactionClient, paymentI
     if (!acceptable || transfer.currency !== (mode === 'SEPAY' ? 'VND' : 'USDT')) return null;
     if (transfer.status === 'REVIEW') transfer = await tx.incomingTransfer.update({ where: { id: transfer.id }, data: { status: 'OBSERVED' } });
   }
+  // Tiền có thể đến từ hướng dẫn cũ sau khi khách đổi phương thức. Khôi phục
+  // đúng hóa đơn đã báo ở phiên đó, không lấy mức giảm hiện hành của shop.
+  const mode = transfer.source === 'BINANCE_MERCHANT' ? 'BINANCE'
+    : transfer.source === 'SEPAY' ? 'SEPAY' : transfer.source === 'BINANCE_ID' ? 'BINANCE_ID' : 'CRYPTO';
+  const snapshot = mode === 'BINANCE'
+    ? await tx.merchantPaymentSession.findUnique({ where: { merchantTradeNo: transfer.reference } })
+    : await tx.paymentInstruction.findFirst({ where: { paymentId, mode, amount: transfer.amount,
+        ...(mode === 'CRYPTO' ? { network: transfer.source.slice('CRYPTO:'.length) } : {}),
+        ...(transfer.receiver ? { receiver: transfer.receiver } : {}),
+      }, orderBy: { createdAt: 'asc' } });
   if ((await claimTransfer(tx, transfer, { paymentId })) !== 'new') return null;
+  if (snapshot?.orderTotalAmount && snapshot.paymentId === paymentId) {
+    const couponDiscount = payment.order.discountAmount.sub(payment.order.paymentDiscountAmount);
+    await tx.order.updateMany({ where: { id: payment.orderId, status: { in: ['PENDING','EXPIRED'] } }, data: {
+      totalAmount: snapshot.orderTotalAmount,
+      discountAmount: couponDiscount.add(snapshot.paymentDiscountAmount),
+      paymentDiscountAmount: snapshot.paymentDiscountAmount,
+      paymentDiscountPercent: snapshot.paymentDiscountPercent,
+    } });
+    await tx.payment.update({ where: { id: paymentId }, data: { amount: snapshot.orderTotalAmount, mode,
+      ...(mode === 'BINANCE' ? { merchantTradeNo: transfer.reference }
+        : 'network' in snapshot ? { cryptoNetwork: snapshot.network, cryptoAddress: snapshot.receiver,
+          ...(mode === 'SEPAY' ? { vndAmount: transfer.amount } : { cryptoAmount: transfer.amount }) } : {}),
+    } });
+  }
   const ref = transfer.source === 'SEPAY'
     ? { sepayRef: transfer.reference }
     : transfer.source === 'BINANCE_MERCHANT' ? {} : { cryptoTxId: transfer.reference };

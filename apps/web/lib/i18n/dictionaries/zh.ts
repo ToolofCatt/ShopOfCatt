@@ -97,6 +97,7 @@ export const zh: Dictionary = {
   },
 
   checkout: {
+    paymentDiscount: "付款方式优惠",
     title: '订单付款',
     expiresIn: '剩余时间',
     mockBadge: '测试付款模式',
@@ -376,6 +377,8 @@ export const zh: Dictionary = {
   },
 
   admin: {
+    paymentDiscountTitle: "付款方式折扣",
+    paymentDiscountHint: "0% 表示关闭。优惠券后计算，仅限购物，不适用于充值或余额付款。已生成的付款会话保持原报价。",
     brand: '管理',
     navDashboard: '概览',
     navSetup: '设置向导',

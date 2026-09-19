@@ -484,6 +484,8 @@ model Order {
   subtotalAmount Decimal @default(0) @db.Decimal(18, 6)
   /// Số tiền được giảm bởi mã giảm giá
   discountAmount Decimal @default(0) @db.Decimal(18, 6)
+  paymentDiscountAmount Decimal @default(0) @db.Decimal(18, 6)
+  paymentDiscountPercent Decimal @default(0) @db.Decimal(5, 2)
   /// Số tiền khách phải trả = subtotalAmount - discountAmount
   totalAmount Decimal @db.Decimal(18, 6)
   couponId    String?
@@ -645,6 +647,9 @@ model IncomingTransfer {
 
 /// Chỉ dẫn đã đưa cho khách không được biến mất khỏi tập đối soát khi đổi phương thức.
 model PaymentInstruction {
+  orderTotalAmount Decimal? @db.Decimal(18, 6)
+  paymentDiscountAmount Decimal @default(0) @db.Decimal(18, 6)
+  paymentDiscountPercent Decimal @default(0) @db.Decimal(5, 2)
   id String @id @default(cuid())
   paymentId String
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
@@ -661,6 +666,9 @@ model PaymentInstruction {
 
 /// Giữ tham chiếu tới phiên cũ: khách vẫn có thể trả trong cửa sổ checkout đã mở.
 model MerchantPaymentSession {
+  orderTotalAmount Decimal? @db.Decimal(18, 6)
+  paymentDiscountAmount Decimal @default(0) @db.Decimal(18, 6)
+  paymentDiscountPercent Decimal @default(0) @db.Decimal(5, 2)
   merchantTradeNo String @id
   paymentId String
   payment Payment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
@@ -672,6 +680,8 @@ model MerchantPaymentSession {
 /// Cấu hình cửa hàng — bản ghi duy nhất id = "main". Địa chỉ ví KHÔNG bí mật
 /// nên để trong DB cho admin sửa; khóa API Binance để trong biến môi trường.
 model StoreSetting {
+  /// Phần trăm giảm theo phương thức, chỉ áp cho mua hàng, không áp nạp ví.
+  paymentDiscounts Json @default("{}")
   id String @id @default("main")
   /// Cổng thanh toán giả lập — MẶC ĐỊNH TẮT. Chỉ có tác dụng khi biến môi
   /// trường PAYMENT_MOCK=true; bật nhầm ở môi trường thật = phát hàng miễn phí.

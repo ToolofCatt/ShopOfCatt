@@ -141,6 +141,8 @@ export function toOrderDetailDto(
     status: order.status,
     subtotalAmount: Number(order.subtotalAmount),
     discountAmount: Number(order.discountAmount),
+    paymentDiscountAmount: Number(order.paymentDiscountAmount),
+    paymentDiscountPercent: Number(order.paymentDiscountPercent),
     couponCode: order.couponCode,
     totalAmount: Number(order.totalAmount),
     currency: order.currency,

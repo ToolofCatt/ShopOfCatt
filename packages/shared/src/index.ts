@@ -67,7 +67,11 @@ export interface ReconciliationSummaryDto {
   conflicts: number;
 }
 
+export { previewPaymentDiscount } from './payment-discount';
+export const DISCOUNT_PAYMENT_METHODS = ['binance_pay', 'binance_id', 'sepay', 'crypto_bep20', 'crypto_trc20'] as const;
+
 export interface PaymentMethodDto {
+  discountPercent?: number;
   method: PaymentMethod;
   /**
    * Nơi nhận tiền: địa chỉ ví với crypto_bep20 / crypto_trc20, Binance ID với
@@ -303,6 +307,7 @@ export const SUPPORT_FIELD_MAX_LENGTH = 120;
 export const SUPPORT_NOTE_MAX_LENGTH = 300;
 
 export interface AdminStoreSettingDto {
+  paymentDiscounts?: Partial<Record<PaymentMethod, number>>;
   mockEnabled: boolean;
   /** Binance Pay MERCHANT — cần khoá BINANCE_PAY_* ở máy chủ. */
   binancePayEnabled: boolean;
@@ -600,6 +605,8 @@ export interface PaymentInfoDto {
 }
 
 export interface OrderDetailDto {
+  paymentDiscountAmount?: number;
+  paymentDiscountPercent?: number;
   id: string;
   code: string;
   status: OrderStatus;

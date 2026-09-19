@@ -98,6 +98,7 @@ export const en: Dictionary = {
   },
 
   checkout: {
+    paymentDiscount: "Payment method discount",
     title: 'Pay for your order',
     expiresIn: 'Expires in',
     mockBadge: 'Sandbox payment mode',
@@ -384,6 +385,8 @@ export const en: Dictionary = {
   },
 
   admin: {
+    paymentDiscountTitle: "Payment method discounts",
+    paymentDiscountHint: "0% disables the offer. Applied after coupons to purchases, not wallet top-ups or balance payments. Existing payment sessions retain their quoted price.",
     brand: 'Admin',
     navDashboard: 'Dashboard',
     navSetup: 'Setup',

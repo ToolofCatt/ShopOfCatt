@@ -1,3 +1,4 @@
+import { parsePaymentDiscounts } from '../orders/payment-discount';
 import { BadRequestException, Injectable, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Prisma, type StoreSetting } from '@prisma/client';
@@ -179,7 +180,8 @@ export class SettingsService {
       methods.push({ method: 'mock' });
     }
 
-    return methods;
+    const discounts = parsePaymentDiscounts(setting.paymentDiscounts ?? {});
+    return methods.map(entry => ({ ...entry, discountPercent: discounts[entry.method] ?? 0 }));
   }
 
   /**
@@ -593,6 +595,7 @@ export class SettingsService {
     const before = before0;
 
     const data = {
+      paymentDiscounts: parsePaymentDiscounts(dto.paymentDiscounts ?? {}),
       mockEnabled: dto.mockEnabled,
       binancePayEnabled: dto.binancePayEnabled,
       binanceIdEnabled: dto.binanceIdEnabled,
@@ -649,6 +652,7 @@ export class SettingsService {
 
 function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
   return {
+    paymentDiscounts: parsePaymentDiscounts(setting.paymentDiscounts ?? {}),
     mockEnabled: setting.mockEnabled,
     binancePayEnabled: setting.binancePayEnabled,
     binanceIdEnabled: setting.binanceIdEnabled,
@@ -703,6 +707,7 @@ function toAdminDto(setting: StoreSetting): AdminStoreSettingDto {
 /** Ảnh chụp phẳng để diff cho nhật ký. */
 function toSnapshot(setting: StoreSetting): Record<string, unknown> {
   return {
+    paymentDiscounts: parsePaymentDiscounts(setting.paymentDiscounts ?? {}),
     mockEnabled: setting.mockEnabled,
     binancePayEnabled: setting.binancePayEnabled,
     cryptoEnabled: setting.cryptoEnabled,

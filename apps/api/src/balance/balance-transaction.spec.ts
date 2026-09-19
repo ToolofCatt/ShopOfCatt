@@ -11,7 +11,7 @@ function fixture() {
   const tx = {
     $queryRaw: vi.fn(async (sql: TemplateStringsArray) => { events.push(sql.join('')); return []; }),
     order: {
-      findFirst: vi.fn(async () => ({ id: 'order', code: 'ORD-TEST', totalAmount: new Prisma.Decimal('2.3') })),
+      findFirst: vi.fn(async () => ({ id: 'order', code: 'ORD-TEST', totalAmount: new Prisma.Decimal('2.3'), subtotalAmount: new Prisma.Decimal('2.3'), discountAmount: new Prisma.Decimal(0), paymentDiscountAmount: new Prisma.Decimal(0) })),
       updateMany: vi.fn(async (_args: any) => ({ count: 1 })),
     },
     payment: {

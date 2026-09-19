@@ -34,7 +34,7 @@ export function settleDraft<T extends object>(state: DraftState<T>, sent: T, rec
 }
 
 export interface SettingsValues {
-  payments: Pick<AdminStoreSettingDto, 'mockEnabled' | 'binancePayEnabled' | 'binanceIdEnabled' | 'binanceId' | 'binanceQr' | 'cryptoEnabled' | 'bep20Address' | 'trc20Address' | 'sepayEnabled' | 'sepayAccountNumber' | 'sepayBank' | 'sepayAccountHolder'> & {
+  payments: Pick<AdminStoreSettingDto, 'paymentDiscounts' | 'mockEnabled' | 'binancePayEnabled' | 'binanceIdEnabled' | 'binanceId' | 'binanceQr' | 'cryptoEnabled' | 'bep20Address' | 'trc20Address' | 'sepayEnabled' | 'sepayAccountNumber' | 'sepayBank' | 'sepayAccountHolder'> & {
     sepayApiKey: string; sepayWebhookSecret: string; clearSepayApiKey: boolean; clearSepayWebhookSecret: boolean;
   };
   rates: { vndPerUsdt: string; cnyPerUsdt: string; rateAuto: boolean; rateMarkupPercent: string; rateHour: string };
@@ -46,6 +46,7 @@ export type SettingsDrafts = { [K in SettingsTab]: DraftState<SettingsValues[K]>
 export function settingsDrafts(next?: AdminStoreSettingDto): SettingsDrafts {
   return {
     payments: createDraft({
+      paymentDiscounts: next?.paymentDiscounts ?? {},
       mockEnabled: next?.mockEnabled ?? false, binancePayEnabled: next?.binancePayEnabled ?? false,
       binanceIdEnabled: next?.binanceIdEnabled ?? false, binanceId: next?.binanceId ?? '', binanceQr: next?.binanceQr ?? '',
       cryptoEnabled: next?.cryptoEnabled ?? false, bep20Address: next?.bep20Address ?? '', trc20Address: next?.trc20Address ?? '',
@@ -68,6 +69,7 @@ export function settingsPayload<K extends SettingsTab>(tab: K, draft: SettingsVa
   if (tab === 'payments') {
     const d = draft as SettingsValues['payments'];
     return {
+      paymentDiscounts: d.paymentDiscounts ?? {},
       mockEnabled: d.mockEnabled, binancePayEnabled: d.binancePayEnabled, binanceIdEnabled: d.binanceIdEnabled,
       binanceId: d.binanceId.trim(), binanceQr: d.binanceQr, cryptoEnabled: d.cryptoEnabled,
       bep20Address: d.bep20Address.trim(), trc20Address: d.trc20Address.trim(), sepayEnabled: d.sepayEnabled,

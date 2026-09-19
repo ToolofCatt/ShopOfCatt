@@ -8,6 +8,7 @@ type Template = string | ((params: MessageParams) => string);
  * người dùng (theo header Accept-Language) trước khi trả về.
  */
 export const K = {
+  paymentDiscountInvalid: 'payment.discount_invalid',
   apiKeyInvalid: 'api.key_invalid',
   apiAccessDisabled: 'api.access_disabled',
   apiScopeRequired: 'api.scope_required',
@@ -253,6 +254,11 @@ export const K = {
 } as const;
 
 const MESSAGES: Record<string, Record<Locale, Template>> = {
+  [K.paymentDiscountInvalid]: {
+    vi: 'Mức giảm theo phương thức phải từ 0 đến 99%, tối đa 2 chữ số thập phân; không áp dụng cho giả lập hoặc số dư.',
+    en: 'Payment discounts must be 0–99% with up to two decimal places; mock and balance payments are excluded.',
+    zh: '付款方式折扣须为 0–99%，最多两位小数；不适用于模拟付款和余额。',
+  },
   [K.adminTelegramMembershipInvalid]: {
     vi: 'Nhập ID kênh hợp lệ và link https://t.me/ dẫn tới đúng kênh.',
     en: 'Enter a valid channel ID and an https://t.me/ link to that channel.',

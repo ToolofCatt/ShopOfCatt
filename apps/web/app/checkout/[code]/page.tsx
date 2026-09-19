@@ -459,6 +459,9 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
                 )}
               </p>
             )}
+            {(order.paymentDiscountAmount ?? 0) > 0 && (
+              <p className="text-sm text-emerald-700">{t.checkout.paymentDiscount} −{order.paymentDiscountPercent}%</p>
+            )}
             {remainingMs !== null && (
               <p className="flex items-center justify-end gap-1.5 text-sm text-neutral-500">
                 <Clock className="h-4 w-4" strokeWidth={1.75} />
@@ -511,15 +514,16 @@ export default function PaymentPage({ params }: { params: Promise<{ code: string
               <PaymentMethodTabs
                 methods={methods.map((m) => m.method)}
                 labels={t.checkout.methodsShort}
+                discounts={Object.fromEntries(methods.map(m => [m.method, m.discountPercent ?? 0]))}
                 value={selectedMethod}
                 onChange={(method) => void handleSelectMethod(method)}
                 disabled={switching}
               />
             ) : (
               <div className="flex flex-wrap justify-center gap-2">
-                {methods.map(({ method }) => (
+                {methods.map(({ method, discountPercent }) => (
                   <Button key={method} variant="outline" size="sm" disabled={switching} onClick={() => void handleSelectMethod(method)}>
-                    {t.checkout.methods[method]}
+                    {t.checkout.methods[method]}{(discountPercent ?? 0) > 0 ? ` · −${discountPercent}%` : ''}
                   </Button>
                 ))}
               </div>

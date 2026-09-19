@@ -103,6 +103,7 @@ export const vi = {
   },
 
   checkout: {
+    paymentDiscount: "Ưu đãi phương thức thanh toán",
     title: 'Thanh toán đơn hàng',
     expiresIn: 'Hết hạn sau',
     mockBadge: 'Chế độ thanh toán thử nghiệm',
@@ -393,6 +394,8 @@ export const vi = {
   },
 
   admin: {
+    paymentDiscountTitle: "Giảm giá theo phương thức thanh toán",
+    paymentDiscountHint: "0% là tắt. Áp dụng sau mã giảm giá cho đơn mua hàng; không áp dụng nạp ví hoặc trả bằng số dư. Phiên thanh toán đã chốt giữ nguyên giá.",
     brand: 'Quản trị',
     navDashboard: 'Tổng quan',
     navSetup: 'Thiết lập',

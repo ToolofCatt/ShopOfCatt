@@ -132,7 +132,7 @@ export class PaymentsService {
     if (payload.bizStatus === 'PAY_SUCCESS') {
       const orderId = await this.prisma.$transaction(async (tx) => {
         await lockFinancialArbitration(tx);
-        const transfer = await observeTransfer(tx, { source: 'BINANCE_MERCHANT', reference, amount: payment.amount, currency: 'USDT' });
+        const transfer = await observeTransfer(tx, { source: 'BINANCE_MERCHANT', reference, amount: session?.orderTotalAmount ?? payment.amount, currency: 'USDT' });
         const id = await settleOrderTransfer(tx, payment.id, transfer);
         await tx.payment.update({ where: { id: payment.id }, data: { rawWebhook: payload as unknown as Prisma.InputJsonValue } });
         return id;

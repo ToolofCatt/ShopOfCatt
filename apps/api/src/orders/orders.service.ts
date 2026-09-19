@@ -37,6 +37,7 @@ import { K } from '../i18n/messages';
 import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/financial-lock';
 import { reconcileCryptoTransfers } from '../common/reconcile-transfers';
 import { observeTransfer, settleOrderTransfer } from '../common/incoming-transfer';
+import { paymentQuote, parsePaymentDiscounts } from './payment-discount';
 
 import {
   createPendingOrderInTransaction,
@@ -522,14 +523,27 @@ export class OrdersService {
     const payment = order.payment;
     const hetHan = await this.apDungHan(order.id, order.createdAt, method);
     // Version được giữ trước I/O, settlement/cancel sau đó vẫn có thể thắng mà không bị ghi đè.
-    const version = await this.prisma.$transaction(async (tx) => {
+    const prepared = await this.prisma.$transaction(async (tx) => {
       await lockFinancialArbitration(tx);
       await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
       const live = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { payment: true } });
       if (live.status !== 'PENDING' || !live.payment || live.payment.status !== 'PENDING' || live.payment.cryptoTxId || live.payment.sepayRef) throw new BadRequestException(K.orderCannotCancel);
+      const currentMethod = live.payment.mode === 'BINANCE' ? 'binance_pay'
+        : live.payment.mode === 'BINANCE_ID' ? 'binance_id'
+        : live.payment.mode === 'SEPAY' ? 'sepay'
+        : live.payment.mode === 'CRYPTO' ? (live.payment.cryptoNetwork === 'BEP20' ? 'crypto_bep20' : 'crypto_trc20') : 'mock';
+      const setting = await tx.storeSetting.findUnique({ where: { id: 'main' } });
+      const discounts = parsePaymentDiscounts(setting?.paymentDiscounts ?? {});
+      // Giữ giá phiên hiện tại kể cả admin đã đổi ưu đãi. Chuyển phương thức
+      // thì tính từ giá gốc sau coupon, không giảm chồng lên tổng đã giảm.
+      const percent = currentMethod === method && live.payment.mode !== 'INITIALIZING'
+        ? Number(live.paymentDiscountPercent) : (discounts[method] ?? 0);
+      const quote = paymentQuote(live, percent);
+      const reuseMerchant = currentMethod === 'binance_pay' && method === 'binance_pay' && !!live.payment.checkoutUrl;
       const updated = await tx.payment.update({ where: { id: payment.id }, data: { sessionVersion: { increment: 1 } } });
-      return updated.sessionVersion;
+      return { version: updated.sessionVersion, quote, reuseMerchant };
     }, FINANCIAL_TRANSACTION);
+    const { version, quote } = prepared;
     const persist = async (data: Prisma.PaymentUpdateManyMutationInput, merchantTradeNo?: string) => {
       await this.prisma.$transaction(async (tx) => {
         await lockFinancialArbitration(tx);
@@ -538,17 +552,18 @@ export class OrdersService {
         const gate = await tx.payment.updateMany({ where: {
           id: payment.id, sessionVersion: version, status: 'PENDING', cryptoTxId: null, sepayRef: null,
           order: { status: 'PENDING' }, incomingTransfer: { is: null },
-        }, data });
+        }, data: { ...data, amount: quote.totalAmount } });
         if (gate.count === 0) throw new BadRequestException(K.orderCannotCancel);
         const applied = await tx.payment.findUniqueOrThrow({ where: { id: payment.id } });
         if (['CRYPTO', 'BINANCE_ID', 'SEPAY'].includes(applied.mode)) {
           await tx.paymentInstruction.create({ data: {
             paymentId: payment.id, sessionVersion: version, mode: applied.mode,
+            orderTotalAmount: quote.totalAmount, paymentDiscountAmount: quote.paymentDiscountAmount, paymentDiscountPercent: quote.paymentDiscountPercent,
             amount: applied.mode === 'SEPAY' ? applied.vndAmount! : applied.cryptoAmount!,
             network: applied.cryptoNetwork, receiver: applied.cryptoAddress,
           } });
         }
-        await tx.order.updateMany({ where: { id: orderId, status: 'PENDING' }, data: { expiresAt: hetHan } });
+        await tx.order.updateMany({ where: { id: orderId, status: 'PENDING' }, data: { expiresAt: hetHan, ...quote } });
       }, FINANCIAL_TRANSACTION);
     };
 
@@ -560,19 +575,20 @@ export class OrdersService {
 
     if (method === 'binance_pay') {
       // Phiên cũ còn nguyên → dùng lại, không tạo phiên trùng merchantTradeNo.
-      if (payment.mode === 'BINANCE' && payment.checkoutUrl) {
+      if (prepared.reuseMerchant) {
         return;
       }
       // Tạo phiên với merchantTradeNo MỚI — Binance từ chối mã đã dùng cho
       // phiên trước đó (trường hợp khách đổi qua lại giữa các phương thức).
       const merchantTradeNo = generateMerchantTradeNo(order.code);
       // Lưu mapping trước I/O để webhook tới sớm hoặc response bị timeout không mất phiên cũ.
-      await this.prisma.merchantPaymentSession.create({ data: { merchantTradeNo, paymentId: payment.id } });
+      await this.prisma.merchantPaymentSession.create({ data: { merchantTradeNo, paymentId: payment.id,
+        orderTotalAmount: quote.totalAmount, paymentDiscountAmount: quote.paymentDiscountAmount, paymentDiscountPercent: quote.paymentDiscountPercent } });
       let session: BinanceCreateOrderResult;
       try {
         session = await this.binance.createOrder({
           merchantTradeNo,
-          orderAmount: Number(order.totalAmount),
+          orderAmount: Number(quote.totalAmount),
           currency: 'USDT',
           description: `Đơn hàng ${order.code}`,
           goods: order.items.map((item) => ({
@@ -617,7 +633,7 @@ export class OrdersService {
        */
       await persist({
         mode: 'BINANCE_ID', cryptoNetwork: null, cryptoAddress: binanceId,
-        cryptoAmount: order.totalAmount, ...CLEAR_PAY_SESSION,
+        cryptoAmount: quote.totalAmount, ...CLEAR_PAY_SESSION,
       });
       return;
     }
@@ -634,11 +650,11 @@ export class OrdersService {
        * toán tính lại theo tỉ giá hiện tại thì khách đang xem một số, chuyển
        * xong lại bị đối chiếu với số khác, và đơn treo.
        */
-      const vnd = usdtToVnd(Number(order.totalAmount), cauHinh.vndPerUsdt);
+      const vnd = usdtToVnd(Number(quote.totalAmount), cauHinh.vndPerUsdt);
       await persist({
         mode: 'SEPAY', cryptoNetwork: null, cryptoAddress: cauHinh.accountNumber,
         sepayBank: cauHinh.bank, vndAmount: new Prisma.Decimal(vnd),
-        cryptoAmount: order.totalAmount, ...CLEAR_PAY_SESSION,
+        cryptoAmount: quote.totalAmount, ...CLEAR_PAY_SESSION,
       });
       return;
     }
@@ -653,7 +669,7 @@ export class OrdersService {
 
     // Giữ exact-price. TxID công khai không chứng minh payer, mọi caller dùng pool chung và không đoán khi trùng.
     await persist({ mode: 'CRYPTO', cryptoNetwork: network, cryptoAddress: address,
-      cryptoAmount: order.totalAmount, ...CLEAR_PAY_SESSION,
+      cryptoAmount: quote.totalAmount, ...CLEAR_PAY_SESSION,
     });
   }
 

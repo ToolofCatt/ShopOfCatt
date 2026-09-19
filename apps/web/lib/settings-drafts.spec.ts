@@ -4,6 +4,16 @@ import type { AdminStoreSettingDto } from '@webcatt/shared';
 
 // Chặn mất bản nháp do phản hồi lưu hoặc lấy tỉ giá đến sau lần nhập tiếp theo.
 describe('independent settings drafts', () => {
+  it('persists payment discounts in the payment tab only and keeps edits made while saving', () => {
+    const drafts=settingsDrafts();
+    const sent={...drafts.payments.draft,paymentDiscounts:{binance_pay:10}};
+    expect(settingsPayload('payments',sent).paymentDiscounts).toEqual({binance_pay:10});
+    expect(settingsPayload('rates',drafts.rates.draft)).not.toHaveProperty('paymentDiscounts');
+    const editing=editDraft(createDraft(sent),{paymentDiscounts:{binance_pay:15}});
+    const settled=settleDraft(editing,sent,sent);
+    expect(settled.draft.paymentDiscounts).toEqual({binance_pay:15});
+    expect(isDraftDirty(settled)).toBe(true);
+  });
   it('normalizes server values without replacing edits made during save', () => {
     const initial = createDraft({ title: 'Old', body: 'Old body' });
     const sent = { title: ' New ', body: 'New body' };

@@ -12,7 +12,7 @@ import type {
   TelegramPreviewDto,
   TelegramStatusDto,
 } from '@webcatt/shared';
-import { floorUsdt } from '@webcatt/shared';
+import { floorUsdt, previewPaymentDiscount } from '@webcatt/shared';
 import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { AdminGuard } from '../auth/admin.guard';
@@ -143,6 +143,8 @@ function previewPayment(
   method: PaymentMethodDto,
   vndPerUsdt: number,
 ): PaymentInfoDto {
+  const quote = previewPaymentDiscount(order.totalAmount, method.discountPercent ?? 0);
+  order = { ...order, totalAmount: quote.total };
   const common = { status: 'PENDING' as const };
   switch (method.method) {
     case 'sepay':
@@ -499,8 +501,13 @@ export class TelegramAdminController {
               code,
               previewPayment(order, method, rates.vndPerUsdt),
             );
-            dua(
-              callback,
+              const discount = previewPaymentDiscount(order.totalAmount, method.discountPercent ?? 0);
+              paid.totalAmount = discount.total;
+              paid.discountAmount = discount.discount;
+              paid.paymentDiscountAmount = discount.discount;
+              paid.paymentDiscountPercent = method.discountPercent ?? 0;
+              dua(
+                callback,
               renderPaymentInstructions(paid, lang, rates, 10, method.accountHolder ?? ''),
             );
             if (method.method === 'mock') {

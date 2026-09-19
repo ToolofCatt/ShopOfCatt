@@ -32,6 +32,7 @@ export interface PaymentMethodTabsProps {
   labels: Record<PaymentMethod, string>;
   onChange: (method: PaymentMethod) => void;
   disabled?: boolean;
+  discounts?: Partial<Record<PaymentMethod, number>>;
 }
 
 export function PaymentMethodTabs({
@@ -40,6 +41,7 @@ export function PaymentMethodTabs({
   labels,
   onChange,
   disabled,
+  discounts,
 }: PaymentMethodTabsProps) {
   return (
     <div
@@ -67,6 +69,7 @@ export function PaymentMethodTabs({
                 : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-950',
             )}
           >
+            {(discounts?.[method] ?? 0) > 0 && <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-800">−{discounts?.[method]}%</span>}
             <Icon className="h-4 w-4 shrink-0" strokeWidth={1.75} />
             {/* Nhãn có thể dài hơn cột: cắt bằng "…", tên đầy đủ nằm ở `title`. */}
             <span className="w-full truncate text-center">{labels[method]}</span>

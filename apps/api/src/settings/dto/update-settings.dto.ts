@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsObject,
   IsIn,
   IsInt,
   IsNotEmpty,
@@ -43,6 +44,9 @@ export class SupportChannelInput {
 }
 
 export class UpdateSettingsDto {
+  @IsOptional() @IsObject({ message: K.paymentDiscountInvalid })
+  paymentDiscounts?: Record<string, number>;
+
   @IsBoolean({ message: K.adminSettingsFlagInvalid })
   mockEnabled: boolean;
 

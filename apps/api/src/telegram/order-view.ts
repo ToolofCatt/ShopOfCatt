@@ -13,6 +13,7 @@ import {
   formatMoney,
   formatUsdt,
   sumMoney,
+  previewPaymentDiscount,
   type OrderDetailDto,
   type OrderSummaryDto,
   type PaymentMethod,
@@ -162,7 +163,7 @@ export function renderMethodChooser(
   const keyboard: TgInlineKeyboard = [];
   // Chỉ chào khi ĐỦ trả — nút "trả bằng số dư" mà bấm ra lỗi thiếu tiền thì
   // thà đừng chào; service vẫn kiểm lại lần cuối trong transaction.
-  if (balanceUsdt >= order.totalAmount) {
+  if (balanceUsdt >= sumMoney([order.totalAmount, order.paymentDiscountAmount ?? 0])) {
     keyboard.push([
       {
         text: dict.payWithBalance(orderMoney(balanceUsdt, lang, rates)),
@@ -172,9 +173,12 @@ export function renderMethodChooser(
   }
   const sortedMethods = sortPaymentMethods(methods.map((entry) => entry.method));
   for (const method of sortedMethods) {
+    const percent = methods.find(entry => entry.method === method)?.discountPercent ?? 0;
+    const base = sumMoney([order.totalAmount, order.paymentDiscountAmount ?? 0]);
+    const quoted = previewPaymentDiscount(base, percent);
     keyboard.push([
       {
-        text: dict.methodNames[method] ?? method,
+        text: (dict.methodNames[method] ?? method) + (percent > 0 ? ` · −${percent}% · ${orderMoney(quoted.total, lang, rates)}` : ''),
         callback_data: encodeCallback({
           kind: 'method',
           orderCode: order.code,
@@ -210,6 +214,7 @@ export function renderPaymentInstructions(
   const dict = botDict(lang);
   const payment = order.payment;
   const lines = [`<b>${escapeHtml(dict.payTitle(order.code))}</b>`];
+  if ((order.paymentDiscountPercent ?? 0) > 0) lines.push(`🏷️ −${order.paymentDiscountPercent}% · −${orderMoney(order.paymentDiscountAmount ?? 0, lang, rates)}`);
   const keyboard: TgInlineKeyboard = [];
   let photo: string | null = null;
   let awaitingPayment = false;

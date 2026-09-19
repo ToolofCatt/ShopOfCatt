@@ -3,6 +3,7 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
+  IsObject,
   IsIn,
   IsInt,
   IsNumber,
@@ -26,6 +27,9 @@ import { SupportChannelInput } from './update-settings.dto';
 
 /** PATCH chỉ chứa trường của tab thanh toán; thiếu trường nghĩa là giữ nguyên. */
 export class PatchPaymentSettingsDto {
+  @IsOptional() @IsObject({ message: K.paymentDiscountInvalid })
+  paymentDiscounts?: Record<string, number>;
+
   @IsOptional() @IsBoolean({ message: K.adminSettingsFlagInvalid }) mockEnabled?: boolean;
   @IsOptional() @IsBoolean({ message: K.adminSettingsFlagInvalid }) binancePayEnabled?: boolean;
   @IsOptional() @IsBoolean({ message: K.adminSettingsFlagInvalid }) binanceIdEnabled?: boolean;
