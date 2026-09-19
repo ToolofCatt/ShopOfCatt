@@ -33,7 +33,8 @@ async function historicSnapshot(db: PrismaClient) {
     db.user.findMany({ orderBy: { id: 'asc' } }),
     db.product.findMany({ orderBy: { id: 'asc' } }),
     db.productVariant.findMany({ orderBy: { id: 'asc' } }),
-    db.order.findMany({ orderBy: { id: 'asc' } }),
+    // Đọc đúng schema lịch sử, không kéo các cột của migration tương lai từ client mới.
+    db.$queryRaw`SELECT * FROM "Order" ORDER BY id ASC`,
     db.orderItem.findMany({ orderBy: { id: 'asc' } }),
     db.payment.findMany({ orderBy: { id: 'asc' } }),
     db.stockItem.findMany({ orderBy: { id: 'asc' } }),
@@ -57,12 +58,9 @@ async function historicalFixture(db: PrismaClient): Promise<void> {
   await db.product.create({ data: { id: 'history-product', name: 'Synthetic history', slug: 'synthetic-history', createdAt } });
   await db.productVariant.create({ data: { id: 'history-variant', productId: 'history-product', name: 'Default', price: '2.000001', priceAmount: '2', createdAt } });
   for (const status of ['PENDING', 'PAID', 'DELIVERED', 'CANCELLED', 'EXPIRED'] as const) {
-    await db.order.create({ data: {
-      id: `history-order-${status}`, code: `DH-HISTORY-${status}`, userId: 'history-buyer', status,
-      subtotalAmount: '2.000001', totalAmount: '2.000001', createdAt, expiresAt,
-      paidAt: status === 'PAID' || status === 'DELIVERED' ? paidAt : null,
-      telegramCallbackId: `historic-callback-${status}`,
-    } });
+    await db.$executeRaw`INSERT INTO "Order" (id, code, "userId", status, "subtotalAmount", "totalAmount", "createdAt", "expiresAt", "paidAt", "telegramCallbackId")
+      VALUES (${`history-order-${status}`}, ${`DH-HISTORY-${status}`}, 'history-buyer', ${status}::"OrderStatus", 2.000001, 2.000001,
+        ${createdAt}, ${expiresAt}, ${status === 'PAID' || status === 'DELIVERED' ? paidAt : null}, ${`historic-callback-${status}`})`;
     await db.orderItem.create({ data: { id: `history-item-${status}`, orderId: `history-order-${status}`, productId: 'history-product', variantId: 'history-variant', productName: 'Name at purchase', variantName: 'Variant at purchase', unitPrice: '2.000001', quantity: 1 } });
   }
   await db.payment.create({ data: { id: 'history-payment', orderId: 'history-order-DELIVERED', mode: 'BALANCE', merchantTradeNo: 'synthetic-historic-trade', amount: '2.000001', status: 'SUCCESS', createdAt } });
@@ -145,7 +143,7 @@ describe.skipIf(!baseUrl)('partner migration upgrade / isolated PostgreSQL', () 
     }
     await db.apiAccess.create({ data: { userId: 'access-only' } });
     await db.apiKey.create({ data: { ownerId: 'key-only', name: 'Synthetic metadata', prefix: 'synthetic', digest: '0'.repeat(64), scopes: ['orders:read'], expiresAt: new Date('2030-01-01T00:00:00Z') } });
-    await db.order.create({ data: { id: 'receipt-order', code: 'DH-RECEIPT-ONLY', userId: 'resource-owner', totalAmount: '1.000001' } });
+    await db.$executeRaw`INSERT INTO "Order" (id,code,"userId","totalAmount") VALUES ('receipt-order','DH-RECEIPT-ONLY','resource-owner',1.000001)`;
     await db.deposit.create({ data: { id: 'receipt-deposit', code: 'NAP-RECEIPT-ONLY', userId: 'resource-owner', amountUsdt: '1.000001', vndAmount: 26000, expiresAt: new Date('2030-01-01T00:00:00Z') } });
     await db.apiOperationReceipt.createMany({ data: [
       { ownerId: 'receipt-only', operation: 'orders.create', idempotencyKey: 'synthetic-order-request', requestHash: '1'.repeat(64), orderId: 'receipt-order' },
