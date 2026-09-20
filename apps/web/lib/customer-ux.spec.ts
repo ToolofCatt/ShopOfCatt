@@ -11,7 +11,7 @@ describe('customer navigation', () => {
   it('retains an internal product destination and query', () => {
     expect(safeCustomerNext('/products/demo?variant=one')).toBe('/products/demo?variant=one');
   });
-  it.each(['/orders', '/orders/order-1', '/checkout/order-1', '/account', '/account/password', '/login', '/legal/refund'])('keeps aftersales route %s available', (path) => {
+  it.each(['/delivery', '/orders', '/orders/order-1', '/checkout/order-1', '/account', '/account/password', '/login', '/legal/refund'])('keeps aftersales route %s available', (path) => {
     expect(isCustomerAfterSalesPath(path)).toBe(true);
   });
   it.each(['/', '/products/demo', '/mock-pay/order-1', '/orders-fake', '/accounting'])('blocks new shopping route %s during maintenance', (path) => {

@@ -14,6 +14,6 @@ export function safeCustomerNext(value: string | null): string {
 }
 
 export function isCustomerAfterSalesPath(pathname: string): boolean {
-  return pathname === '/docs/api' || pathname === '/login' || pathname === '/register' ||
+  return pathname === '/delivery' || pathname === '/docs/api' || pathname === '/login' || pathname === '/register' ||
     ['/orders', '/account', '/checkout', '/legal'].some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }

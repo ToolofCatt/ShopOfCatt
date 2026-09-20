@@ -402,6 +402,7 @@ export const TELEGRAM_OWNER_LOW_STOCK_MAX = 10_000;
 
 /** Một nút inline trong bản xem trước — text + callback y như bot gửi thật. */
 export interface TelegramPreviewButton {
+  copyText?: string;
   text: string;
   callbackData: string;
   url?: string;
@@ -409,6 +410,7 @@ export interface TelegramPreviewButton {
 
 /** Một tin bot đã dựng sẵn: text là HTML Telegram đã escape từ dữ liệu CSDL. */
 export interface TelegramMessagePreview {
+  download?: { name:string; text:string };
   text: string;
   keyboard: TelegramPreviewButton[][];
   /** Ảnh đi kèm tin (hiện là QR SePay); null/rỗng = tin chữ. */
@@ -624,6 +626,12 @@ export interface OrderDetailDto {
   paidAt: string | null;
   items: OrderItemDto[];
   payment: PaymentInfoDto | null;
+}
+
+/** Dữ liệu tối thiểu của link giao hàng chỉ đọc, không thông tin tài khoản/thanh toán. */
+export interface DeliveryViewDto {
+  code:string;
+  items:Array<{name:string;variant:string|null;lines:string[]}>;
 }
 
 export interface OrderSummaryDto {

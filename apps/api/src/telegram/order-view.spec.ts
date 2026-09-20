@@ -246,6 +246,19 @@ describe('renderPaymentInstructions', () => {
 });
 
 describe('renderOrderDelivered', () => {
+  it.each(['vi','en','zh'] as const)('offers exact clipboard text and TXT callback for short deliveries in %s', lang => {
+    const detail=order({status:'DELIVERED'});
+    detail.items[0].deliveredLines=['mail@example.test|pass','second|pass'];
+    const view=renderOrderDelivered(detail,lang);
+    expect(view.keyboard.flat()).toContainEqual(expect.objectContaining({copy_text:{text:'mail@example.test|pass\nsecond|pass'}}));
+    expect(view.keyboard.flat()).toContainEqual(expect.objectContaining({callback_data:'dt:DH-ABC123'}));
+  });
+  it('never truncates long credentials into copy buttons',()=>{
+    const detail=order({status:'DELIVERED'});detail.items[0].deliveredLines=['X'.repeat(257),'short|exact'];
+    const view=renderOrderDelivered(detail,'vi');
+    const buttons=view.keyboard.flat() as Array<{copy_text?:{text:string}}>;
+    expect(buttons.filter(b=>b.copy_text).map(b=>b.copy_text!.text)).toEqual(['short|exact']);
+  });
   it('splits documents above the transport byte limit without losing multibyte key content', () => {
     const key = '🔑'.repeat(2_600_001) + '\nEND-OF-KEY';
     const detail = order({ status: 'DELIVERED' });

@@ -332,17 +332,29 @@ export function renderOrderDelivered(order: OrderDetailDto, lang: BotLang): BotV
   const html = lines.join('\n');
   // Đo sau animate để giới hạn bảo thủ cả HTML; cắt chuỗi sẽ làm mất key/thẻ.
   const needsDocument = animateEmoji(html).length > 4096;
-  const document = [order.code, ...order.items.flatMap(item => [
-    '', `${item.productName}${item.variantName ? ` – ${item.variantName}` : ''} ×${item.quantity}`,
-    ...(item.deliveredLines ?? []),
-  ])].join('\n');
+  const credentials = order.items.flatMap(item => item.deliveredLines ?? []);
+  const document = credentials.join('\n');
+  const actions: TgInlineKeyboard = [];
+  // Telegram giới hạn copy_text 256 ký tự. Không cắt một key để vừa nút.
+  if (document.length > 0 && document.length <= 256) {
+    actions.push([{ text: dict.deliveryCopyAll, copy_text: { text: document } }]);
+  } else {
+    credentials.slice(0, 20).forEach((text, index) => {
+      if (text.length > 0 && text.length <= 256) actions.push([{ text: `${dict.deliveryCopyItem} ${index + 1}`, copy_text: { text } }]);
+    });
+  }
+  actions.push([{ text: dict.deliveryDownload, callback_data: encodeCallback({ kind: 'deliveryTxt', orderCode: order.code }) },
+    { text: dict.deliveryWeb, callback_data: encodeCallback({ kind: 'deliveryWeb', orderCode: order.code }) }]);
 
   return {
     text: needsDocument
       ? [`<b>${escapeHtml(dict.deliveredTitle(order.code))}</b>`, escapeHtml(dict.deliveredAsDocument), escapeHtml(dict.deliveredKeepSafe)].join('\n')
       : html,
-    ...(needsDocument ? { documents: deliveryDocuments(order.code, document) } : {}),
+    ...(needsDocument ? { documents: deliveryDocuments(order.code, [order.code, ...order.items.flatMap(item => [
+      '', `${item.productName}${item.variantName ? ` – ${item.variantName}` : ''} ×${item.quantity}`, ...(item.deliveredLines ?? []),
+    ])].join('\n')) } : {}),
     keyboard: [
+      ...actions,
       [
         { text: dict.btnMyOrders, callback_data: encodeCallback({ kind: 'orders' }) },
         {
@@ -355,7 +367,7 @@ export function renderOrderDelivered(order: OrderDetailDto, lang: BotLang): BotV
 }
 
 /** Transport document hiện giới hạn 10 MB; chia tại ranh giới UTF-8, không cắt key. */
-function deliveryDocuments(code: string, text: string): { name: string; text: string }[] {
+export function deliveryDocuments(code: string, text: string): { name: string; text: string }[] {
   const bytes = new TextEncoder().encode(text);
   const chunks: string[] = [];
   for (let start = 0; start < bytes.length;) {

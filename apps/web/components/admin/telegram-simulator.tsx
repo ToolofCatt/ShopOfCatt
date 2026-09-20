@@ -166,6 +166,12 @@ export function TelegramSimulator({
     if (!message || message.from !== 'bot' || message.kind !== 'screens') return;
 
     if (callbackData === 'membership:check') membershipPassed.current = true;
+    const download=message.data.screens[callbackData]?.download;
+    if(download){
+      const url=URL.createObjectURL(new Blob([download.text],{type:'text/plain;charset=utf-8'}));
+      const a=document.createElement('a');a.href=url;a.download=download.name;a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),1000);return;
+    }
 
     const language = /^lg:(vi|en|zh)$/.exec(callbackData);
     if (language) {
@@ -355,10 +361,10 @@ export function TelegramSimulator({
                           </a>
                         ) : (
                           <button
-                            key={button.callbackData}
+                            key={button.callbackData || button.text}
                             type="button"
                             title={button.text}
-                            onClick={() => onButton(message.id, button.callbackData)}
+                            onClick={() => button.copyText ? void navigator.clipboard.writeText(button.copyText).catch(() => setError(t.common.connectionError)) : onButton(message.id, button.callbackData)}
                             className="min-w-0 flex-1 truncate rounded-lg bg-white/10 px-3 py-1.5 text-center text-[12.5px] font-medium text-white/90 transition hover:bg-white/20 active:bg-white/25"
                           >
                             {button.text}

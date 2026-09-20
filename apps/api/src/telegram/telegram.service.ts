@@ -13,6 +13,7 @@ import { AnnouncementService } from '../announcement/announcement.service';
 import { BalanceService } from '../balance/balance.service';
 import { isMessageKey, K, parseMessage, translate } from '../i18n/messages';
 import { OrdersService } from '../orders/orders.service';
+import { DeliveryAccessService } from '../orders/delivery-access.service';
 import { PaymentsService } from '../payments/payments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductsService } from '../products/products.service';
@@ -41,6 +42,7 @@ import { DEPOSIT_MAX_VND, DEPOSIT_MIN_VND } from '../balance/balance.service';
 import {
   renderMethodChooser,
   renderOrderDelivered,
+  deliveryDocuments,
   renderOrderList,
   renderOrderView,
   renderPaymentInstructions,
@@ -192,6 +194,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly storefront: StorefrontService,
     @Optional() private readonly management?: TelegramAdminBotService,
+    @Optional() private readonly deliveryAccess?: DeliveryAccessService,
   ) {}
 
   onModuleInit(): void {
@@ -964,6 +967,23 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
 
     switch (parsed.kind) {
+      case 'deliveryTxt':
+      case 'deliveryWeb': {
+        const user=await this.requireUser(chatId);
+        if(user.lockedAt)throw new ForbiddenException(K.accountLocked);
+        const order=await this.orders.getOwnDetail(user.id,parsed.orderCode);
+        if(order.status!=='DELIVERED')throw new BadRequestException(K.orderNotFound);
+        await answer();
+        if(parsed.kind==='deliveryTxt') {
+          const text=order.items.flatMap(item=>item.deliveredLines??[]).join('\n');
+          for(const document of deliveryDocuments(order.code,text))await sendAdminDocument(token,chatId,document,stop);
+        } else {
+          if(!this.deliveryAccess)throw new ServiceUnavailableException(K.internalError);
+          const url=await this.deliveryAccess.createLink(user.id,order.code);
+          await this.sendHtml(token,chatId,escapeText(dict.deliveryLinkHint),[[{text:dict.deliveryWeb,url}]],stop);
+        }
+        return;
+      }
       case 'membershipCheck': {
         await answer();
         const user = await this.users.findByChat(chatId);

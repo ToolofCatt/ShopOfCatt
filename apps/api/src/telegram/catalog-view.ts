@@ -136,6 +136,8 @@ export type BotCallback =
   | { kind: 'mockConfirm'; orderCode: string }
   | { kind: 'orders' }
   | { kind: 'order'; orderCode: string }
+  | { kind: 'deliveryTxt'; orderCode: string }
+  | { kind: 'deliveryWeb'; orderCode: string }
   | { kind: 'account' }
   | { kind: 'depositMenu' }
   | { kind: 'depositAmount'; vnd: number }
@@ -198,6 +200,10 @@ export function encodeCallback(cb: BotCallback): string {
       return 'o';
     case 'order':
       return `v:${cb.orderCode}`;
+    case 'deliveryTxt':
+      return `dt:${cb.orderCode}`;
+    case 'deliveryWeb':
+      return `dv:${cb.orderCode}`;
     case 'account':
       return 'a';
     case 'depositMenu':
@@ -271,6 +277,9 @@ export function parseCallback(data: string | undefined): BotCallback | null {
     return { kind: 'mockConfirm', orderCode: m[1] };
   }
   if (data === 'o') return { kind: 'orders' };
+  if ((m = new RegExp(`^d([tv]):${ORDER_CODE_RE}$`).exec(data))) {
+    return { kind: m[1] === 't' ? 'deliveryTxt' : 'deliveryWeb', orderCode: m[2] };
+  }
   if ((m = new RegExp(`^v:${ORDER_CODE_RE}$`).exec(data))) {
     return { kind: 'order', orderCode: m[1] };
   }

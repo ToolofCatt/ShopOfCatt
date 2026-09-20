@@ -99,6 +99,7 @@ function toPreviewKeyboard(keyboard: TgInlineKeyboard) {
       text: button.text,
       callbackData: button.callback_data ?? '',
       ...(button.url ? { url: button.url } : {}),
+      ...(button.copy_text ? { copyText: button.copy_text.text } : {}),
     })),
   );
 }
@@ -484,6 +485,13 @@ export class TelegramAdminController {
           const order = previewOrder(product, variant, parsed.qty, code);
           dua(button.callbackData, renderMethodChooser(order, enabledMethods, lang, rates, 10));
           const delivered = previewDelivered(order);
+          screens[encodeCallback({kind:'deliveryTxt',orderCode:code})]={
+            text:botDict(lang).deliveryDownload,keyboard:[],
+            download:{name:code+'.txt',text:delivered.items.flatMap(item=>item.deliveredLines??[]).join('\n')},
+          };
+          dua(encodeCallback({kind:'deliveryWeb',orderCode:code}),{
+            text:botDict(lang).deliveryLinkHint,keyboard:[],
+          });
           dua(
             encodeCallback({ kind: 'payBalance', orderCode: code }),
             renderOrderDelivered(delivered, lang),

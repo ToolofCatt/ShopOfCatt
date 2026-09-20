@@ -1,5 +1,25 @@
 # Bot Telegram bán hàng — thiết kế và lộ trình
 
+## Nhận hàng: copy, TXT và xem trên web
+
+Tin giao hàng có nút copy tất cả nếu nội dung tối đa 256 ký tự. Với nhiều dữ
+liệu, bot hiện nút copy riêng cho từng món tối đa 256 ký tự (tối đa 20 nút);
+key dài không bị cắt, dùng **Tải .txt** hoặc **Xem trên web** để lấy đầy đủ.
+File tải bằng nút chỉ chứa nguyên văn các dòng đã giao, không thêm tiêu đề.
+Đơn quá dài vẫn tự gửi file theo cơ chế outbox hiện có.
+
+Hai callback đều kiểm khách sở hữu đơn, tài khoản không bị khóa và đơn đã giao.
+Tải lại không giữ kho/giao thêm lần nữa. Vào **Đơn của tôi** để mở đơn cũ với
+các nút mới; tin cũ đã gửi không tự đổi.
+
+**Xem trên web** cấp link riêng chỉ đọc một đơn, hạn 15 phút. Link không phải
+token đăng nhập, không dùng được với tài khoản/ví/admin. Token đặt trong fragment,
+web xóa khỏi thanh địa chỉ và chỉ gửi qua header `Authorization: Delivery ...`.
+API kiểm lại quyền, trả dữ liệu giao hàng tối thiểu, `Cache-Control: no-store`.
+Người cầm link có thể đọc hàng trong thời hạn; không chuyển tiếp link cho người khác.
+Hết hạn lấy link mới trong bot. Trang `/delivery` có copy/tải file, không cần
+tài khoản web và vẫn hoạt động khi cửa hàng tạm ngừng bán.
+
 ## Bắt buộc tham gia kênh
 
 Trong `/admin/telegram`, nhập ID kênh (ID rút gọn, `-100…` hoặc `@username`)

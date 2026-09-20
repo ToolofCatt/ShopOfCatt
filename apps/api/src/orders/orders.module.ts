@@ -9,18 +9,21 @@ import { DeliverySweeperService } from './delivery-sweeper.service';
 import { FulfillmentService } from './fulfillment.service';
 import { OrdersController } from './orders.controller';
 import { OrdersService } from './orders.service';
+import { DeliveryAccessService } from './delivery-access.service';
+import { DeliveryAccessController } from './delivery-access.controller';
 
 @Module({
   // WalletCreditModule: vòng đối soát crypto cộng ví mã nạp trong cùng tick
   // với đơn — module tí hon không import gì nên không tạo vòng với Balance.
   imports: [AuthModule, BinanceModule, SettingsModule, CouponsModule, WalletCreditModule],
-  controllers: [OrdersController],
+  controllers: [OrdersController, DeliveryAccessController],
   providers: [
     OrdersService,
+    DeliveryAccessService,
     FulfillmentService,
     CryptoReconcileService,
     DeliverySweeperService,
   ],
-  exports: [OrdersService, FulfillmentService],
+  exports: [OrdersService, FulfillmentService, DeliveryAccessService],
 })
 export class OrdersModule {}

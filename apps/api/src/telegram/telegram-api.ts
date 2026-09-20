@@ -44,8 +44,9 @@ export interface TgUpdate {
 }
 
 export type TgInlineKeyboardButton = { text: string } & (
-  | { callback_data: string; url?: never }
-  | { url: string; callback_data?: never }
+  | { callback_data: string; url?: never; copy_text?: never }
+  | { url: string; callback_data?: never; copy_text?: never }
+  | { copy_text: { text: string }; callback_data?: never; url?: never }
 );
 
 /** Mảng hàng nút — mỗi hàng một mảng nút. */

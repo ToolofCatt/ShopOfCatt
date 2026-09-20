@@ -13,7 +13,7 @@ type Internals = {
   notifySweep(): Promise<void>;
 };
 
-function fixture(options: { locked?: boolean; long?: boolean; failure?: number; documentFailure?: number; deposit?: boolean; initializing?: boolean } = {}) {
+function fixture(options: { locked?: boolean; long?: boolean; failure?: number; documentFailure?: number; deposit?: boolean; initializing?: boolean; foreignOrder?:boolean } = {}) {
   const user = { id: 'u1', code: 100001, telegramLangChosen: true, telegramLang: 'vi', telegramChatId: '100001', balance: 20, lockedAt: options.locked ? new Date() : null };
   const lines = options.long ? ['PREFIX|' + '<>&🔑'.repeat(1500) + '|SUFFIX', 'SECOND-KEY'] : ['TEST-KEY'];
   const detail: OrderDetailDto = {
@@ -41,7 +41,9 @@ function fixture(options: { locked?: boolean; long?: boolean; failure?: number; 
   }));
   const mutate = async () => { mutations++; throw new Error('MUTATION_REACHED'); };
   const users = { findByChat: async () => user, findOrCreate: async () => user };
-  const orders = { create: mutate, selectPayment: mutate, cancel: mutate, checkPayment: mutate, getOwnDetail: async () => detail };
+  const orders = { create: mutate, selectPayment: mutate, cancel: mutate, checkPayment: mutate, getOwnDetail: async (userId:string,code:string) => {
+    if(options.foreignOrder||userId!==user.id||code!==detail.code)throw new Error('not owned');return detail;
+  } };
   const payments = { confirmMock: mutate };
   const balance = {
     listDepositMethods: async () => ['crypto_bep20'], createDeposit: mutate, payOrderWithBalance: mutate,
@@ -66,7 +68,19 @@ function fixture(options: { locked?: boolean; long?: boolean; failure?: number; 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('locked customer callbacks', () => {
+  it.each([{foreignOrder:true},{initializing:true}])('does not download keys of a foreign or unpaid order: %j',async options=>{
+    const f=fixture(options);await f.service.handleCallback(TOKEN,f.callback({kind:'deliveryTxt',orderCode:'DH-FIXTURE'}),STOP);
+    expect(f.sent.some(s=>s.method==='sendDocument')).toBe(false);
+  });
+  it('TXT button delivers exact credentials and does not rerun fulfillment',async()=>{
+    const f=fixture();await f.service.handleCallback(TOKEN,f.callback({kind:'deliveryTxt',orderCode:'DH-FIXTURE'}),STOP);
+    const sent=f.sent.find(s=>s.method==='sendDocument');expect(sent).toBeDefined();
+    const blob=(sent!.body as FormData).get('document') as Blob;
+    expect(await blob.text()).toBe('TEST-KEY');expect(f.mutations()).toBe(0);expect(f.orderNotified()).toBe(false);
+  });
   const actions: BotCallback[] = [
+    { kind: 'deliveryTxt', orderCode: 'DH-FIXTURE' },
+    { kind: 'deliveryWeb', orderCode: 'DH-FIXTURE' },
     { kind: 'qty', variantId: 'v1', qty: 1 },
     { kind: 'method', orderCode: 'DH-FIXTURE', method: 'crypto_bep20' },
     { kind: 'check', orderCode: 'DH-FIXTURE' },

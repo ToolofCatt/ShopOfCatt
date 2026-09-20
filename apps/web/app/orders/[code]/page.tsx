@@ -192,7 +192,7 @@ function CopyLineButton({ text }: { text: string }) {
         'shrink-0 cursor-pointer rounded-md p-1.5 transition-all',
         copied
           ? 'text-emerald-600'
-          : 'text-neutral-400 hover:bg-neutral-200 hover:text-neutral-950 sm:opacity-0 sm:group-hover:opacity-100',
+          : 'text-neutral-600 hover:bg-neutral-200 hover:text-neutral-950 focus-visible:ring-2 focus-visible:ring-neutral-500',
       )}
     >
       {copied ? (
@@ -590,7 +590,7 @@ function OrderDetailContent({ code }: { code: string }) {
                         key={index}
                         className="group flex items-center justify-between gap-3 px-3 py-2"
                       >
-                        <span className="break-all font-mono text-sm">{line}</span>
+                        <span className="min-w-0 whitespace-pre-wrap break-all font-mono text-sm">{line}</span>
                         <CopyLineButton text={line} />
                       </div>
                     ))}
