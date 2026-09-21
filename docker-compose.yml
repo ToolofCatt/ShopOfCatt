@@ -55,6 +55,8 @@ services:
       JWT_SECRET: "${JWT_SECRET:?Thieu JWT_SECRET - hay tao file .env tu .env.docker.example}"
       WEB_URL: "${WEB_URL:-http://localhost:3000}"
       API_PUBLIC_URL: "${API_PUBLIC_URL:-http://localhost:3001}"
+      # Tùy chọn CONNECT proxy nội bộ dành riêng Telegram; rỗng = kết nối trực tiếp.
+      TELEGRAM_PROXY_URL: "${TELEGRAM_PROXY_URL:-}"
       STORE_BOOTSTRAP_NAME: "${NEXT_PUBLIC_SITE_NAME:-Digital Store}"
       BACKUP_HEARTBEAT_FILE: "/backup-status/.last-success.json"
       # Fail-closed: chỉ bật cổng giả lập khi ghi ĐÚNG "true".

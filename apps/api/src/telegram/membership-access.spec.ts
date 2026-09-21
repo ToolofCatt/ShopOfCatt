@@ -40,6 +40,14 @@ describe('membership validation and presentation', () => {
 });
 
 describe('membership API gate', () => {
+  it('starts both independent membership checks before either responds',async()=>{
+    const releases:Array<()=>void>=[];
+    const fetch=vi.fn((_url,init)=>new Promise<Response>(resolve=>releases.push(()=>resolve(ok({status:JSON.parse(init.body).user_id===123456?'administrator':'member'})))));
+    vi.stubGlobal('fetch',fetch);
+    const pending=checkChannelMembership(TOKEN,CONFIG,77,STOP);
+    await Promise.resolve();expect(fetch).toHaveBeenCalledTimes(2);
+    releases.forEach(release=>release());expect(await pending).toBe('allowed');
+  });
   it('disabled gate does not call Telegram', async () => {
     const fetch = vi.fn(); vi.stubGlobal('fetch',fetch);
     expect(await checkChannelMembership(TOKEN,{...CONFIG,membershipRequired:false},77,STOP)).toBe('allowed');
@@ -60,10 +68,11 @@ describe('membership API gate', () => {
   it.each(['left','member'])('fails closed when bot status is %s', async status => {
     const fetch=vi.fn(async()=>ok({status}));vi.stubGlobal('fetch',fetch);
     expect(await checkChannelMembership(TOKEN,CONFIG,77,STOP)).toBe('unavailable');
-    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
   it('fails closed on network or Telegram errors, without caching failure', async () => {
-    const fetch=vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(new Response(JSON.stringify({ok:false,error_code:403,description:'Forbidden'})))
+    const fetch=vi.fn().mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce(ok({status:'member'}))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ok:false,error_code:403,description:'Forbidden'}))).mockResolvedValueOnce(ok({status:'member'}))
       .mockResolvedValueOnce(ok({status:'administrator'})).mockResolvedValueOnce(ok({status:'member'}));
     vi.stubGlobal('fetch',fetch);
     expect(await checkChannelMembership(TOKEN,CONFIG,77,STOP)).toBe('unavailable');

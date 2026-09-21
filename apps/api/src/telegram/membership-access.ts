@@ -52,9 +52,12 @@ export async function checkChannelMembership(token: string, config: MembershipCo
     const chatId = normalizeChannelId(config.membershipChatId);
     if (!validJoinUrl(config.membershipJoinUrl) || !Number.isSafeInteger(userId) || userId <= 0) return 'unavailable';
     const botId = Number(token.split(':')[0]);
-    const bot = await tgCall<ChatMember>(token, 'getChatMember', { chat_id: chatId, user_id: botId }, 5_000, stop);
+    // Hai truy vấn độc lập chạy cùng lúc để không cộng dồn độ trễ mạng.
+    const [bot, member] = await Promise.all([
+      tgCall<ChatMember>(token, 'getChatMember', { chat_id: chatId, user_id: botId }, 5_000, stop),
+      tgCall<ChatMember>(token, 'getChatMember', { chat_id: chatId, user_id: userId }, 5_000, stop),
+    ]);
     if (!['creator', 'administrator'].includes(bot.status)) return 'unavailable';
-    const member = await tgCall<ChatMember>(token, 'getChatMember', { chat_id: chatId, user_id: userId }, 5_000, stop);
     return isChannelMember(member) ? 'allowed' : 'join';
   } catch {
     // Lỗi API/mạng không chứng minh đã tham gia; giữ chặn và cho khách thử lại.

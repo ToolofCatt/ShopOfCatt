@@ -8,6 +8,7 @@
  */
 
 const API_BASE = 'https://api.telegram.org';
+import { telegramFetch } from './telegram-network';
 
 /** Người gửi trong một update. */
 export interface TgUser {
@@ -100,7 +101,7 @@ export async function tgCall<T>(
   // app, một getUpdates đang treo 25 giây giữ event loop sống thêm chừng đó.
   const timeout = AbortSignal.timeout(timeoutMs);
   const signal = stopSignal ? AbortSignal.any([timeout, stopSignal]) : timeout;
-  const res = await fetch(`${API_BASE}/bot${token}/${method}`, {
+  const res = await telegramFetch(`${API_BASE}/bot${token}/${method}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload ?? {}),
@@ -188,7 +189,7 @@ export async function tgSendPhotoUpload(
   form.append('caption', caption);
   form.append('parse_mode', 'HTML');
   form.append('photo', new Blob([image], { type: 'image/png' }), 'qr.png');
-  const res = await fetch(`${API_BASE}/bot${token}/sendPhoto`, {
+  const res = await telegramFetch(`${API_BASE}/bot${token}/sendPhoto`, {
     method: 'POST',
     body: form,
     signal,

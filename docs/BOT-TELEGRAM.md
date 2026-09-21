@@ -1,5 +1,21 @@
 # Bot Telegram bán hàng — thiết kế và lộ trình
 
+## Kết nối Telegram chậm hoặc chập chờn
+
+Đo riêng đường truyền `api.telegram.org` trước khi giảm timeout hay cache quyền
+thành viên. `TELEGRAM_PROXY_URL` là tùy chọn CONNECT proxy dành riêng Telegram;
+không áp dụng cho Binance, thanh toán hay fetch toàn cục. TLS vẫn xác minh tên
+miền Telegram đầu cuối, proxy không đọc token/nội dung. Không retry POST gửi tin
+vì phản hồi thất lạc có thể khiến gửi trùng.
+
+`docker/telegram-relay.mjs` chỉ nhận CONNECT tới `api.telegram.org:443`, kết nối
+IPv6 ở máy chủ. Chỉ dùng khi đã đo được đường IPv6 tốt và bind vào IP bridge
+Docker nội bộ bằng `TELEGRAM_RELAY_BIND`, không public port. Chạy với network host,
+read-only, cap-drop ALL. Không dùng relay này trên VPS không có IPv6 hoạt động.
+Để quay về trực tiếp, xóa `TELEGRAM_PROXY_URL` và recreate riêng API.
+
+Kiểm tra quyền bot và khách chạy song song, vẫn không cache kết quả thành viên.
+
 ## Nhận hàng: copy, TXT và xem trên web
 
 Tin giao hàng có nút copy tất cả nếu nội dung tối đa 256 ký tự. Với nhiều dữ

@@ -1,6 +1,7 @@
 import { BadRequestException } from '@nestjs/common';
 import { tgCall, type TgMessage } from '../telegram/telegram-api';
 import { K } from '../i18n/messages';
+import { telegramFetch } from '../telegram/telegram-network';
 
 export async function readAdminDocument(
   token: string,
@@ -26,7 +27,7 @@ export async function readAdminDocument(
     file.file_path.includes('..')
   )
     throw new BadRequestException(K.adminStockContentInvalid);
-  const response = await fetch(
+  const response = await telegramFetch(
     `https://api.telegram.org/file/bot${token}/${file.file_path}`,
     {
       signal: AbortSignal.any([stop, AbortSignal.timeout(15000)]),
@@ -74,7 +75,7 @@ export async function sendAdminDocument(
     new Blob([file.text], { type: 'text/plain;charset=utf-8' }),
     file.name,
   );
-  const response = await fetch(
+  const response = await telegramFetch(
     `https://api.telegram.org/bot${token}/sendDocument`,
     {
       method: 'POST',
