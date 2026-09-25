@@ -24,6 +24,14 @@ Trong `/admin/mail`:
    Lọc theo mức giá vốn/giá bán có số lượng từng mức, loại mail, tồn, trạng thái và
    cách đặt giá. Enter lưu từng dòng, Esc bỏ bản nháp; lọc không làm mất bản nháp.
    Chọn nhiều dòng để áp dụng giá nguyên tử, tối đa200dịch vụ/lần và có xác nhận số dòng.
+   **Làm tròn giá VND** có lựa chọn tắt hoặc gần nhất1.000đ. Khi bật, giá theo hệ số
+   đổi sang VND rồi làm tròn; giá neo VND cũng làm tròn. Giá riêng USDT giữ nguyên.
+   900đ→1.000đ,1.400đ→1.000đ,1.500đ→2.000đ; giá dương tối thiểu1.000đ.
+   Đây là giá bán thật: catalog, nút thuê và debit dùng cùng giá đã làm tròn, không
+   chỉ sửa chữ hiển thị. Làm tròn đơn giá trước khi nhân số lượng. Đơn đã mua giữ snapshot.
+   Dữ liệu giá gốc không bị sửa; tắt làm tròn sẽ dùng lại giá gốc. Thiếu tỷ giá thì
+   không cho bật, nếu tỷ giá mất sau đó thì không nhận mua giá cần quy đổi. Migration
+   mặc định tắt; chỉ bật theo quyết định của chủ cửa hàng.
 3. Xác nhận đơn vị giá nguồn là USDT hoặc chấp nhận quy đổi USD theo tỷ lệ 1:1
    sang USDT trước khi bật mua. Không suy ra đơn vị tiền từ con số giá.
 4. **Đơn nhà cung cấp:** xem trạng thái, chi phí và mã nguồn; đối soát các đơn REVIEW.

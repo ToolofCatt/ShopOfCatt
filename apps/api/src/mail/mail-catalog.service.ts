@@ -19,14 +19,22 @@ export class MailCatalogService {
   async getSettings(): Promise<MailProviderSettingDto> {
     const s = await this.setting();
     return { tokenSet: !!s.token, tokenSuffix: s.token ? s.token.slice(-4) : '', enabled: s.enabled, currencyConfirmed: s.currencyConfirmed,
-      multiplier: s.multiplier.toString(), maxOrderCost: s.maxOrderCost.toString(), maxDailyCost: s.maxDailyCost.toString(), syncedAt: s.syncedAt?.toISOString() ?? null, lastSyncFailed: s.lastSyncFailed };
+      multiplier: s.multiplier.toString(), vndRounding: s.vndRounding as 0 | 1000, maxOrderCost: s.maxOrderCost.toString(), maxDailyCost: s.maxDailyCost.toString(), syncedAt: s.syncedAt?.toISOString() ?? null, lastSyncFailed: s.lastSyncFailed };
   }
   async updateSettings(input: MailSettingsInput) {
+    // DTO transform tạo field undefined cho phần bị bỏ qua; PATCH không được
+    // dùng chúng ghi đè cấu hình hiện có khi chỉ đổi công tắc làm tròn.
+    input = Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)) as MailSettingsInput;
+    if (Object.values(input).some(value => value === null) || (input.vndRounding !== undefined && ![0, 1000].includes(input.vndRounding))) throw new BadRequestException(K.mailInvalid);
     const previous = await this.setting();
     const token = input.token?.trim() ?? previous.token;
     const next = { ...previous, ...input, token };
     if (new Prisma.Decimal(next.multiplier).lessThan(1) || new Prisma.Decimal(next.maxOrderCost).lessThanOrEqualTo(0) || new Prisma.Decimal(next.maxDailyCost).lessThanOrEqualTo(0)) throw new BadRequestException(K.mailInvalid);
     if (next.enabled && (!token || !next.currencyConfirmed)) throw new BadRequestException(K.mailNotReady);
+    if (input.vndRounding === 1000) {
+      const rate = await this.prisma.storeSetting.findUnique({ where: { id: 'main' }, select: { vndPerUsdt: true } });
+      if (!rate?.vndPerUsdt.gt(0)) throw new BadRequestException(K.mailRateRequired);
+    }
     // Token mới phải đọc được catalog trước khi thay; lỗi không phá kết nối đang dùng.
     if (input.token && token !== previous.token) await this.client.list(token, 'gmail-api');
     await this.prisma.mailProviderSetting.update({ where: { id: 1 }, data: { ...input, ...(input.token !== undefined ? { token } : {}) } });

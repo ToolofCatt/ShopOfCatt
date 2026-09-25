@@ -22,6 +22,7 @@ export interface MailProviderSettingDto {
   enabled: boolean;
   currencyConfirmed: boolean;
   multiplier: string;
+  vndRounding: 0 | 1000;
   maxOrderCost: string;
   maxDailyCost: string;
   syncedAt: string | null;

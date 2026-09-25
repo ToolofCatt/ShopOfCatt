@@ -1,4 +1,12 @@
 export const mailUxVi = {
+  roundingTitle: "Làm tròn giá VND",
+  roundingScope: "Áp dụng giá theo hệ số và giá neo VND. Giá riêng USDT không đổi. Giá hiển thị và tiền trừ ví cùng dùng giá đã làm tròn.",
+  roundingOff: "Không làm tròn",
+  roundingNearest: "Gần nhất 1.000 ₫",
+  roundingExamples: "900 → 1.000 ₫ · 1.400 → 1.000 ₫ · 1.500 → 2.000 ₫. Giá dương tối thiểu 1.000 ₫.",
+  roundingOffHint: "Giữ giá gốc đã nhập và giá tính theo hệ số. Không thay đổi các đơn đã mua.",
+  effectivePrice: "Giá đang bán",
+
   invalidPrice: "Nhập giá hợp lệ; VND có thể nhập 3k hoặc 3000.",
   services: "dịch vụ",
   priceLevels: "mức giá",
@@ -47,6 +55,14 @@ export const mailUxVi = {
   priceHint: 'Giá và tổng tiền được kiểm lại trên máy chủ.', gmailOnly: 'Gmail', loading: 'Đang tải…', service: 'Dịch vụ', settings: 'Cấu hình', requestCode: 'Mã yêu cầu',
 };
 export const mailUxEn: Record<keyof typeof mailUxVi,string> = {
+  roundingTitle: "Round VND prices",
+  roundingScope: "Applies to multiplier pricing and VND anchors. Explicit USDT prices stay unchanged. Display and wallet charges use the same rounded price.",
+  roundingOff: "No rounding",
+  roundingNearest: "Nearest 1,000 VND",
+  roundingExamples: "900 → 1,000 VND · 1,400 → 1,000 VND · 1,500 → 2,000 VND. Positive prices have a 1,000 VND minimum.",
+  roundingOffHint: "Keep original entered prices and multiplier pricing. Existing purchases remain unchanged.",
+  effectivePrice: "Current selling price",
+
   invalidPrice: "Enter a valid price; VND accepts 3k or 3000.",
   services: "services",
   priceLevels: "price levels",
@@ -79,6 +95,14 @@ export const mailUxEn: Record<keyof typeof mailUxVi,string> = {
   title:'Your mailboxes',rentTitle:'Get a mailbox',nav:'Mail',products:'Digital products',serviceSearch:'Search services…',search:'Search email, service or code…',all:'All',waiting:'Waiting',received:'Code received',closed:'Closed',newCode:'New code received',address:'Email address',codes:'Verification codes',status:'Status',rent:'Get mailbox',renting:'Getting mailbox…',quantity:'Quantity',remaining:'Available',perMail:'/ mailbox',total:'Total',balance:'Balance',login:'Sign in to get a mailbox',export:'Export .txt',copyMail:'Copy email address',copyCode:'Copy code',copied:'Copied.',copyFailed:'Could not copy. Export .txt instead.',oldCodes:'Previous codes',oldSearch:'Find a previous code…',pin:'Pin code list',unpin:'Unpin code list',recent:'Most recent',updateCodes:'New codes · Update',empty:'No mailboxes yet',emptyHint:'Choose a service to get started.',noResult:'No matching mailboxes.',noCodes:'Waiting for a code',noOldCodes:'No matching codes.',unavailable:'Mail is being configured. Purchases will open when the connection is ready.',stale:'Stock could not be refreshed. Showing the last available data.',retry:'Retry',connectionError:'Could not reach the server. Existing data is preserved.',lowBalance:'Your balance is too low for this quantity.',account:'Account',confirmTitle:'Confirm mailbox purchase',confirmHint:'The total will be charged to your balance. Purchases cannot be cancelled after delivery.',cancel:'Back',pending:'Request received. Getting your mailbox.',review:'This request needs review. Contact support with the request ID below.',refunded:'Refunded to balance',close:'Stop receiving codes',closeTitle:'Stop receiving codes for this mailbox?',closeHint:'Previously received codes stay available. This does not cancel or refund the purchase.',readFailed:'Codes could not be read. We will retry.',readUnsupported:'Reading codes is not available for this mailbox yet. Please contact support.',loadMore:'Load more mailboxes',adminTitle:'Mail services',catalog:'Catalog & prices',connection:'Connection',orders:'Provider orders',token:'Connection token',tokenHint:'Leave blank to keep the current token.',enabled:'Enable mailbox purchases',currency:'Source prices confirmed as USDT or USD converted 1:1 to USDT',multiplier:'Price multiplier',maxOrder:'Cost limit per order (USDT)',maxDaily:'Daily cost limit (USDT)',save:'Save',saved:'Saved',sync:'Sync catalog',syncTime:'Last sync',never:'Not synced',cost:'Cost',salePrice:'Sale price',stock:'Provider stock',active:'Enabled',automatic:'Use multiplier',fixed:'Fixed price',providerOrder:'Provider order ID',customer:'Customer',refund:'Refund balance',refundReason:'Reason and reconciliation evidence',refundConfirm:'I confirmed the provider has not delivered and no purchase outcome remains uncertain.',refundedNotice:'Balance refunded.',superadminOnly:'Only the store owner may change the connection, enable purchasing or refund.',setupHint:'Save a token, sync, confirm the currency, then enable purchases. Timed-out purchases are never retried automatically.',priceHint:'Prices and totals are verified on the server.',gmailOnly:'Gmail',loading:'Loading…',service:'Service',settings:'Settings',requestCode:'Request ID',
 };
 export const mailUxZh: Record<keyof typeof mailUxVi,string> = {
+  roundingTitle: "越南盾价格取整",
+  roundingScope: "适用于按倍数定价和越南盾锚定价格。单独设置的USDT价格不变。展示及余额扣款采用同一取整价格。",
+  roundingOff: "不取整",
+  roundingNearest: "取整至最接近的1,000越南盾",
+  roundingExamples: "900 → 1,000越南盾 · 1,400 → 1,000越南盾 · 1,500 → 2,000越南盾。正价格最低1,000越南盾。",
+  roundingOffHint: "保留原始输入价格及倍数定价，不影响已购买订单。",
+  effectivePrice: "当前售价",
+
   invalidPrice: "请输入有效价格；越南盾可输入3k或3000。",
   services: "项服务",
   priceLevels: "种价格",

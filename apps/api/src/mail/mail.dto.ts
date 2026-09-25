@@ -6,6 +6,7 @@ export class MailSettingsInput {
   @IsOptional() @IsBoolean() enabled?: boolean;
   @IsOptional() @IsBoolean() currencyConfirmed?: boolean;
   @IsOptional() @Matches(/^\d{1,3}(\.\d{1,4})?$/) multiplier?: string;
+  @IsOptional() @IsIn([0, 1000]) vndRounding?: 0 | 1000;
   @IsOptional() @Matches(/^\d{1,5}(\.\d{1,6})?$/) maxOrderCost?: string;
   @IsOptional() @Matches(/^\d{1,6}(\.\d{1,6})?$/) maxDailyCost?: string;
 }

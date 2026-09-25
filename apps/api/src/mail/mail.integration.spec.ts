@@ -8,6 +8,7 @@ import { MailPurchaseService } from './mail-purchase.service';
 import { MailInboxService } from './mail-inbox.service';
 import { FiveMailClient } from './fivemail.client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailSettingsInput } from './mail.dto';
 
 const url = new URL(process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5433/webcatt');
 const database = 'webcatt_mail_test';
@@ -34,7 +35,7 @@ beforeEach(async () => {
   const user = await db.user.create({ data: { code: 80000001, email: 'buyer@example.test', passwordHash: 'fixture', balance: 1 } }); userId = user.id;
   otherId = (await db.user.create({ data: { code: 80000002, email: 'other@example.test', passwordHash: 'fixture', role: 'SUPERADMIN' } })).id;
   await db.mailProviderSetting.upsert({ where: { id: 1 }, create: { id: 1 }, update: {} });
-  await db.mailProviderSetting.update({ where: { id: 1 }, data: { token: 'fixture', enabled: true, currencyConfirmed: true, multiplier: 2, maxOrderCost: 5, maxDailyCost: 50 } });
+  await db.mailProviderSetting.update({ where: { id: 1 }, data: { token: 'fixture', enabled: true, currencyConfirmed: true, multiplier: 2, vndRounding: 0, maxOrderCost: 5, maxDailyCost: 50 } });
   await db.storeSetting.upsert({ where: { id: 'main' }, create: { id: 'main', vndPerUsdt: 26000 }, update: { vndPerUsdt: 26000 } });
   await db.storeSetup.upsert({ where: { id: 'main' }, create: { id: 'main', maintenanceMode: false, publishedAt: new Date() }, update: { maintenanceMode: false, publishedAt: new Date() } });
   publicId = (await db.mailOffer.create({ data: { code: 'g_api_test', name: 'Test Mail', category: 'gmail-api', cost: '0.033', stock: 20, syncedAt: new Date() } })).publicId;
@@ -46,6 +47,27 @@ function testDb(name: string, body: () => Promise<void>) { it(name, async ctx =>
 const input = () => ({ requestId: randomUUID(), offerCode: publicId, quantity: 2, expectedUnitPrice: '0.066' });
 
 describe('mail transactions on isolated PostgreSQL', () => {
+  testDb('rounding setting uses one quote for catalog, debit and immutable order; toggle restores original price', async () => {
+    await db.mailOffer.update({ where: { code: 'g_api_test' }, data: { cost: '0.02' } });
+    provider.info.mockResolvedValue({ code: 'g_api_test', name: 'Test Mail', price: '0.02', stock: 20 });
+    await catalog.updateSettings(Object.assign(new MailSettingsInput(), { vndRounding: 1000 }));
+    const quote = (await catalog.catalog()).offers[0];
+    expect(quote.priceCurrency).toBe('VND'); expect(quote.priceAmount).toBe('1000'); expect(quote.price).toBe('0.038461');
+    await expect(purchases.rent(userId, { ...input(), expectedUnitPrice: '0.04' })).rejects.toThrow('mail.price_changed');
+    await purchases.rent(userId, { ...input(), expectedUnitPrice: quote.price });
+    const order = await db.mailPurchase.findFirstOrThrow(); expect(order.priceAmount?.toString()).toBe('1000'); expect(order.total.toString()).toBe('0.076922');
+    expect((await db.balanceEntry.findFirstOrThrow()).amount.toString()).toBe('-0.076922');
+    await catalog.updateSettings({ vndRounding: 0 });
+    expect((await catalog.catalog()).offers[0].price).toBe('0.04');
+    expect((await db.mailPurchase.findUniqueOrThrow({ where: { id: order.id } })).priceAmount?.toString()).toBe('1000');
+    expect((await catalog.getSettings()).enabled).toBe(true);
+  });
+  testDb('rounding activation rejects missing rate and invalid steps without changing configuration', async () => {
+    await db.storeSetting.update({ where: { id: 'main' }, data: { vndPerUsdt: 0 } });
+    await expect(catalog.updateSettings({ vndRounding: 1000 })).rejects.toThrow('mail.rate_required');
+    await expect(catalog.updateSettings({ vndRounding: 500 as 1000 })).rejects.toThrow('mail.invalid');
+    expect((await catalog.getSettings()).vndRounding).toBe(0);
+  });
   testDb('VND3000 stays anchored after rate changes and purchase snapshots never move', async () => {
     await catalog.updateOffer('g_api_test', { useMultiplier: false, saleCurrency: 'VND', saleAmount: '3000' });
     const first = (await catalog.catalog()).offers[0];
