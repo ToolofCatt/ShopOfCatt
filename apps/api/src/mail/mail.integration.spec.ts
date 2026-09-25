@@ -14,7 +14,7 @@ const database = 'webcatt_mail_test';
 function client(name: string) { const u = new URL(url); u.pathname = '/'+name; return new PrismaClient({ datasources: { db: { url: u.toString() } } }); }
 let db: PrismaClient, reachable = false, catalog: MailCatalogService, purchases: MailPurchaseService, inbox: MailInboxService;
 const provider = { info: vi.fn(), buy: vi.fn(), list: vi.fn() };
-let userId: string, otherId: string;
+let userId: string, otherId: string, publicId: string;
 beforeAll(async () => {
   const admin = client('postgres');
   try { await admin.$queryRaw`SELECT 1`; reachable = true; await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`); await admin.$executeRawUnsafe(`CREATE DATABASE "${database}"`); } catch { return; } finally { await admin.$disconnect(); }
@@ -35,16 +35,59 @@ beforeEach(async () => {
   otherId = (await db.user.create({ data: { code: 80000002, email: 'other@example.test', passwordHash: 'fixture', role: 'SUPERADMIN' } })).id;
   await db.mailProviderSetting.upsert({ where: { id: 1 }, create: { id: 1 }, update: {} });
   await db.mailProviderSetting.update({ where: { id: 1 }, data: { token: 'fixture', enabled: true, currencyConfirmed: true, multiplier: 2, maxOrderCost: 5, maxDailyCost: 50 } });
+  await db.storeSetting.upsert({ where: { id: 'main' }, create: { id: 'main', vndPerUsdt: 26000 }, update: { vndPerUsdt: 26000 } });
   await db.storeSetup.upsert({ where: { id: 'main' }, create: { id: 'main', maintenanceMode: false, publishedAt: new Date() }, update: { maintenanceMode: false, publishedAt: new Date() } });
-  await db.mailOffer.create({ data: { code: 'g_api_test', name: 'Test Mail', category: 'gmail-api', cost: '0.033', stock: 20, syncedAt: new Date() } });
+  publicId = (await db.mailOffer.create({ data: { code: 'g_api_test', name: 'Test Mail', category: 'gmail-api', cost: '0.033', stock: 20, syncedAt: new Date() } })).publicId;
   provider.info.mockReset().mockResolvedValue({ code: 'g_api_test', name: 'Test Mail', price: '0.033', stock: 20 });
   provider.buy.mockReset().mockImplementation(async (_token: string, code: string, count: number) => ({ orderNo: 'S'+randomUUID(), productCode: code, totalPrice: String(count*0.033), lines: Array.from({ length: count }, () => `${randomUUID()}@example.test----https://gapi.mailsapi.com/api/get-code?uid=${randomUUID()}`) }));
 });
 afterAll(async () => { if (!db) return; await db.$disconnect(); const admin = client('postgres'); try { await admin.$executeRawUnsafe(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`); } finally { await admin.$disconnect(); } });
 function testDb(name: string, body: () => Promise<void>) { it(name, async ctx => { if (!reachable) { ctx.skip(); return; } await body(); }); }
-const input = () => ({ requestId: randomUUID(), offerCode: 'g_api_test', quantity: 2, expectedUnitPrice: '0.066' });
+const input = () => ({ requestId: randomUUID(), offerCode: publicId, quantity: 2, expectedUnitPrice: '0.066' });
 
 describe('mail transactions on isolated PostgreSQL', () => {
+  testDb('VND3000 stays anchored after rate changes and purchase snapshots never move', async () => {
+    await catalog.updateOffer('g_api_test', { useMultiplier: false, saleCurrency: 'VND', saleAmount: '3000' });
+    const first = (await catalog.catalog()).offers[0];
+    expect(first.priceCurrency).toBe('VND'); expect(first.priceAmount).toBe('3000'); expect(first.price).toBe('0.115384');
+    expect(first.code).toBe(publicId); expect(JSON.stringify(first)).not.toContain('g_api_');
+    await purchases.rent(userId, { ...input(), expectedUnitPrice: first.price });
+    const order = await db.mailPurchase.findFirstOrThrow();
+    expect(order.priceAmount?.toString()).toBe('3000'); expect(order.unitPrice.toString()).toBe('0.115384');
+    await db.storeSetting.update({ where: { id: 'main' }, data: { vndPerUsdt: 25000 } });
+    const next = (await catalog.catalog()).offers[0]; expect(next.price).toBe('0.12'); expect(next.priceAmount).toBe('3000');
+    expect((await db.mailPurchase.findUniqueOrThrow({ where: { id: order.id } })).total.toString()).toBe('0.230768');
+    expect((await inbox.list(userId)).mailboxes[0].priceAmount).toBe('3000');
+    await catalog.updateOffer('g_api_test', { useMultiplier: false, saleCurrency: 'USDT', saleAmount: '0.15' });
+    expect((await catalog.catalog()).offers[0].price).toBe('0.15');
+    await catalog.updateOffer('g_api_test', { useMultiplier: true });
+    expect((await catalog.catalog()).offers[0].price).toBe('0.066');
+  });
+  testDb('bulk update is atomic, rate/amount validated, and sync preserves anchored settings', async () => {
+    await expect(catalog.updateOffers(['g_api_test', 'missing'], { saleCurrency: 'VND', saleAmount: '3000' })).rejects.toThrow();
+    expect((await db.mailOffer.findUniqueOrThrow({ where: { code: 'g_api_test' } })).saleAmount).toBeNull();
+    await expect(catalog.updateOffers(['g_api_test'], { saleCurrency: 'VND', saleAmount: '3.5' })).rejects.toThrow();
+    await db.storeSetting.update({ where: { id: 'main' }, data: { vndPerUsdt: 0 } });
+    await expect(catalog.updateOffer('g_api_test', { saleCurrency: 'VND', saleAmount: '3000' })).rejects.toThrow('mail.rate_required');
+    await db.storeSetting.update({ where: { id: 'main' }, data: { vndPerUsdt: 26000 } });
+    await db.mailOffer.create({ data: { code: 'g_api_other', name: 'Other', category: 'gmail-api', cost: '.02', stock: 10, syncedAt: new Date() } });
+    await catalog.updateOffers(['g_api_test', 'g_api_other'], { saleCurrency: 'VND', saleAmount: '3000' });
+    expect(await db.mailOffer.count({ where: { saleCurrency: 'VND', saleAmount: 3000 } })).toBe(2);
+    provider.list.mockImplementation(async (_token: string, category: string) => category === 'gmail-api' ? [{ code: 'g_api_test', name: 'Test Mail', price: '0.034', stock: 20 }] : []);
+    await catalog.refresh(true);
+    expect((await db.mailOffer.findUniqueOrThrow({ where: { code: 'g_api_test' } })).saleAmount?.toString()).toBe('3000');
+  });
+  testDb('catalog/workspace/TXT hide upstream identity and reject raw provider offer codes', async () => {
+    await db.mailOffer.update({ where: { code: 'g_api_test' }, data: { name: 'ChatGPT | 5Mail.io' } });
+    const publicData = await catalog.catalog();
+    expect(publicData.offers[0].name).toBe('ChatGPT'); expect(publicData.offers[0].code).toBe(publicId);
+    await expect(purchases.rent(userId, { ...input(), offerCode: 'g_api_test' })).rejects.toThrow('mail.unavailable');
+    await purchases.rent(userId, input());
+    const customerData = JSON.stringify(await inbox.list(userId));
+    const exported = await inbox.export(userId);
+    for (const secret of ['5mail', 'mailsapi', 'g_api_', 'https://', 'uid=']) { expect(customerData.toLowerCase()).not.toContain(secret); expect(exported.toLowerCase()).not.toContain(secret); }
+    expect((await catalog.catalog(true)).offers[0].code).toBe('g_api_test');
+  });
   testDb('catalog sync and purchase share Setting-to-Offer lock order without losing admin overrides', async () => {
     provider.list.mockImplementation(async (_token: string, category: string) => category === 'gmail-api' ? [{ code: 'g_api_test', name: 'Test Mail', price: '0.033', stock: 20 }] : []);
     await db.mailOffer.update({ where: { code: 'g_api_test' }, data: { salePrice: '0.07' } });

@@ -5,29 +5,34 @@ import { PrismaService } from '../prisma/prisma.service';
 import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/financial-lock';
 import { K } from '../i18n/messages';
 import { FiveMailClient, type FiveMailPurchase } from './fivemail.client';
-import { MailCatalogService, mailSalePrice } from './mail-catalog.service';
+import { MailCatalogService } from './mail-catalog.service';
 import { RentMailInput } from './mail.dto';
 import { parseMailDelivery } from './mail-delivery';
+import { publicMailName } from './mail-public';
+import { mailPriceQuote } from './mail-price';
 
 @Injectable()
 export class MailPurchaseService {
   constructor(private readonly prisma: PrismaService, private readonly catalog: MailCatalogService, private readonly client: FiveMailClient) {}
 
   async rent(userId: string, input: RentMailInput) {
+    const publicOffer = await this.prisma.mailOffer.findUnique({ where: { publicId: input.offerCode }, select: { code: true } });
+    if (!publicOffer) throw new BadRequestException(K.mailUnavailable);
+    const providerCode = publicOffer.code;
     const previous = await this.prisma.mailPurchase.findUnique({ where: { userId_requestId: { userId, requestId: input.requestId } } });
     if (previous) {
-      if (previous.offerCode !== input.offerCode || previous.quantity !== input.quantity) throw new ConflictException(K.mailRequestConflict);
+      if (previous.offerCode !== providerCode || previous.quantity !== input.quantity) throw new ConflictException(K.mailRequestConflict);
       return { id: previous.id };
     }
     const settings = await this.catalog.setting();
     if (!settings.enabled || !settings.currencyConfirmed || !settings.token) throw new ServiceUnavailableException(K.mailNotReady);
-    const live = await this.client.info(settings.token, input.offerCode);
+    const live = await this.client.info(settings.token, providerCode);
     const id = randomUUID();
     const claim = await this.prisma.$transaction(async tx => {
       await lockFinancialArbitration(tx);
       const replay = await tx.mailPurchase.findUnique({ where: { userId_requestId: { userId, requestId: input.requestId } } });
       if (replay) {
-        if (replay.offerCode !== input.offerCode || replay.quantity !== input.quantity) throw new ConflictException(K.mailRequestConflict);
+        if (replay.offerCode !== providerCode || replay.quantity !== input.quantity) throw new ConflictException(K.mailRequestConflict);
         return { id: replay.id, send: false };
       }
       if (await tx.mailPurchase.findFirst({ where: { userId, status: { in: ['REQUESTING', 'REVIEW'] } }, select: { id: true } })) throw new ConflictException(K.mailRequestConflict);
@@ -35,11 +40,14 @@ export class MailPurchaseService {
       const s = await tx.mailProviderSetting.findUniqueOrThrow({ where: { id: 1 } });
       const setup = await tx.storeSetup.findUnique({ where: { id: 'main' } });
       if (!s.enabled || !s.currencyConfirmed || s.token !== settings.token || !setup || setup.maintenanceMode || !setup.publishedAt) throw new ServiceUnavailableException(K.mailNotReady);
-      await tx.$queryRaw`SELECT code FROM "MailOffer" WHERE code = ${input.offerCode} FOR UPDATE`;
-      const offer = await tx.mailOffer.findUnique({ where: { code: input.offerCode } });
+      await tx.$queryRaw`SELECT code FROM "MailOffer" WHERE code = ${providerCode} FOR UPDATE`;
+      const offer = await tx.mailOffer.findUnique({ where: { code: providerCode } });
       if (!offer?.active || offer.category !== 'gmail-api') throw new BadRequestException(K.mailUnavailable);
       const cost = new Prisma.Decimal(live.price);
-      const price = mailSalePrice({ cost, salePrice: offer.salePrice }, s);
+      const rates = await tx.storeSetting.findUnique({ where: { id: 'main' }, select: { vndPerUsdt: true } });
+      const quote = mailPriceQuote({ ...offer, cost }, s, rates?.vndPerUsdt ?? 0);
+      if (!quote.ready) throw new BadRequestException(K.mailRateRequired);
+      const price = quote.price;
       if (price.lessThanOrEqualTo(0) || !price.equals(input.expectedUnitPrice) || price.lessThan(cost)) throw new ConflictException(K.mailPriceChanged);
       const total = price.mul(input.quantity), expectedCost = cost.mul(input.quantity);
       const reserved = await tx.mailPurchase.aggregate({ where: { offerCode: offer.code, status: 'REQUESTING' }, _sum: { quantity: true } });
@@ -52,7 +60,7 @@ export class MailPurchaseService {
       if (user.lockedAt) throw new BadRequestException(K.accountLocked);
       if (user.balance.lessThan(total)) throw new BadRequestException(K.balanceInsufficient);
       const balanceAfter = user.balance.sub(total);
-      await tx.mailPurchase.create({ data: { id, userId, requestId: input.requestId, offerCode: offer.code, serviceName: offer.name, quantity: input.quantity, unitPrice: price, total, expectedCost } });
+      await tx.mailPurchase.create({ data: { id, userId, requestId: input.requestId, offerCode: offer.code, serviceName: publicMailName(offer.name), quantity: input.quantity, unitPrice: price, priceCurrency: quote.currency, priceAmount: quote.amount, total, expectedCost } });
       await tx.user.update({ where: { id: userId }, data: { balance: balanceAfter } });
       await tx.balanceEntry.create({ data: { userId, amount: total.neg(), balanceAfter, reason: 'mail_purchase', refCode: id } });
       return { id, send: true };
@@ -60,7 +68,7 @@ export class MailPurchaseService {
     if (!claim.send) return { id: claim.id };
     // REQUESTING đã commit trước I/O. Mất phản hồi/restart không được tạo request buy lần2.
     try {
-      const receipt = await this.client.buy(settings.token, input.offerCode, input.quantity);
+      const receipt = await this.client.buy(settings.token, providerCode, input.quantity);
       await this.deliver(id, receipt);
     } catch {
       await this.prisma.mailPurchase.updateMany({ where: { id, status: 'REQUESTING' }, data: { status: 'REVIEW' } });

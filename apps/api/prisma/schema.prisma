@@ -116,6 +116,8 @@ model MailProviderSetting {
 
 model MailOffer {
   code      String         @id
+  /// Mã public ngẫu nhiên, không lộ mã hàng hoặc danh tính nhà cung cấp.
+  publicId  String         @unique @default(uuid())
   name      String
   category  String
   cost      Decimal        @db.Decimal(18, 6)
@@ -123,6 +125,8 @@ model MailOffer {
   active    Boolean        @default(true)
   /// null dùng hệ số chung, giá cố định không bị đồng bộ catalog ghi đè.
   salePrice Decimal?       @db.Decimal(18, 6)
+  saleCurrency String     @default("USDT")
+  saleAmount Decimal?     @db.Decimal(18, 6)
   syncedAt  DateTime
   purchases MailPurchase[]
 
@@ -147,6 +151,8 @@ model MailPurchase {
   serviceName     String
   quantity        Int
   unitPrice       Decimal            @db.Decimal(18, 6)
+  priceCurrency   String             @default("USDT")
+  priceAmount     Decimal?           @db.Decimal(18, 6)
   total           Decimal            @db.Decimal(18, 6)
   expectedCost    Decimal            @db.Decimal(18, 6)
   actualCost      Decimal?           @db.Decimal(18, 6)

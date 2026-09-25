@@ -3,6 +3,7 @@ import type { MailWorkspaceDto } from '@webcatt/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { K } from '../i18n/messages';
 import { parseMailCodes } from './mail-delivery';
+import { customerMailExport, publicMailName } from './mail-public';
 
 @Injectable()
 export class MailInboxService {
@@ -12,12 +13,12 @@ export class MailInboxService {
     const [user, rows, purchases] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { balance: true } }),
       this.prisma.mailbox.findMany({ where: { userId, ...(cursor ? { id: { lt: cursor } } : {}) }, orderBy: { id: 'desc' }, take: 101, include: { purchase: true, codes: { orderBy: { receivedAt: 'desc' } } } }),
-      this.prisma.mailPurchase.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100 }),
+      this.prisma.mailPurchase.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 100, include: { offer: { select: { publicId: true } } } }),
     ]);
     const visible = rows.slice(0, 100);
     return { balance: user.balance.toString(), nextCursor: rows.length > 100 ? visible.at(-1)!.id : null,
-      purchases: purchases.map(p => ({ id: p.id, offerCode: p.offerCode, serviceName: p.serviceName, quantity: p.quantity, total: p.total.toString(), status: p.status, createdAt: p.createdAt.toISOString() })),
-      mailboxes: visible.map(m => ({ id: m.id, purchaseId: m.purchaseId, email: m.account, service: m.purchase.serviceName, price: m.purchase.unitPrice.toString(), closed: !!m.closedAt, canRead: !!m.readUrl, pollFailed: m.pollFailed,
+      purchases: purchases.map(p => ({ id: p.id, offerCode: p.offer.publicId, serviceName: publicMailName(p.serviceName), quantity: p.quantity, total: p.total.toString(), status: p.status, createdAt: p.createdAt.toISOString() })),
+      mailboxes: visible.map(m => ({ id: m.id, purchaseId: m.purchaseId, email: m.account, service: publicMailName(m.purchase.serviceName), price: m.purchase.unitPrice.toString(), priceCurrency: m.purchase.priceCurrency as 'VND' | 'USDT', priceAmount: (m.purchase.priceAmount ?? m.purchase.unitPrice).toString(), closed: !!m.closedAt, canRead: !!m.readUrl, pollFailed: m.pollFailed,
         codes: m.codes.map(c => ({ id: c.id, code: c.code, receivedAt: c.receivedAt.toISOString() })) })) };
   }
   async markStalePurchases() {
@@ -58,6 +59,6 @@ export class MailInboxService {
   }
   async export(userId: string) {
     const rows = await this.prisma.mailbox.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, include: { codes: { orderBy: { receivedAt: 'desc' } } } });
-    return rows.map(m => [m.deliveryText, m.codes.map(c => c.code).join(',')].join('\t')).join('\n');
+    return customerMailExport(rows);
   }
 }

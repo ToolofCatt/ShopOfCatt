@@ -12,7 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { MailCatalogService } from './mail-catalog.service';
 import { MailPurchaseService } from './mail-purchase.service';
 import { MailInboxService } from './mail-inbox.service';
-import { MailOfferInput, MailSettingsInput, RentMailInput, RefundMailInput } from './mail.dto';
+import { MailBulkOfferInput, MailOfferInput, MailSettingsInput, RentMailInput, RefundMailInput } from './mail.dto';
 
 class PollMailInput {
   @IsArray() @ArrayMaxSize(30) @ArrayUnique() @IsString({ each: true }) @MaxLength(60, { each: true }) ids!: string[];
@@ -51,6 +51,12 @@ export class AdminMailController {
   @Patch('offers/:code')
   async saveOffer(@CurrentUser() actor: User, @Param('code') code: string, @Body() body: MailOfferInput) {
     await this.catalog.updateOffer(code, body); await this.audit.log(actor, 'settings.update', { type: 'mail.offer', id: code }, { ...body }); return { saved: true };
+  }
+  @Patch('offers') @RateLimit({ limit: 20, windowMs: 60_000 })
+  async bulkOffers(@CurrentUser() actor: User, @Body() body: MailBulkOfferInput) {
+    const result = await this.catalog.updateOffers(body.codes, body.changes);
+    await this.audit.log(actor, 'settings.update', { type: 'mail.offers', id: 'bulk' }, { codes: body.codes, changes: { ...body.changes }, updated: result.updated });
+    return result;
   }
   @Get('purchases')
   async orders() {

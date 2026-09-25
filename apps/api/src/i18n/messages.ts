@@ -8,6 +8,7 @@ type Template = string | ((params: MessageParams) => string);
  * người dùng (theo header Accept-Language) trước khi trả về.
  */
 export const K = {
+  mailRateRequired: 'mail.rate_required',
   mailSpendLimit: 'mail.spend_limit',
   mailPriceChanged: 'mail.price_changed',
   mailRequestConflict: 'mail.request_conflict',
@@ -261,6 +262,7 @@ export const K = {
 } as const;
 
 const MESSAGES: Record<string, Record<Locale, Template>> = {
+  [K.mailRateRequired]: { vi: 'Chưa có tỷ giá VND hợp lệ. Vui lòng cấu hình tỷ giá trước khi đặt giá hoặc mua.', en: 'A valid VND exchange rate is required before pricing or purchasing.', zh: '设置价格或购买前需要有效的越南盾汇率。' },
   'mail.spend_limit': { vi: 'Dịch vụ tạm đạt hạn mức. Vui lòng liên hệ hỗ trợ.', en: 'The service has reached its spending limit. Please contact support.', zh: '服务已达到额度，请联系客服。' },
   'mail.price_changed': { vi: 'Giá đã thay đổi. Làm mới danh mục rồi thử lại.', en: 'The price has changed. Refresh the catalog and try again.', zh: '价格已更改，请刷新目录后重试。' },
   'mail.request_conflict': { vi: 'Yêu cầu đã thay đổi hoặc đang được xử lý.', en: 'The request has changed or is already being processed.', zh: '请求已更改或正在处理中。' },

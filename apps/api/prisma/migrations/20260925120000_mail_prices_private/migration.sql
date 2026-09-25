@@ -1,0 +1,10 @@
+ALTER TABLE "MailOffer" ADD COLUMN "publicId" TEXT;
+UPDATE "MailOffer" SET "publicId" = gen_random_uuid()::text;
+ALTER TABLE "MailOffer" ALTER COLUMN "publicId" SET NOT NULL;
+CREATE UNIQUE INDEX "MailOffer_publicId_key" ON "MailOffer"("publicId");
+ALTER TABLE "MailOffer" ADD COLUMN "saleCurrency" TEXT NOT NULL DEFAULT 'USDT';
+ALTER TABLE "MailOffer" ADD COLUMN "saleAmount" DECIMAL(18,6);
+UPDATE "MailOffer" SET "saleAmount" = "salePrice" WHERE "salePrice" IS NOT NULL;
+ALTER TABLE "MailPurchase" ADD COLUMN "priceCurrency" TEXT NOT NULL DEFAULT 'USDT';
+ALTER TABLE "MailPurchase" ADD COLUMN "priceAmount" DECIMAL(18,6);
+UPDATE "MailPurchase" SET "priceAmount" = "unitPrice";

@@ -17,6 +17,13 @@ Trong `/admin/mail`:
    đọc được catalog trước khi thay; API chỉ trả `tokenSet` và bốn ký tự cuối.
 2. **Danh mục & giá:** đồng bộ dữ liệu thật, bật/tắt từng dịch vụ hoặc đặt giá
    cố định. Mặc định giá nguồn ×2, dùng Decimal sáu chữ số. Sync giữ lựa chọn admin.
+   Giá riêng chọn VND hoặc USDT; VND nhận `3k`, `3.000` hoặc `3000` và lưu nguyên
+   3.000 đồng. Đơn vị còn lại quy đổi theo tỷ giá của cửa hàng; mỗi dịch vụ có một
+   giá neo, không phải hai giá độc lập cho cùng một món. Tỷ giá thiếu thì từ chối
+   đặt/mua giá VND. Giá và đơn vị trên giao dịch đã chốt không đổi khi sửa giá sau đó.
+   Lọc theo mức giá vốn/giá bán có số lượng từng mức, loại mail, tồn, trạng thái và
+   cách đặt giá. Enter lưu từng dòng, Esc bỏ bản nháp; lọc không làm mất bản nháp.
+   Chọn nhiều dòng để áp dụng giá nguyên tử, tối đa200dịch vụ/lần và có xác nhận số dòng.
 3. Xác nhận đơn vị giá nguồn là USDT hoặc chấp nhận quy đổi USD theo tỷ lệ 1:1
    sang USDT trước khi bật mua. Không suy ra đơn vị tiền từ con số giá.
 4. **Đơn nhà cung cấp:** xem trạng thái, chi phí và mã nguồn; đối soát các đơn REVIEW.
@@ -64,8 +71,10 @@ giữ REVIEW và xử lý đối soát; bản đầu chưa có endpoint nhập r
   mảng record cùng field, hoặc text thuần toàn bộ là mã. Không quét số từ HTML.
 - Lỗi mạng/định dạng giữ mã cũ, báo lỗi đọc; không suy ra mail chết hoặc tự đặt
   thời hạn. Dừng poll không hủy mua hoặc hoàn tiền.
-- Public catalog không có token, giá vốn hoặc URL đọc mã. Export có xác thực và
-  `Cache-Control: no-store`; dữ liệu giao không được công khai.
+- Public catalog và lịch sử dùng UUIDdịch vụ nội bộ, không trả mã nguồn, token,
+  giá vốn hoặc URL đọc mã. Tên dịch vụ bỏ dấu vết tên miền/thương hiệu nguồn.
+  TXT cho khách chỉ gồm email và mã đã nhận, không còn rawdeliveryText chứa URL.
+  Dữ liệu gốc vẫn giữ ở server cho đối soát; export có xác thực và no-store.
 
 Hợp đồng đọc mã thực tế phải kiểm lại với tài liệu/receipt mới của nguồn trước
 khi coi là đã nghiệm thu live. Đợt triển khai này không mua mail hoặc nhận OTP thật.

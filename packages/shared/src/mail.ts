@@ -3,6 +3,9 @@ export interface MailOfferDto {
   name: string;
   category: 'gmail-api' | 'gmail-account';
   price: string;
+  priceCurrency: 'VND' | 'USDT';
+  priceAmount: string;
+  purchasable: boolean;
   stock: number;
   active: boolean;
   syncedAt: string;
@@ -39,6 +42,8 @@ export interface MailboxDto {
   email: string;
   service: string;
   price: string;
+  priceCurrency: 'VND' | 'USDT';
+  priceAmount: string;
   closed: boolean;
   canRead: boolean;
   pollFailed: boolean;
@@ -50,6 +55,13 @@ export interface MailWorkspaceDto {
   purchases: MailPurchaseDto[];
   nextCursor: string | null;
 }
-export interface AdminMailOfferDto extends MailOfferDto { cost: string; salePrice: string | null }
+export type MailPriceCurrency = 'VND' | 'USDT';
+export interface MailOfferPriceInput {
+  active?: boolean;
+  useMultiplier?: boolean;
+  saleCurrency?: MailPriceCurrency;
+  saleAmount?: string;
+}
+export interface AdminMailOfferDto extends MailOfferDto { cost: string; salePrice: string | null; saleCurrency: MailPriceCurrency; saleAmount: string | null }
 export interface AdminMailCatalogDto extends Omit<MailCatalogDto, 'offers'> { offers: AdminMailOfferDto[] }
 export interface AdminMailPurchaseDto extends MailPurchaseDto { userCode: number; providerOrderNo: string | null; expectedCost: string; actualCost: string | null }
