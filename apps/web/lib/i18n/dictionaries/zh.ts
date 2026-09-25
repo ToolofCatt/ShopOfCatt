@@ -1,3 +1,4 @@
+import { mailUxZh } from './mail-ux';
 import type { Dictionary } from './vi';
 
 import { customerUxZh } from './customer-ux';
@@ -8,6 +9,7 @@ import { reconciliationUxZh } from './reconciliation-ux';
 import { partnerUxZh } from './partner-ux';
 
 export const zh: Dictionary = {
+  mail: mailUxZh,
   customerUx: customerUxZh,
   adminUx: adminUxZh,
   settingsUx: settingsUxZh,

@@ -23,6 +23,7 @@ import { TelegramModule } from './telegram/telegram.module';
 import { TranslationModule } from './translation/translation.module';
 import { StorefrontModule } from './storefront/storefront.module';
 import { ApiV1Module } from './api-v1/api-v1.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { ApiV1Module } from './api-v1/api-v1.module';
     AnalyticsModule,
     StorefrontModule,
     ApiV1Module,
+    MailModule,
   ],
 })
 export class AppModule {}

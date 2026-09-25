@@ -1,3 +1,4 @@
+import { mailUxEn } from './mail-ux';
 import type { Dictionary } from './vi';
 
 import { customerUxEn } from './customer-ux';
@@ -8,6 +9,7 @@ import { reconciliationUxEn } from './reconciliation-ux';
 import { partnerUxEn } from './partner-ux';
 
 export const en: Dictionary = {
+  mail: mailUxEn,
   customerUx: customerUxEn,
   adminUx: adminUxEn,
   settingsUx: settingsUxEn,

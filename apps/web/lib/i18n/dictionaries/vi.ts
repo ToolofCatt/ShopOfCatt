@@ -1,3 +1,4 @@
+import { mailUxVi } from './mail-ux';
 import type { AiProvider, AuditAction, PaymentMethod, StockDrawMode } from '@webcatt/shared';
 
 /**
@@ -13,6 +14,7 @@ import { reconciliationUxVi } from './reconciliation-ux';
 import { partnerUxVi } from './partner-ux';
 
 export const vi = {
+  mail: mailUxVi,
   customerUx: customerUxVi,
   adminUx: adminUxVi,
   settingsUx: settingsUxVi,

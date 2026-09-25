@@ -96,6 +96,103 @@ model User {
   apiAccess ApiAccess?
   apiKeys ApiKey[]
   apiReceipts ApiOperationReceipt[]
+  mailPurchases MailPurchase[]
+  mailboxes Mailbox[]
+}
+
+/// Cấu hình riêng cho hàng lấy từ nhà cung cấp; cài mới không tự mở chi tiền.
+model MailProviderSetting {
+  id                Int       @id @default(1)
+  token             String    @default("")
+  enabled           Boolean   @default(false)
+  currencyConfirmed Boolean   @default(false)
+  multiplier        Decimal   @default(2) @db.Decimal(8, 4)
+  maxOrderCost      Decimal   @default(5) @db.Decimal(18, 6)
+  maxDailyCost      Decimal   @default(50) @db.Decimal(18, 6)
+  syncedAt          DateTime?
+  lastSyncFailed    Boolean   @default(false)
+  updatedAt         DateTime  @updatedAt
+}
+
+model MailOffer {
+  code      String         @id
+  name      String
+  category  String
+  cost      Decimal        @db.Decimal(18, 6)
+  stock     Int            @default(0)
+  active    Boolean        @default(true)
+  /// null dùng hệ số chung, giá cố định không bị đồng bộ catalog ghi đè.
+  salePrice Decimal?       @db.Decimal(18, 6)
+  syncedAt  DateTime
+  purchases MailPurchase[]
+
+  @@index([category, active])
+}
+
+enum MailPurchaseStatus {
+  REQUESTING
+  DELIVERED
+  REVIEW
+  REFUNDED
+}
+
+/// Ghi intent và debit trước gọi buy; REQUESTING/REVIEW tuyệt đối không tự mua lại.
+model MailPurchase {
+  id              String             @id @default(cuid())
+  userId          String
+  user            User               @relation(fields: [userId], references: [id], onDelete: Restrict)
+  requestId       String
+  offerCode       String
+  offer           MailOffer          @relation(fields: [offerCode], references: [code], onDelete: Restrict)
+  serviceName     String
+  quantity        Int
+  unitPrice       Decimal            @db.Decimal(18, 6)
+  total           Decimal            @db.Decimal(18, 6)
+  expectedCost    Decimal            @db.Decimal(18, 6)
+  actualCost      Decimal?           @db.Decimal(18, 6)
+  status          MailPurchaseStatus @default(REQUESTING)
+  providerOrderNo String?            @unique
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  mailboxes       Mailbox[]
+
+  @@unique([userId, requestId])
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
+}
+
+model Mailbox {
+  id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  purchaseId       String
+  purchase         MailPurchase @relation(fields: [purchaseId], references: [id], onDelete: Restrict)
+  account          String
+  deliveryText     String
+  /// URL chỉ ở server, không cho client truyền URL vào trình đọc để tránh SSRF.
+  readUrl          String?
+  readUid          String?
+  providerIdentity String       @unique
+  closedAt         DateTime?
+  lastPolledAt     DateTime?
+  pollLeaseUntil   DateTime?
+  pollFailed       Boolean      @default(false)
+  createdAt        DateTime     @default(now())
+  codes            MailCode[]
+
+  @@index([userId, createdAt])
+  @@index([closedAt, lastPolledAt])
+}
+
+model MailCode {
+  id         String   @id @default(cuid())
+  mailboxId  String
+  mailbox    Mailbox  @relation(fields: [mailboxId], references: [id], onDelete: Restrict)
+  code       String
+  receivedAt DateTime @default(now())
+
+  @@unique([mailboxId, code])
+  @@index([mailboxId, receivedAt])
 }
 
 /// Quyền API tách khỏi vai trò quản trị, mặc định không cấp cho tài khoản có sẵn.

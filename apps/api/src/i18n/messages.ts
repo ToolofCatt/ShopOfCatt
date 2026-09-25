@@ -8,6 +8,13 @@ type Template = string | ((params: MessageParams) => string);
  * người dùng (theo header Accept-Language) trước khi trả về.
  */
 export const K = {
+  mailSpendLimit: 'mail.spend_limit',
+  mailPriceChanged: 'mail.price_changed',
+  mailRequestConflict: 'mail.request_conflict',
+  mailUnavailable: 'mail.unavailable',
+  mailNotReady: 'mail.not_ready',
+  mailInvalid: 'mail.invalid',
+  mailProviderUnavailable: 'mail.provider_unavailable',
   paymentDiscountInvalid: 'payment.discount_invalid',
   apiKeyInvalid: 'api.key_invalid',
   apiAccessDisabled: 'api.access_disabled',
@@ -254,6 +261,13 @@ export const K = {
 } as const;
 
 const MESSAGES: Record<string, Record<Locale, Template>> = {
+  'mail.spend_limit': { vi: 'Dịch vụ tạm đạt hạn mức. Vui lòng liên hệ hỗ trợ.', en: 'The service has reached its spending limit. Please contact support.', zh: '服务已达到额度，请联系客服。' },
+  'mail.price_changed': { vi: 'Giá đã thay đổi. Làm mới danh mục rồi thử lại.', en: 'The price has changed. Refresh the catalog and try again.', zh: '价格已更改，请刷新目录后重试。' },
+  'mail.request_conflict': { vi: 'Yêu cầu đã thay đổi hoặc đang được xử lý.', en: 'The request has changed or is already being processed.', zh: '请求已更改或正在处理中。' },
+  'mail.unavailable': { vi: 'Mail không tồn tại hoặc dịch vụ đã hết hàng.', en: 'Mailbox not found or the service is out of stock.', zh: '邮箱不存在或服务已售罄。' },
+  'mail.not_ready': { vi: 'Mail chưa được mở bán. Vui lòng quay lại sau.', en: 'Mail purchases are not available yet. Please try again later.', zh: '邮箱购买暂未开放，请稍后再试。' },
+  [K.mailInvalid]: {vi:'Thông tin yêu cầu Mail không hợp lệ.',en:'Invalid Mail request.',zh:'邮件请求信息无效。'},
+  [K.mailProviderUnavailable]: {vi:'Chưa xác nhận được kết quả từ nhà cung cấp Mail. Vui lòng kiểm tra trước khi thử mua lại.',en:'The Mail provider result could not be confirmed. Check before attempting another purchase.',zh:'无法确认邮件供应商的结果。请先核实，再尝试购买。'},
   [K.paymentDiscountInvalid]: {
     vi: 'Mức giảm theo phương thức phải từ 0 đến 99%, tối đa 2 chữ số thập phân; không áp dụng cho giả lập hoặc số dư.',
     en: 'Payment discounts must be 0–99% with up to two decimal places; mock and balance payments are excluded.',

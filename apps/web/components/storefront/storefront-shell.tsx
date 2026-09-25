@@ -11,6 +11,7 @@ import { Header } from '@/components/header';
 import { useI18n } from '@/lib/i18n/client';
 import { useStorefront } from '@/lib/storefront';
 import { StorefrontRenderer } from './storefront-renderer';
+import { StoreSectionNav } from '@/components/mail/store-section-nav';
 
 export function StorefrontShell({ children, announcement }: { children: ReactNode; announcement: ReactNode }) {
   const pathname = usePathname();
@@ -30,6 +31,7 @@ export function StorefrontShell({ children, announcement }: { children: ReactNod
         </nav>
         {afterSales && <p className="mx-auto max-w-6xl text-sm text-neutral-600">{t.customerUx.maintenanceHint}</p>}
       </header> : <Header />}
+      {!paused && (pathname === '/' || pathname.startsWith('/mail')) && <StoreSectionNav />}
       <main id="main-content" tabIndex={-1} className="min-w-0 flex-1">
         {paused && !admin ? (afterSales ? children : <Maintenance />) : <AutoFrame pathname={pathname} announcement={announcement}>{children}</AutoFrame>}
       </main>
