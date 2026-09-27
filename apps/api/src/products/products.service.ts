@@ -1,6 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { ProductDto } from '@webcatt/shared';
-import { FulfillmentService } from '../orders/fulfillment.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   PRODUCT_IMAGE_META_SELECT,
@@ -17,7 +16,6 @@ import type { Locale } from '../i18n/locale';
 export class ProductsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly fulfillment: FulfillmentService,
   ) {}
 
   /**
@@ -52,7 +50,6 @@ export class ProductsService {
   }
 
   async list(locale: Locale): Promise<ProductDto[]> {
-    await this.fulfillment.releaseExpiredOrders();
     const products = await this.prisma.product.findMany({
       where: { active: true },
       orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
@@ -77,7 +74,6 @@ export class ProductsService {
   }
 
   async getBySlug(slug: string, locale: Locale): Promise<ProductDto> {
-    await this.fulfillment.releaseExpiredOrders();
     const product = await this.prisma.product.findFirst({
       where: { slug, active: true },
       select: this.publicDetailSelect(locale),

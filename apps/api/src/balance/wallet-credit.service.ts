@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/financial-lock';
 import { creditDepositTransfer, observeTransfer, type TransferFacts } from '../common/incoming-transfer';
+import { unresolvedUsdtAmounts } from '../common/payment-amounts';
 
 /** Mã nạp crypto quá 24 giờ thì thôi không đối soát nữa — xem listAwaiting. */
 const CRYPTO_AWAIT_HOURS = 24;
@@ -99,37 +100,12 @@ export class WalletCreditService {
   }
 
   /**
-   * Số USDT các khoản ĐANG CHỜ trên hai kênh crypto (cả mã nạp lẫn đơn hàng)
+   * Số USDT các chỉ dẫn CHƯA GIẢI QUYẾT trên hai kênh crypto (cả mã nạp lẫn đơn hàng)
    * — để mã nạp mới chọn được số tiền không đụng ai. Xem unique-amount.ts.
    */
   async takenUsdtAmounts(
-    client: Pick<Prisma.TransactionClient, 'deposit' | 'payment'> = this.prisma,
+    client: Pick<Prisma.TransactionClient, 'deposit' | 'payment' | 'paymentInstruction'> = this.prisma,
   ): Promise<number[]> {
-    const [naps, dons] = await Promise.all([
-      client.deposit.findMany({
-        where: {
-          mode: { in: ['CRYPTO', 'BINANCE_ID'] },
-          status: { in: ['PENDING', 'EXPIRED'] },
-          cryptoTxId: null,
-          createdAt: {
-            gt: new Date(Date.now() - CRYPTO_AWAIT_HOURS * 3_600_000),
-          },
-        },
-        select: { amountUsdt: true },
-      }),
-      client.payment.findMany({
-        where: {
-          mode: { in: ['CRYPTO', 'BINANCE_ID'] },
-          status: 'PENDING',
-          cryptoAmount: { not: null },
-          order: { status: 'PENDING' },
-        },
-        select: { cryptoAmount: true },
-      }),
-    ]);
-    return [
-      ...naps.map((row) => Number(row.amountUsdt)),
-      ...dons.map((row) => Number(row.cryptoAmount)),
-    ];
+    return unresolvedUsdtAmounts(client);
   }
 }

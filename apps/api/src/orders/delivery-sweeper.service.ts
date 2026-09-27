@@ -67,6 +67,9 @@ export class DeliverySweeperService implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
     try {
+      // Catalog là đường đọc công khai: quét hết hạn ở đó từng cho khách bất kỳ
+      // tranh khóa phân xử tiền/kho. Worker chịu trách nhiệm này theo lịch.
+      await this.fulfillment.releaseExpiredOrders();
       await this.deliverPaidOrders();
       await this.promotePaidPayments();
     } catch (error) {

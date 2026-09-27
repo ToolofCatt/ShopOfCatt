@@ -9,6 +9,7 @@ import type { AuditService } from '../audit/audit.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import { lockFinancialArbitration } from '../common/financial-lock';
 import { markOrderPaid } from '../common/order-settlement';
+import { observeTransfer, settleOrderTransfer } from '../common/incoming-transfer';
 
 const baseUrl = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5433/webcatt';
 const database = `webcatt_fulfillment_coupon_test_${process.pid}`;
@@ -290,7 +291,7 @@ describe('lifecycle/coupon trên PostgreSQL thật', () => {
     expect((await db.stockItem.findUniqueOrThrow({ where: { id: closing.stock.id } })).status).toBe('AVAILABLE');
   });
 
-  dbTest('late-paid khôi phục lượt EXPIRED đúng một lần kể cả coupon đã đầy', async () => {
+  dbTest('đơn EXPIRED không hồi sinh khi coupon đã cấp hết cho đơn khác', async () => {
     const coupon = await makeCoupon({ maxUses: 1, usedCount: 1 });
     const late = await makeOrder({ coupon });
     await fulfillment.expireOrder(late.order.id);
@@ -302,9 +303,9 @@ describe('lifecycle/coupon trên PostgreSQL thật', () => {
       fulfillment.markPaidAndDeliver({ orderId: late.order.id }),
     ]);
     await fulfillment.markPaidAndDeliver({ orderId: late.order.id });
-    expect((await db.coupon.findUniqueOrThrow({ where: { id: coupon.id } })).usedCount).toBe(2);
-    expect((await db.order.findUniqueOrThrow({ where: { id: late.order.id } })).status).toBe('DELIVERED');
-    expect(await db.stockItem.count({ where: { variantId: late.variant.id, status: 'SOLD' } })).toBe(1);
+    expect((await db.coupon.findUniqueOrThrow({ where: { id: coupon.id } })).usedCount).toBe(1);
+    expect((await db.order.findUniqueOrThrow({ where: { id: late.order.id } })).status).toBe('EXPIRED');
+    expect(await db.stockItem.count({ where: { variantId: late.variant.id, status: 'SOLD' } })).toBe(0);
   });
 
   dbTest('payment ghi thất bại rollback luôn Order PAID, không để trạng thái nửa chừng', async () => {
@@ -420,6 +421,62 @@ describe('lifecycle/coupon trên PostgreSQL thật', () => {
     expect((await db.order.findUniqueOrThrow({ where: { id: fixture.order.id } })).status).toBe('EXPIRED');
     expect((await db.payment.findUniqueOrThrow({ where: { orderId: fixture.order.id } })).status).toBe('EXPIRED');
     expect((await db.coupon.findUniqueOrThrow({ where: { id: coupon.id } })).usedCount).toBe(0);
+  });
+  dbTest('thanh toán muộn không tự chiếm lại lượt coupon đã cấp cho đơn khác', async () => {
+    const coupon = await makeCoupon({ maxUses: 1, usedCount: 1 });
+    const expired = await makeOrder({ coupon, status: 'EXPIRED', paymentStatus: 'EXPIRED' });
+    const result = await db.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      return markOrderPaid(tx, expired.order.id);
+    }, transactionOptions);
+    expect(result).toEqual({ status: 'EXPIRED', changed: false, couponConflict: true });
+    expect((await db.order.findUniqueOrThrow({ where: { id: expired.order.id } })).status).toBe('EXPIRED');
+    expect((await db.coupon.findUniqueOrThrow({ where: { id: coupon.id } })).usedCount).toBe(1);
+  });
+  dbTest('thanh toán muộn không vượt perUserLimit dù tổng lượt vẫn còn', async () => {
+    const coupon = await makeCoupon({ perUserLimit: 1, usedCount: 1 });
+    const expired = await makeOrder({ coupon, status: 'EXPIRED', paymentStatus: 'EXPIRED' });
+    const other = await makeOrder({ coupon });
+    await db.order.update({ where: { id: other.order.id }, data: { userId: expired.order.userId } });
+    const result = await db.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      return markOrderPaid(tx, expired.order.id);
+    }, transactionOptions);
+    expect(result).toMatchObject({ status: 'EXPIRED', changed: false, couponConflict: true });
+    expect((await db.coupon.findUniqueOrThrow({ where: { id: coupon.id } })).usedCount).toBe(1);
+  });
+  dbTest('khoản tiền thật đến muộn vượt quota được giữ lại để đối soát, không giao key', async () => {
+    const coupon = await makeCoupon({ maxUses: 1, usedCount: 1 });
+    const expired = await makeOrder({ coupon, status: 'EXPIRED', paymentStatus: 'EXPIRED' });
+    const payment = await db.payment.update({ where: { orderId: expired.order.id }, data: {
+      mode: 'SEPAY', vndAmount: 234_000, cryptoAddress: 'FIXTURE-ACCOUNT',
+    } });
+    const transferId = await db.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      const transfer = await observeTransfer(tx, {
+        source: 'SEPAY', reference: `late-coupon-${expired.order.id}`, amount: 234_000,
+        currency: 'VND', receiver: 'FIXTURE-ACCOUNT',
+      });
+      expect(await settleOrderTransfer(tx, payment.id, transfer)).toBeNull();
+      return transfer.id;
+    }, transactionOptions);
+    expect(await db.incomingTransfer.findUniqueOrThrow({ where: { id: transferId } })).toMatchObject({
+      status: 'REVIEW', reviewReason: 'coupon-quota-exhausted', paymentId: null,
+    });
+    expect((await db.order.findUniqueOrThrow({ where: { id: expired.order.id } })).status).toBe('EXPIRED');
+    expect((await db.payment.findUniqueOrThrow({ where: { id: payment.id } })).status).toBe('EXPIRED');
+    expect(await db.stockItem.count({ where: { variantId: expired.variant.id, status: 'SOLD' } })).toBe(0);
+  });
+  dbTest('Payment SUCCESS đã ghi từ trước vẫn được phục hồi cho đúng Order dù coupon hiện đầy', async () => {
+    const coupon = await makeCoupon({ maxUses: 1, usedCount: 1 });
+    const expired = await makeOrder({ coupon, status: 'EXPIRED', paymentStatus: 'SUCCESS' });
+    const result = await db.$transaction(async (tx) => {
+      await lockFinancialArbitration(tx);
+      return markOrderPaid(tx, expired.order.id);
+    }, transactionOptions);
+    expect(result).toEqual({ status: 'PAID', changed: true });
+    expect((await db.payment.findUniqueOrThrow({ where: { orderId: expired.order.id } })).status).toBe('SUCCESS');
+    expect((await db.coupon.findUniqueOrThrow({ where: { id: coupon.id } })).usedCount).toBe(2);
   });
 
   dbTest('helper trả null khi thiếu Order và fail-closed nếu thiếu Payment', async () => {

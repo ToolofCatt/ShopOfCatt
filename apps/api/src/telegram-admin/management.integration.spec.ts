@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { PrismaClient, type TelegramAdmin, type User } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { AdminService } from '../admin/admin.service';
 import { AuditService } from '../audit/audit.service';
 import { SettingsService } from '../settings/settings.service';
@@ -129,6 +129,29 @@ afterAll(async () => {
 }, 60000);
 
 describe('Telegram admin transaction (real PostgreSQL)', () => {
+  it('holds admin access across a non-stock action until its side effect finishes', async (ctx) => {
+    if (!reachable) return ctx.skip();
+    await access.save(owner, { telegramUserId: '1234599', name: 'Concurrent', permission: 'FULL', enabled: true });
+    const actor = (await access.resolve(1234599))!;
+    const variant = await db.productVariant.findUniqueOrThrow({ where: { id: variantId } });
+    const snapshot = await actions.snapshot('product.edit', variant.productId);
+    const action = await actions.prepare(actor, 'product.edit', variant.productId, { name: 'Fixture update' }, snapshot.hash, snapshot.label);
+    let entered!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => { entered = resolve; });
+    const wait = new Promise<void>((resolve) => { release = resolve; });
+    const perform = vi.spyOn(actions as never as { perform: () => Promise<unknown> }, 'perform')
+      .mockImplementation(async () => { entered(); await wait; return { summary: 'fixture' }; });
+    const running = actions.execute(actor, action);
+    try {
+      await started;
+      await expect(db.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "TelegramAdmin" WHERE "id" = ${actor.id} FOR UPDATE NOWAIT`;
+      })).rejects.toThrow();
+    } finally { release(); perform.mockRestore(); }
+    await running;
+    await access.save(owner, { telegramUserId: actor.telegramUserId, name: actor.name, permission: 'FULL', enabled: false, version: actor.version }, actor.id);
+  });
   it('does not replay or acknowledge an in-flight action', async (ctx) => {
     if (!reachable) return ctx.skip();
     const saved = await db.telegramAdminAction.create({

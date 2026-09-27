@@ -92,15 +92,17 @@ export class TelegramAdminAccessService {
     if (typeof enabled !== 'boolean')
       throw new BadRequestException(K.adminSettingsFlagInvalid);
     await this.prisma.$transaction(async (tx) => {
+      // Cùng thứ tự với execute: Admin trước StoreSetting. Đổi ngược lại khi
+      // perform đang sửa settings sẽ giữ hai khóa chéo nhau rồi deadlock.
+      await tx.telegramAdmin.updateMany({
+        data: { version: { increment: 1 } },
+      });
       await tx.storeSetting.upsert({
         where: { id: 'main' },
         create: { id: 'main', telegramAdminEnabled: enabled },
         update: { telegramAdminEnabled: enabled },
       });
       // Tắt rồi bật lại không được hồi sinh những nút xác nhận cũ.
-      await tx.telegramAdmin.updateMany({
-        data: { version: { increment: 1 } },
-      });
       await tx.telegramAdminAction.updateMany({
         where: { status: 'PENDING' },
         data: { status: 'CANCELLED' },

@@ -77,6 +77,10 @@ function SettingsContent() {
   const { mockEnabled, binancePayEnabled, binanceIdEnabled, binanceId, binanceQr, sepayEnabled, sepayAccountNumber, sepayBank, sepayAccountHolder, sepayApiKey, sepayWebhookSecret, clearSepayApiKey, clearSepayWebhookSecret, cryptoEnabled, bep20Address, trc20Address } = groups.payments.draft;
   const { vndPerUsdt, cnyPerUsdt, rateAuto, rateMarkupPercent, rateHour } = groups.rates.draft;
   const { aiProvider, aiBaseUrl, aiModel, aiKey, clearAiKey } = groups.ai.draft;
+  const aiDestinationChanged = Boolean(settings && (
+    aiProvider !== settings.aiProvider ||
+    aiBaseUrl.trim().replace(/\/+$/, '') !== settings.aiBaseUrl.trim().replace(/\/+$/, '')
+  ));
   const { supportNote, supportChannels } = groups.support.draft;
   const setMockEnabled = (value: boolean) => edit('payments', { mockEnabled: value });
   const setBinancePayEnabled = (value: boolean) => edit('payments', { binancePayEnabled: value });
@@ -109,6 +113,7 @@ function SettingsContent() {
   const [rateMessage, setRateMessage] = useState<string | null>(null);
   const [sepayError, setSepayError] = useState<string | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [aiKeyError, setAiKeyError] = useState<string | null>(null);
   const { saving, saved, error: saveError } = groups[activeTab];
   const requestContext = useRef({ token, locale, connectionError: t.common.connectionError });
   requestContext.current = { token, locale, connectionError: t.common.connectionError };
@@ -262,6 +267,11 @@ function SettingsContent() {
       return;
     }
     setAiError(null);
+    if (tab === 'ai' && aiDestinationChanged && !aiKey.trim() && !clearAiKey) {
+      setAiKeyError(t.admin.settingApiKeyDestinationHint);
+      return;
+    }
+    setAiKeyError(null);
     /*
       Bật SePay mà thiếu cấu hình thì báo NGAY tại chỗ. Máy chủ cũng chặn, nhưng
       để nó chặn thì chủ shop chỉ thấy một dòng lỗi chung ở cuối biểu mẫu.
@@ -868,11 +878,13 @@ function SettingsContent() {
                     : t.admin.settingApiKeyLabel
                 }
                 htmlFor="setting-ai-key"
-                hint={t.admin.settingApiKeyHint}
+                hint={aiDestinationChanged ? t.admin.settingApiKeyDestinationHint : t.admin.settingApiKeyHint}
+                error={aiKeyError}
               >
                 <Input
                   id="setting-ai-key"
                   type="password"
+                  invalid={Boolean(aiKeyError)}
                   autoComplete="off"
                   spellCheck={false}
                   value={aiKey}

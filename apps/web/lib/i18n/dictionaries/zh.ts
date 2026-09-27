@@ -1062,6 +1062,7 @@ export const zh: Dictionary = {
     settingApiKeyLabel: 'Claude API 密钥',
     settingApiKeyReplaceLabel: '更换为新密钥',
     settingApiKeyHint: '所选服务商的密钥。留空表示保留当前密钥。',
+    settingApiKeyDestinationHint: '更换服务商或 API 地址时须输入新密钥；现有密钥不会发送到新地址。',
     settingApiKeySaved: (hint: string) => `已保存密钥 ····${hint}`,
     settingApiKeyClear: '删除密钥',
     settingApiKeyWillClear: '保存后密钥将被删除 —— 自动翻译会关闭。',

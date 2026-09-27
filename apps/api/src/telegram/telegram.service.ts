@@ -690,6 +690,20 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
 
       if (text.startsWith('/start')) {
         const khach = await this.users.findByChat(chatId);
+        if (khach?.id) {
+          // Một chat từng chặn bot có thể tự mở lại. Chỉ /start mới rearm để
+          // thông báo không lặp vô hạn khi lỗi 400/403 vẫn còn.
+          await Promise.all([
+            this.prisma.order.updateMany({
+              where: { userId: khach.id, telegramNotifiedAt: null, telegramNotifyFailedAt: { not: null } },
+              data: { telegramNotifyFailedAt: null },
+            }),
+            this.prisma.deposit.updateMany({
+              where: { userId: khach.id, telegramNotifiedAt: null, telegramNotifyFailedAt: { not: null } },
+              data: { telegramNotifyFailedAt: null },
+            }),
+          ]);
+        }
         if (!khach?.telegramLangChosen) {
           /*
            * Lần đầu: CHỌN NGÔN NGỮ trước đã — menu hiện sẵn theo language_code
@@ -1529,6 +1543,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         where: {
           status: 'DELIVERED',
           telegramNotifiedAt: null,
+          telegramNotifyFailedAt: null,
           user: { telegramChatId: { not: null } },
         },
         select: {
@@ -1561,10 +1576,13 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
           this.logger.log(`Đã đẩy key đơn ${order.code} vào chat ${chatId}`);
         } catch (err) {
           this.logger.warn(`Đẩy key đơn ${order.code} trượt: ${errText(err)}`);
-          // Cùng phân loại stock alert: 400/403 riêng chat, 429/5xx/mất mạng
-          // dừng batch. Không có failedAt cho đơn nên tuyệt đối không lấy
-          // telegramNotifiedAt làm marker lỗi: marker này chỉ có nghĩa đã gửi.
+          // Không giả vờ đã giao; loại lỗi chat vĩnh viễn khỏi batch để khách
+          // đến sau vẫn nhận được hàng. Vẫn có thể mở đơn thủ công.
           if (!isPermanentRecipientError(err)) return;
+          await this.prisma.order.updateMany({
+            where: { id: order.id, telegramNotifiedAt: null },
+            data: { telegramNotifyFailedAt: new Date() },
+          });
         }
       }
       // Tin nạp đã cộng — cùng cơ chế outbox với key.
@@ -1596,6 +1614,10 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
         } catch (err) {
           this.logger.warn(`Báo cộng ví ${nap.code} trượt: ${errText(err)}`);
           if (!isPermanentRecipientError(err)) return;
+          await this.prisma.deposit.updateMany({
+            where: { id: nap.id, telegramNotifiedAt: null },
+            data: { telegramNotifyFailedAt: new Date() },
+          });
         }
       }
 
@@ -1901,7 +1923,6 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  /** Đánh dấu "đã báo khách" — updateMany điều kiện null nên gọi trùng vô hại. */
   /**
    * Cùng đường gửi cho outbox và xem tay/check/mock/ví. Document dùng transport
    * multipart đã có của quản trị (không retry POST): timeout có thể đã gửi,
@@ -1928,7 +1949,7 @@ export class TelegramService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.prisma.order.updateMany({
         where: { id: orderId, telegramNotifiedAt: null },
-        data: { telegramNotifiedAt: new Date() },
+        data: { telegramNotifiedAt: new Date(), telegramNotifyFailedAt: null },
       });
     } catch (err) {
       this.logger.warn(`Đánh dấu đã báo đơn ${orderId} trượt: ${errText(err)}`);

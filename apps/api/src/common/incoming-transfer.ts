@@ -1,5 +1,5 @@
 import { Prisma, type IncomingTransfer } from '@prisma/client';
-import { markOrderPaid } from './order-settlement';
+import { expiredCouponConflict, markOrderPaid } from './order-settlement';
 
 export interface TransferFacts {
   source: 'CRYPTO:BEP20' | 'CRYPTO:TRC20' | 'BINANCE_ID' | 'SEPAY' | 'BINANCE_MERCHANT';
@@ -68,11 +68,15 @@ export async function settleOrderTransfer(tx: Prisma.TransactionClient, paymentI
   if (transfer.status === 'CLAIMED') {
     if (transfer.paymentId !== payment.id || payment.order.status === 'CANCELLED') return null;
     // Bản cũ có khe crash Payment.SUCCESS -> Order.PAID: claim backfill phải phục hồi đúng target.
-    await markOrderPaid(tx, payment.orderId);
+    const promoted = await markOrderPaid(tx, payment.orderId, { allowCouponOveruse: options.allowReview });
+    if (promoted?.couponConflict) return null;
     return payment.orderId;
   }
   if (!['PENDING', 'EXPIRED'].includes(payment.order.status) || payment.status === 'SUCCESS' || payment.cryptoTxId || payment.sepayRef) {
     await reviewTransfer(tx, transfer, 'target-not-awaiting-payment'); return null;
+  }
+  if (!options.allowReview && await expiredCouponConflict(tx, payment.orderId)) {
+    await reviewTransfer(tx, transfer, 'coupon-quota-exhausted'); return null;
   }
   if (options.allowReview) {
     if (transfer.reviewReason === 'provider-facts-changed') return null;
@@ -119,7 +123,7 @@ export async function settleOrderTransfer(tx: Prisma.TransactionClient, paymentI
     ? { sepayRef: transfer.reference }
     : transfer.source === 'BINANCE_MERCHANT' ? {} : { cryptoTxId: transfer.reference };
   await tx.payment.update({ where: { id: paymentId }, data: { ...ref, status: 'SUCCESS' } });
-  await markOrderPaid(tx, payment.orderId);
+  await markOrderPaid(tx, payment.orderId, { allowCouponOveruse: options.allowReview });
   return payment.orderId;
 }
 

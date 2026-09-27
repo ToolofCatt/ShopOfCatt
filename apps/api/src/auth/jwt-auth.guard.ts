@@ -52,14 +52,9 @@ export class JwtAuthGuard implements CanActivate {
     if (user.lockedAt) {
       throw new ForbiddenException(K.accountLocked);
     }
-    // Đổi/đặt lại mật khẩu → mọi token cấp trước đó hết hiệu lực.
-    // `iat` tính theo giây (làm tròn xuống) nên cộng 1 giây dung sai để token
-    // vừa cấp ngay sau khi đổi mật khẩu không bị loại oan.
-    if (
-      user.passwordChangedAt &&
-      typeof payload.iat === 'number' &&
-      payload.iat * 1000 + 1000 < user.passwordChangedAt.getTime()
-    ) {
+    // `iat` chỉ có độ phân giải giây: cộng dung sai từng giữ lại token trước
+    // đổi mật khẩu. Version nguyên tử phân biệt mọi lần đổi, kể cả cùng mili giây.
+    if (!Number.isInteger(payload.sessionVersion) || payload.sessionVersion !== user.sessionVersion) {
       throw new UnauthorizedException(K.sessionInvalid);
     }
 

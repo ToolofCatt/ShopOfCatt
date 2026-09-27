@@ -1,12 +1,13 @@
-import { Controller, Post, Headers, Header } from '@nestjs/common';
+import { Controller, Post, Headers, Header, UseGuards } from '@nestjs/common';
 import { DeliveryAccessService } from './delivery-access.service';
-import { RateLimit } from '../security/rate-limit.guard';
+import { RateLimit, RateLimitGuard } from '../security/rate-limit.guard';
 
 @Controller('delivery')
 export class DeliveryAccessController {
   constructor(private readonly delivery:DeliveryAccessService){}
 
   @Post('view')
+  @UseGuards(RateLimitGuard)
   @Header('Cache-Control','no-store, private')
   @Header('Pragma','no-cache')
   @Header('Referrer-Policy','no-referrer')

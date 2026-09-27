@@ -1104,6 +1104,7 @@ export const en: Dictionary = {
     settingApiKeyLabel: 'Claude API key',
     settingApiKeyReplaceLabel: 'Replace with a new key',
     settingApiKeyHint: 'The key for the selected provider. Leave empty to keep the current key.',
+    settingApiKeyDestinationHint: 'Changing the provider or API URL requires a new key. The existing key is never sent to a new destination.',
     settingApiKeySaved: (hint: string) => `Key saved ····${hint}`,
     settingApiKeyClear: 'Remove key',
     settingApiKeyWillClear: 'The key will be removed when you save — auto-translation turns off.',

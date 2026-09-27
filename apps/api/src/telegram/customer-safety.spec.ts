@@ -28,6 +28,8 @@ function fixture(options: { locked?: boolean; long?: boolean; failure?: number; 
   }
   let orderNotified = false;
   let depositNotified = false;
+  let orderFailed = false;
+  let depositFailed = false;
   let mutations = 0;
   const sent: { method: string; body: Record<string, any> | FormData }[] = [];
   const events: string[] = [];
@@ -47,15 +49,23 @@ function fixture(options: { locked?: boolean; long?: boolean; failure?: number; 
   const payments = { confirmMock: mutate };
   const balance = {
     listDepositMethods: async () => ['crypto_bep20'], createDeposit: mutate, payOrderWithBalance: mutate,
-    cancelDeposit: mutate, listUnnotifiedDeposits: async () => options.deposit && !depositNotified ? [{ id: 'd1', code: 'NAP-FIXTURE', chatId: user.telegramChatId, lang: 'vi', amountUsdt: 5, balance: 20 }] : [],
+    cancelDeposit: mutate, listUnnotifiedDeposits: async () => options.deposit && !depositNotified && !depositFailed ? [{ id: 'd1', code: 'NAP-FIXTURE', chatId: user.telegramChatId, lang: 'vi', amountUsdt: 5, balance: 20 }] : [],
     markDepositNotified: async () => { depositNotified = true; events.push('deposit-mark'); },
   };
   const prisma = {
     order: {
       findUnique: async () => null, count: async () => 0,
-      findMany: async () => !options.deposit && !orderNotified ? [{ id: detail.id, code: detail.code, userId: user.id, user }] : [],
-      updateMany: async () => { orderNotified = true; events.push('order-mark'); return { count: 1 }; },
+      findMany: async () => !options.deposit && !orderNotified && !orderFailed ? [{ id: detail.id, code: detail.code, userId: user.id, user }] : [],
+      updateMany: async ({ data }: { data: { telegramNotifyFailedAt?: Date } }) => {
+        if (data.telegramNotifyFailedAt) { orderFailed = true; events.push('order-failed'); }
+        else { orderNotified = true; events.push('order-mark'); }
+        return { count: 1 };
+      },
     },
+    deposit: { updateMany: async ({ data }: { data: { telegramNotifyFailedAt?: Date } }) => {
+      if (data.telegramNotifyFailedAt) { depositFailed = true; events.push('deposit-failed'); }
+      return { count: 1 };
+    } },
     telegramStockAlertRecipient: { findMany: async () => [] },
     telegramStockAlert: { deleteMany: async () => ({ count: 0 }) },
   };
@@ -63,7 +73,7 @@ function fixture(options: { locked?: boolean; long?: boolean; failure?: number; 
   const service = new TelegramService(...[settings, {}, {}, orders, payments, users, balance, prisma, {}] as unknown as ConstructorParameters<typeof TelegramService>) as unknown as Internals;
   service.activeToken = TOKEN;
   const callback = (parsed: BotCallback): TgCallbackQuery => ({ id: 'fixture', from: { id: 100001, language_code: 'vi' }, message: { message_id: 1, chat: { id: 100001, type: 'private' } }, data: encodeCallback(parsed) });
-  return { service, callback, sent, events, lines, mutations: () => mutations, orderNotified: () => orderNotified, depositNotified: () => depositNotified };
+  return { service, callback, sent, events, lines, mutations: () => mutations, orderNotified: () => orderNotified, depositNotified: () => depositNotified, orderFailed: () => orderFailed, depositFailed: () => depositFailed };
 }
 afterEach(() => vi.unstubAllGlobals());
 
@@ -121,12 +131,14 @@ describe('delivered keys and notification acknowledgement', () => {
     const f = fixture({ failure });
     await f.service.notifySweep();
     expect(f.orderNotified()).toBe(false);
+    expect(f.orderFailed()).toBe(failure === 403);
   });
 
   it.each([429, 500, 503, 403])('failed wallet notification %s remains pending', async failure => {
     const f = fixture({ failure, deposit: true });
     await f.service.notifySweep();
     expect(f.depositNotified()).toBe(false);
+    expect(f.depositFailed()).toBe(failure === 403);
   });
 
   it.each(['sweep', 'manual'] as const)('%s sends oversized keys as complete UTF-8 document before marking', async route => {

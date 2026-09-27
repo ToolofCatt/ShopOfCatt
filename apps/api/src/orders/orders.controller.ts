@@ -57,6 +57,7 @@ export class OrdersController {
 
   @Post(':code/select-payment')
   @HttpCode(HttpStatus.OK)
+  @RateLimit({ limit: 20, windowMs: MINUTES_10 })
   selectPayment(
     @CurrentUser() user: User,
     @Param('code') code: string,

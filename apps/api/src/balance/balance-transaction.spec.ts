@@ -19,6 +19,7 @@ function fixture() {
       updateMany: vi.fn(async (_args: any) => ({ count: 1 })),
       findMany: vi.fn(async () => []),
     },
+    paymentInstruction: { findMany: vi.fn(async () => []) },
     user: { findUniqueOrThrow: vi.fn(async () => user), update: vi.fn(async (_args: any) => ({})) },
     balanceEntry: { create: vi.fn(async (_args: any) => ({})) },
     deposit: {
@@ -81,14 +82,15 @@ describe('balance transaction boundary', () => {
     expect(deposit.telegramCallbackId).toBeNull();
   });
 
-  it('allocates crypto amount in tx across existing deposits and orders', async () => {
+  it('allocates crypto amount in tx across existing deposits, orders and old instructions', async () => {
     const f = fixture();
     const prepared = await f.service.prepareDeposit('buyer', 26_000, 'crypto_bep20');
     f.tx.deposit.findMany.mockResolvedValue([{ amountUsdt: new Prisma.Decimal(1) }] as any);
     f.tx.payment.findMany.mockResolvedValue([{ cryptoAmount: new Prisma.Decimal('1.0001') }] as any);
+    f.tx.paymentInstruction.findMany.mockResolvedValue([{ amount: new Prisma.Decimal('1.0003') }] as never);
     const deposit = await f.service.createDepositInTransaction(f.tx as any, 'buyer', prepared);
     // Matcher cần cách khoản 1.0001 ít nhất 0.0002, không chỉ khác một bước.
-    expect(deposit.amountUsdt.toString()).toBe('1.0003');
+    expect(deposit.amountUsdt.toString()).toBe('1.0005');
     expect(deposit.cryptoAddress).toBe('0xOriginal');
   });
 

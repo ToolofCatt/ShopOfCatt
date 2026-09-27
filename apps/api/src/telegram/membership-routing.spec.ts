@@ -26,16 +26,18 @@ function fixture(joined = false, chosen = true, required = true) {
   const config = { membershipRequired:required,membershipChatId:'-1001234567890',membershipJoinUrl:'https://t.me/shop_channel',sendAnnouncement:false,greeting:'' };
   const products={list:vi.fn(async()=>[])};
   const orders={create:vi.fn()};
-  const users={findByChat:vi.fn(async()=>chosen?{telegramLangChosen:true,telegramLang:'vi',balance:0,telegramName:'Fixture'}:null),setLanguage:vi.fn(),findOrCreate:vi.fn()};
+  const users={findByChat:vi.fn(async()=>chosen?{id:'user-fixture',telegramLangChosen:true,telegramLang:'vi',balance:0,telegramName:'Fixture'}:null),setLanguage:vi.fn(),findOrCreate:vi.fn()};
   const balance={createDeposit:vi.fn(),payOrderWithBalance:vi.fn()};
+  const retryOrder=vi.fn(async()=>({count:1}));
+  const retryDeposit=vi.fn(async()=>({count:1}));
   const deps = [
     {getTelegramConfig:vi.fn(async()=>config),getPublicRates:vi.fn(async()=>null)},
-    products, {}, orders, {}, users, balance, {}, {getPublic:vi.fn(async()=>({document:{brand:{name:'Shop'}}}))},
+    products, {}, orders, {}, users, balance, {order:{updateMany:retryOrder},deposit:{updateMany:retryDeposit}}, {getPublic:vi.fn(async()=>({document:{brand:{name:'Shop'}}}))},
   ] as unknown as ConstructorParameters<typeof TelegramService>;
   const service=new TelegramService(...deps) as unknown as Routes;
   const message=(text:string,id=79,language='vi'):TgMessage=>({message_id:3,chat:{id,type:'private'},from:{id,language_code:language,first_name:'Fixture'},text});
   const callback=(data:string,id=79):TgCallbackQuery=>({id:'cb-'+id,from:{id,language_code:'vi'},message:message('old',id),data});
-  return {service,calls,products,orders,users,balance,message,callback,setMember:(value:boolean)=>{member=value;}};
+  return {service,calls,products,orders,users,balance,message,callback,retryOrder,retryDeposit,setMember:(value:boolean)=>{member=value;}};
 }
 afterEach(()=>vi.unstubAllGlobals());
 
@@ -91,5 +93,15 @@ describe('membership gate at customer entry points',()=>{
     await f.service.handleMessage(TOKEN,f.message('/start'),STOP);
     expect(f.calls.filter(c=>c.method==='getChatMember')).toHaveLength(0);
     expect(f.calls.filter(c=>c.method==='sendMessage')).toHaveLength(2);
+  });
+  it('rearms only this customer’s failed delivery and deposit notices after /start',async()=>{
+    const f=fixture(true,true);
+    await f.service.handleMessage(TOKEN,f.message('/start'),STOP);
+    for(const call of [f.retryOrder,f.retryDeposit]){
+      expect(call).toHaveBeenCalledWith({
+        where:{userId:'user-fixture',telegramNotifiedAt:null,telegramNotifyFailedAt:{not:null}},
+        data:{telegramNotifyFailedAt:null},
+      });
+    }
   });
 });

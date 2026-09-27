@@ -571,6 +571,12 @@ export class SettingsService {
     }
     // Anthropic có model mặc định, các nhà cung cấp khác thì không đoán được.
     const aiProviderNext = dto.aiProvider ?? normalizeProvider(before0.aiProvider);
+    const aiDestinationChanged = aiProviderNext !== normalizeProvider(before0.aiProvider)
+      || (aiBaseUrl !== undefined && aiBaseUrl !== before0.aiBaseUrl.trim().replace(/\/+$/, ''));
+    if (aiDestinationChanged && (before0.aiApiKey.trim() !== '' || (this.config.get<string>('ANTHROPIC_API_KEY') ?? '').trim() !== '') && aiApiKey === undefined) {
+      // Khoá cũ bị ẩn khỏi UI; đổi đích mà giữ khoá sẽ gửi bí mật sang host mới.
+      throw new BadRequestException(K.adminAiKeyInvalid);
+    }
     const aiModelNext = aiModel ?? before0.aiModel.trim();
     if (aiProviderNext === 'openai' && aiModelNext === '') {
       throw new BadRequestException(K.adminAiModelRequired);

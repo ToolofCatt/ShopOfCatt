@@ -38,6 +38,8 @@ import { FINANCIAL_TRANSACTION, lockFinancialArbitration } from '../common/finan
 import { reconcileCryptoTransfers } from '../common/reconcile-transfers';
 import { observeTransfer, settleOrderTransfer } from '../common/incoming-transfer';
 import { paymentQuote, parsePaymentDiscounts } from './payment-discount';
+import { pickUniqueUsdt } from '../balance/unique-amount';
+import { unresolvedUsdtAmounts } from '../common/payment-amounts';
 
 import {
   createPendingOrderInTransaction,
@@ -53,6 +55,8 @@ export interface CreateOrderOptions {
 
 /** Khoản nạp được tính từ trước khi tạo đơn tối đa 10 phút (đồng bộ với matcher). */
 const CRYPTO_SLACK_MS = 10 * 60_000;
+const MAX_PAYMENT_INSTRUCTIONS_PER_ORDER = 8;
+const MAX_UNRESOLVED_INSTRUCTIONS_PER_USER = 24;
 /** Seed tách namespace khóa callback Telegram khỏi các advisory lock khác. */
 const TELEGRAM_ORDER_LOCK_SEED = 0x43415454474f5244n;
 /** Xóa các trường phiên Binance Pay khi chuyển sang phương thức khác. */
@@ -191,6 +195,18 @@ export class OrdersService {
                 total: Number(replay.totalAmount),
                 replayed: true,
               };
+            }
+          }
+
+          if (method === 'crypto_bep20' || method === 'crypto_trc20' || method === 'binance_id') {
+            // Đơn được tạo trước khi cấp amount. Chặn tài khoản đã tích nhiều
+            // chỉ dẫn chưa xử lý NGAY ở transaction này để không giữ kho vô ích.
+            const issued = await tx.paymentInstruction.count({ where: {
+              payment: { order: { userId: user.id }, status: { not: 'SUCCESS' } },
+              mode: { in: ['CRYPTO', 'BINANCE_ID'] },
+            } });
+            if (issued >= MAX_UNRESOLVED_INSTRUCTIONS_PER_USER) {
+              throw new ServiceUnavailableException(K.paymentCryptoAmountUnavailable);
             }
           }
 
@@ -540,14 +556,38 @@ export class OrdersService {
         ? Number(live.paymentDiscountPercent) : (discounts[method] ?? 0);
       const quote = paymentQuote(live, percent);
       const reuseMerchant = currentMethod === 'binance_pay' && method === 'binance_pay' && !!live.payment.checkoutUrl;
+      const reuseInstruction = currentMethod === method &&
+        ['CRYPTO', 'BINANCE_ID'].includes(live.payment.mode) && live.payment.cryptoAmount !== null;
+      if (reuseInstruction) return { version: live.payment.sessionVersion, quote, reuseMerchant, reuseInstruction };
+      if (method === 'crypto_bep20' || method === 'crypto_trc20' || method === 'binance_id') {
+        const [perOrder, perUser] = await Promise.all([
+          tx.paymentInstruction.count({ where: { paymentId: payment.id, mode: { in: ['CRYPTO', 'BINANCE_ID'] } } }),
+          tx.paymentInstruction.count({ where: {
+            payment: { order: { userId: live.userId }, status: { not: 'SUCCESS' } },
+            mode: { in: ['CRYPTO', 'BINANCE_ID'] },
+          } }),
+        ]);
+        if (perOrder >= MAX_PAYMENT_INSTRUCTIONS_PER_ORDER || perUser >= MAX_UNRESOLVED_INSTRUCTIONS_PER_USER) {
+          throw new ServiceUnavailableException(K.paymentCryptoAmountUnavailable);
+        }
+      }
       const updated = await tx.payment.update({ where: { id: payment.id }, data: { sessionVersion: { increment: 1 } } });
-      return { version: updated.sessionVersion, quote, reuseMerchant };
+      return { version: updated.sessionVersion, quote, reuseMerchant, reuseInstruction };
     }, FINANCIAL_TRANSACTION);
     const { version, quote } = prepared;
+    if (prepared.reuseInstruction) return;
     const persist = async (data: Prisma.PaymentUpdateManyMutationInput, merchantTradeNo?: string) => {
       await this.prisma.$transaction(async (tx) => {
         await lockFinancialArbitration(tx);
         await tx.$queryRaw`SELECT id FROM "Order" WHERE id = ${orderId} FOR UPDATE`;
+        if (data.mode === 'CRYPTO' || data.mode === 'BINANCE_ID') {
+          // Chỉ dẫn cũ có thể nhận tiền muộn; không cấp lại cùng amount cho đơn
+          // khác khi nguồn chuyển tiền không chứng minh được người gửi.
+          const taken = await unresolvedUsdtAmounts(tx);
+          const unique = pickUniqueUsdt(Number(quote.totalAmount), taken);
+          if (unique === null) throw new ServiceUnavailableException(K.paymentCryptoAmountUnavailable);
+          data = { ...data, cryptoAmount: new Prisma.Decimal(unique.toFixed(6)) };
+        }
         if (merchantTradeNo) await tx.merchantPaymentSession.upsert({ where: { merchantTradeNo }, create: { merchantTradeNo, paymentId: payment.id }, update: {} });
         const gate = await tx.payment.updateMany({ where: {
           id: payment.id, sessionVersion: version, status: 'PENDING', cryptoTxId: null, sepayRef: null,
@@ -624,13 +664,8 @@ export class OrdersService {
       if (binanceId === '') {
         throw new BadRequestException(K.paymentMethodUnavailable);
       }
-      /*
-       * Số tiền ĐÚNG BẰNG giá bán, không thêm phần lẻ.
-       *
-       * Đổi lại, số tiền một mình không còn chỉ ra được đơn nào: khách phải ghi
-       * MÃ ĐƠN vào phần ghi chú khi chuyển. Không ghi thì bộ đối soát chỉ dám
-       * khớp khi đúng một đơn chờ cùng số tiền — xem `matchPayTransfers`.
-       */
+      // Giữ mã đơn trong ghi chú; phần lẻ chốt trong persist tránh tái dùng
+      // amount của chỉ dẫn cũ khi Binance không trả ghi chú giao dịch.
       await persist({
         mode: 'BINANCE_ID', cryptoNetwork: null, cryptoAddress: binanceId,
         cryptoAmount: quote.totalAmount, ...CLEAR_PAY_SESSION,
@@ -667,7 +702,7 @@ export class OrdersService {
       throw new BadRequestException(K.paymentMethodUnavailable);
     }
 
-    // Giữ exact-price. TxID công khai không chứng minh payer, mọi caller dùng pool chung và không đoán khi trùng.
+    // Exact amount do persist cấp sau khóa phân xử; TxID công khai không chứng minh payer.
     await persist({ mode: 'CRYPTO', cryptoNetwork: network, cryptoAddress: address,
       cryptoAmount: quote.totalAmount, ...CLEAR_PAY_SESSION,
     });

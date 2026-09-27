@@ -10,7 +10,8 @@ import { K } from '../i18n/messages';
 export async function markOrderPaid(
   tx: Prisma.TransactionClient,
   orderId: string,
-): Promise<{ status: OrderStatus; changed: boolean } | null> {
+  options: { allowCouponOveruse?: boolean } = {},
+): Promise<{ status: OrderStatus; changed: boolean; couponConflict?: boolean } | null> {
   const [order] = await tx.$queryRaw<Array<{
     status: OrderStatus;
     couponId: string | null;
@@ -24,11 +25,15 @@ export async function markOrderPaid(
     return { status: order.status, changed: false };
   }
 
-  const [payment] = await tx.$queryRaw<Array<{ id: string }>>`
-    SELECT "id" FROM "Payment" WHERE "orderId" = ${orderId} FOR UPDATE
+  const [payment] = await tx.$queryRaw<Array<{ id: string; status: string }>>`
+    SELECT "id", "status" FROM "Payment" WHERE "orderId" = ${orderId} FOR UPDATE
   `;
   // Không còn Payment thì không được tạo một đơn PAID chỉ có nửa bằng chứng.
   if (!payment) throw new InternalServerErrorException(K.paymentSessionMissing);
+
+  if (payment.status !== 'SUCCESS' && !options.allowCouponOveruse && await expiredCouponConflict(tx, orderId)) {
+    return { status: 'EXPIRED', changed: false, couponConflict: true };
+  }
 
   const changed = await tx.order.updateMany({
     where: { id: orderId, status: order.status },
@@ -42,8 +47,8 @@ export async function markOrderPaid(
   });
 
   if (order.status === 'EXPIRED' && order.couponId) {
-    // EXPIRED đã nhả lượt giữ chỗ. Tiền đến muộn vẫn phải được ghi nhận, kể cả
-    // lượt trống đã cấp cho đơn khác: không áp maxUses/active ở đường nhận tiền.
+    // Khoản muộn vượt quota đã được chặn để đối soát; operator có thể ghi đè
+    // thủ công sau khi kiểm tra transfer và chấp nhận vượt quota.
     // CAS Order ở trên bảo đảm webhook phát lại không tăng coupon lần thứ hai.
     await tx.$queryRaw`SELECT "id" FROM "Coupon" WHERE "id" = ${order.couponId} FOR UPDATE`;
     await tx.coupon.updateMany({
@@ -52,4 +57,19 @@ export async function markOrderPaid(
     });
   }
   return { status: 'PAID', changed: true };
+}
+
+/** Caller giữ arbitration; khóa coupon cho tới khi Order đổi trạng thái. */
+export async function expiredCouponConflict(tx: Prisma.TransactionClient, orderId: string): Promise<boolean> {
+  const order = await tx.order.findUnique({ where: { id: orderId }, select: { status: true, couponId: true, userId: true } });
+  if (order?.status !== 'EXPIRED' || !order.couponId) return false;
+  await tx.$queryRaw`SELECT "id" FROM "Coupon" WHERE "id" = ${order.couponId} FOR UPDATE`;
+  const coupon = await tx.coupon.findUnique({ where: { id: order.couponId }, select: { maxUses: true, usedCount: true, perUserLimit: true } });
+  if (!coupon) return true;
+  if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) return true;
+  if (coupon.perUserLimit !== null) {
+    const used = await tx.order.count({ where: { userId: order.userId, couponId: order.couponId, status: { in: ['PENDING', 'PAID', 'DELIVERED'] } } });
+    if (used >= coupon.perUserLimit) return true;
+  }
+  return false;
 }

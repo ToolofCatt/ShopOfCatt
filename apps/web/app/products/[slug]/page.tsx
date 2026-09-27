@@ -21,9 +21,10 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) return {};
   const { locale } = await getServerDictionary();
   try {
-    const product = await apiFetch<ProductDto>(`/products/${slug}`, { locale });
+    const product = await apiFetch<ProductDto>(`/products/${encodeURIComponent(slug)}`, { locale });
     const description =
       product.shortDescription?.trim() ||
       product.description?.trim().slice(0, 160) ||
@@ -58,11 +59,12 @@ export default async function ProductDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
+  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) notFound();
   const { locale, t } = await getServerDictionary();
 
   let product: ProductDto;
   try {
-    product = await apiFetch<ProductDto>(`/products/${slug}`, { locale });
+    product = await apiFetch<ProductDto>(`/products/${encodeURIComponent(slug)}`, { locale });
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) notFound();
     return (

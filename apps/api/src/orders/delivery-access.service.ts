@@ -19,8 +19,8 @@ export class DeliveryAccessService {
   }
 
   async createLink(userId: string, code: string): Promise<string> {
-    await this.load(userId,code);
-    const payload=Buffer.from(JSON.stringify({u:userId,c:code,iat:Date.now(),exp:Date.now()+15*60_000,n:randomBytes(12).toString('hex')})).toString('base64url');
+    const { sessionVersion } = await this.load(userId,code);
+    const payload=Buffer.from(JSON.stringify({u:userId,c:code,v:sessionVersion,iat:Date.now(),exp:Date.now()+15*60_000,n:randomBytes(12).toString('hex')})).toString('base64url');
     const token=payload+'.'+this.signature(payload).toString('base64url');
     const origin=new URL(this.config.get<string>('WEB_URL') ?? 'http://localhost:3000');
     if(!['http:','https:'].includes(origin.protocol))throw new UnauthorizedException(K.sessionInvalid);
@@ -28,23 +28,24 @@ export class DeliveryAccessService {
   }
 
   async read(token: string): Promise<DeliveryViewDto> {
-    let grant: {u:string;c:string;exp:number;iat:number};
+    let grant: {u:string;c:string;v:number;exp:number;iat:number};
     try {
       if(token.length>2048||! /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token))throw new Error();
       const [payload,signature]=token.split('.');const actual=Buffer.from(signature,'base64url');const expected=this.signature(payload);
       if(actual.length!==expected.length||!timingSafeEqual(actual,expected))throw new Error();
       grant=JSON.parse(Buffer.from(payload,'base64url').toString('utf8'));
-      if(typeof grant.u!=='string'||typeof grant.c!=='string'||!Number.isFinite(grant.exp)||grant.exp<=Date.now()
+      if(typeof grant.u!=='string'||typeof grant.c!=='string'||!Number.isSafeInteger(grant.v)||grant.v<0||!Number.isFinite(grant.exp)||grant.exp<=Date.now()
         ||!Number.isFinite(grant.iat)||grant.iat>Date.now()||grant.exp-grant.iat>15*60_000+1000)throw new Error();
     }catch{throw new UnauthorizedException(K.sessionInvalid);}
-    return this.load(grant.u,grant.c,grant.iat);
+    return (await this.load(grant.u,grant.c,grant.iat,grant.v)).view;
   }
 
-  private async load(userId:string,code:string,issuedAt?:number):Promise<DeliveryViewDto>{
-    const user=await this.prisma.user.findUnique({where:{id:userId},select:{lockedAt:true,passwordChangedAt:true}});
-    if(!user||user.lockedAt||(issuedAt&&user.passwordChangedAt&&user.passwordChangedAt.getTime()>issuedAt))throw new UnauthorizedException(K.sessionInvalid);
+  private async load(userId:string,code:string,issuedAt?:number,version?:number):Promise<{view:DeliveryViewDto;sessionVersion:number}>{
+    const user=await this.prisma.user.findUnique({where:{id:userId},select:{lockedAt:true,passwordChangedAt:true,sessionVersion:true}});
+    if(!user||user.lockedAt||(version!==undefined&&user.sessionVersion!==version)
+      ||(issuedAt&&user.passwordChangedAt&&user.passwordChangedAt.getTime()>issuedAt))throw new UnauthorizedException(K.sessionInvalid);
     const order=await this.orders.getOwnDetail(userId,code);
     if(order.status!=='DELIVERED')throw new NotFoundException(K.orderNotFound);
-    return {code:order.code,items:order.items.map(item=>({name:item.productName,variant:item.variantName,lines:item.deliveredLines??[]}))};
+    return {sessionVersion:user.sessionVersion,view:{code:order.code,items:order.items.map(item=>({name:item.productName,variant:item.variantName,lines:item.deliveredLines??[]}))}};
   }
 }

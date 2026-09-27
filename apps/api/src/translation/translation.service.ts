@@ -32,6 +32,7 @@ const MAX_TOKENS = 16000;
  * một nhà cung cấp treo sẽ giữ request quản trị lại vô hạn.
  */
 const OPENAI_TIMEOUT_MS = 120_000;
+const OPENAI_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
 /** Cho phép máy chủ tự chuyển sang model dự phòng khi bị từ chối. */
 const TRANSLATION_BETAS = ['server-side-fallback-2026-07-01'];
 
@@ -192,9 +193,11 @@ export class TranslationService {
       return { key: cai.apiKey, source: 'settings', ...chung };
     }
     // Biến môi trường chỉ có khoá, nên nó luôn đi kèm cấu hình trong CSDL —
-    // vốn mặc định là Anthropic, đúng với thời trước khi có ô cài đặt này.
+    // vốn mặc định là Anthropic. Không gửi khoá env tới endpoint do ADMIN chọn.
     const fromEnv = (this.config.get<string>('ANTHROPIC_API_KEY') ?? '').trim();
-    if (fromEnv !== '') return { key: fromEnv, source: 'env', ...chung };
+    if (fromEnv !== '' && cai.provider === 'anthropic' && cai.baseUrl === '') {
+      return { key: fromEnv, source: 'env', ...chung };
+    }
     return { key: '', source: null, ...chung };
   }
 
@@ -206,7 +209,14 @@ export class TranslationService {
       // trong CSDL không có mặt ở process.env.
       this.cachedClient = new Anthropic({
         apiKey: cfg.key,
+        timeout: OPENAI_TIMEOUT_MS,
+        maxRetries: 0,
         ...(cfg.baseUrl === '' ? {} : { baseURL: cfg.baseUrl }),
+        fetch: async (url, init) => {
+          const response = await fetch(url, { ...init, redirect: 'error' });
+          const body = await readBoundedResponse(response);
+          return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+        },
       });
       this.cachedSignature = chuKy;
     }
@@ -239,7 +249,9 @@ export class TranslationService {
         const response = await fetch(`${base}/models`, {
           headers: { Authorization: `Bearer ${cfg.key}` },
           signal: AbortSignal.timeout(15_000),
+          redirect: 'error',
         });
+        await response.body?.cancel();
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
       }
       return { configured: true, connected: true, detail: `${cfg.provider} kết nối được; model ${cfg.model}.` };
@@ -490,8 +502,9 @@ export class TranslationService {
             : { type: 'json_object' },
         }),
         signal: AbortSignal.timeout(OPENAI_TIMEOUT_MS),
+        redirect: 'error',
       });
-      return { ok: res.ok, status: res.status, than: await res.text() };
+      return { ok: res.ok, status: res.status, than: await readBoundedResponse(res) };
     };
 
     let r = await goi(true);
@@ -517,6 +530,29 @@ export class TranslationService {
       throw new BadGatewayException(K.adminTranslationRefused);
     }
     return (choice?.message?.content ?? '').trim();
+  }
+}
+
+async function readBoundedResponse(response: Response): Promise<string> {
+  if (!response.body) throw new BadGatewayException(K.adminTranslationFailed);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const part = await reader.read();
+      if (part.done) break;
+      total += part.value.byteLength;
+      if (total > OPENAI_RESPONSE_MAX_BYTES) {
+        // `res.text()` từng cấp phát cả phản hồi lỗi của provider trước khi cắt log.
+        await reader.cancel();
+        throw new BadGatewayException(K.adminTranslationFailed);
+      }
+      chunks.push(part.value);
+    }
+    return Buffer.concat(chunks, total).toString('utf8');
+  } finally {
+    reader.releaseLock();
   }
 }
 

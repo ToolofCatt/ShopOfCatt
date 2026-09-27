@@ -159,10 +159,13 @@ export class CustomersService {
 
     const password = generatePassword();
     const passwordHash = await bcrypt.hash(password, BCRYPT_ROUNDS);
-    await this.prisma.user.update({
-      where: { id },
-      data: { passwordHash, passwordChangedAt: new Date() },
+    const changed = await this.prisma.user.updateMany({
+      // Role check và ghi phải cùng một phép UPDATE: bcrypt tạo khoảng chờ đủ
+      // để SUPERADMIN nâng khách thành ADMIN sau lần đọc đầu tiên.
+      where: { id, role: actor.role === 'SUPERADMIN' ? { not: 'SUPERADMIN' } : 'USER' },
+      data: { passwordHash, passwordChangedAt: new Date(), sessionVersion: { increment: 1 } },
     });
+    if (changed.count !== 1) throw new BadRequestException(K.cannotLockAdmin);
     await this.audit.log(
       actor,
       'customer.reset_password',
@@ -186,7 +189,7 @@ export class CustomersService {
     }
     await this.prisma.user.update({
       where: { id },
-      data: { role: 'ADMIN' },
+      data: { role: 'ADMIN', sessionVersion: { increment: 1 } },
     });
     await this.audit.log(
       actor,
@@ -208,7 +211,7 @@ export class CustomersService {
     }
     await this.prisma.user.update({
       where: { id },
-      data: { role: 'USER' },
+      data: { role: 'USER', sessionVersion: { increment: 1 } },
     });
     await this.audit.log(
       actor,

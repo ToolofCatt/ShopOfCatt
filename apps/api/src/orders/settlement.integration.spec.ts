@@ -18,6 +18,7 @@ import type { AuditService } from '../audit/audit.service';
 import type { BinanceDeposit } from '../binance-exchange/deposit-matcher';
 import { lockFinancialArbitration } from '../common/financial-lock';
 import { observeTransfer, settleOrderTransfer } from '../common/incoming-transfer';
+import { K } from '../i18n/messages';
 
 const base = process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5433/webcatt';
 const database = 'webcatt_settlement_regression_test';
@@ -107,25 +108,30 @@ function barrier() {
 }
 
 describe('quyền sở hữu thanh toán và lifecycle', () => {
-  dbTest('poll một đơn không thu hẹp tập hai đơn cùng amount', async () => {
+  dbTest('poll đơn mới không lấy khoản chuyển đúng amount của đơn cũ', async () => {
     const a = await create(11), b = await create(11);
+    const aPayment = await db.payment.findUniqueOrThrow({ where: { orderId: a.order.id } });
+    const bPayment = await db.payment.findUniqueOrThrow({ where: { orderId: b.order.id } });
+    expect(bPayment.cryptoAmount?.equals(aPayment.cryptoAmount ?? 0)).toBe(false);
     deposit = incoming(11);
     const result = await orders.checkPayment(b.user.id, b.order.code);
     expect(result.delivered).toBe(false);
-    expect((await db.order.findUniqueOrThrow({ where: { id: a.order.id } })).status).toBe('PENDING');
-    expect(await db.stockItem.count({ where: { status: 'SOLD', variantId: { in: [a.variant.id, b.variant.id] } } })).toBe(0);
+    expect((await db.order.findUniqueOrThrow({ where: { id: a.order.id } })).status).toBe('DELIVERED');
+    expect((await db.order.findUniqueOrThrow({ where: { id: b.order.id } })).status).toBe('PENDING');
+    expect(await db.stockItem.count({ where: { status: 'SOLD', variantId: b.variant.id } })).toBe(0);
   });
   dbTest('đổi phương thức đã đọc cũ không xóa reference sau settlement', async () => {
     const a = await create(12);
     deposit = incoming(12);
+    await db.storeSetting.update({ where: { id: 'main' }, data: { trc20Address: `T${'1'.repeat(33)}` } });
     const gate = barrier();
     const delayed = Object.create(settings) as SettingsService;
     delayed.getCryptoAddress = async (network) => { gate.enter(); await gate.wait; return settings.getCryptoAddress(network); };
     const service = new OrdersService(db as unknown as PrismaService, config, fulfillment, gateway, exchange, delayed, {} as CouponsService);
-    const selection = service.selectPayment(a.user.id, a.order.code, 'crypto_bep20').catch(() => null);
+    const selection = service.selectPayment(a.user.id, a.order.code, 'crypto_trc20').catch(() => null);
     await gate.entered;
     try { expect((await orders.checkPayment(a.user.id, a.order.code)).delivered).toBe(true); }
-    finally { gate.release(); }
+    finally { gate.release(); await db.storeSetting.update({ where: { id: 'main' }, data: { trc20Address: '' } }); }
     await selection;
     expect((await db.payment.findUniqueOrThrow({ where: { orderId: a.order.id } })).cryptoTxId).toBe(deposit.txId);
   });
@@ -136,14 +142,16 @@ describe('quyền sở hữu thanh toán và lifecycle', () => {
     expect((await db.payment.findUniqueOrThrow({ where: { orderId: a.order.id } })).status).toBe('SUCCESS');
     expect((await db.order.findUniqueOrThrow({ where: { id: a.order.id } })).status).not.toBe('CANCELLED');
   });
-  dbTest('nạp ví trước rồi tạo đơn cùng tiền không ưu tiên lấy tiền cho đơn', async () => {
+  dbTest('nạp ví trước giữ amount riêng, khoản chuyển của mã nạp không trả đơn', async () => {
     const value = await buyer(14);
     const topup = await balance.createDeposit(value.user, 364000, 'crypto_bep20');
     const a = await create(14);
+    const payment = await db.payment.findUniqueOrThrow({ where: { orderId: a.order.id } });
+    expect(Number(payment.cryptoAmount)).not.toBe(Number(topup.deposit.amountUsdt));
     deposit = incoming(14);
     await new CryptoReconcileService(db as unknown as PrismaService, exchange, fulfillment, settings, wallet).tick();
     expect((await db.order.findUniqueOrThrow({ where: { id: a.order.id } })).status).toBe('PENDING');
-    expect((await db.deposit.findUniqueOrThrow({ where: { id: topup.deposit.id } })).status).toBe('PENDING');
+    expect((await db.deposit.findUniqueOrThrow({ where: { id: topup.deposit.id } })).status).toBe('SUCCESS');
   });
   dbTest('writer ví dùng candidate cũ không nhận lại transfer đơn vừa claim', async () => {
     const a = await create(15);
@@ -184,6 +192,57 @@ describe('quyền sở hữu thanh toán và lifecycle', () => {
     deposit = incoming(22);
     expect((await orders.checkPayment(fresh.user.id, fresh.order.code)).delivered).toBe(false);
     expect((await db.incomingTransfer.findUniqueOrThrow({ where: { source_reference: { source: 'CRYPTO:BEP20', reference: deposit.txId } } })).reviewReason).toBe('older-unresolved-instruction');
+  });
+  dbTest('đơn crypto mới tránh số tiền của chỉ dẫn cũ chưa được đối soát', async () => {
+    const old = await create(23);
+    const oldPayment = await db.payment.findUniqueOrThrow({ where: { orderId: old.order.id } });
+    const time = new Date(Date.now() - 25 * 3_600_000);
+    await db.order.update({ where: { id: old.order.id }, data: { createdAt: time, status: 'EXPIRED' } });
+    await db.paymentInstruction.updateMany({ where: { paymentId: oldPayment.id }, data: { createdAt: time } });
+    const fresh = await create(23);
+    const freshPayment = await db.payment.findUniqueOrThrow({ where: { orderId: fresh.order.id } });
+    expect(Number(freshPayment.cryptoAmount)).not.toBe(Number(oldPayment.cryptoAmount));
+    deposit = incoming(Number(freshPayment.cryptoAmount));
+    expect((await orders.checkPayment(fresh.user.id, fresh.order.code)).delivered).toBe(true);
+  });
+  dbTest('mã nạp mới tránh chỉ dẫn đơn cũ, bấm lại phương thức không đổi amount đã phát hành', async () => {
+    const old = await create(24);
+    const payment = await db.payment.findUniqueOrThrow({ where: { orderId: old.order.id } });
+    const count = await db.paymentInstruction.count({ where: { paymentId: payment.id } });
+    const repeated = await orders.selectPayment(old.user.id, old.order.code, 'crypto_bep20');
+    expect(repeated.payment?.cryptoAmount).toBe(Number(payment.cryptoAmount));
+    expect(await db.paymentInstruction.count({ where: { paymentId: payment.id } })).toBe(count);
+    const time = new Date(Date.now() - 25 * 3_600_000);
+    await db.order.update({ where: { id: old.order.id }, data: { status: 'EXPIRED' } });
+    await db.paymentInstruction.updateMany({ where: { paymentId: payment.id }, data: { createdAt: time } });
+    const user = (await buyer()).user;
+    const topup = await balance.createDeposit(user, 624_000, 'crypto_bep20');
+    expect(Number(topup.deposit.amountUsdt)).not.toBe(Number(payment.cryptoAmount));
+  });
+  dbTest('đổi phương thức lặp không phát hành quá tám chỉ dẫn cho một đơn', async () => {
+    const a = await create(25);
+    await db.storeSetting.update({ where: { id: 'main' }, data: { binanceIdEnabled: true, binanceId: 'FIXTURE-ID' } });
+    try {
+      for (let i = 1; i < 8; i++) {
+        await orders.selectPayment(a.user.id, a.order.code, i % 2 ? 'binance_id' : 'crypto_bep20');
+      }
+      const payment = await db.payment.findUniqueOrThrow({ where: { orderId: a.order.id } });
+      expect(await db.paymentInstruction.count({ where: { paymentId: payment.id } })).toBe(8);
+      await expect(orders.selectPayment(a.user.id, a.order.code, 'crypto_bep20')).rejects.toThrow(K.paymentCryptoAmountUnavailable);
+      expect(await db.paymentInstruction.count({ where: { paymentId: payment.id } })).toBe(8);
+    } finally { await db.storeSetting.update({ where: { id: 'main' }, data: { binanceIdEnabled: false } }); }
+  });
+  dbTest('tài khoản hết quota chỉ dẫn không tạo đơn mới hoặc giữ kho', async () => {
+    const a = await create(26);
+    const payment = await db.payment.findUniqueOrThrow({ where: { orderId: a.order.id } });
+    await db.paymentInstruction.createMany({ data: Array.from({ length: 23 }, (_, i) => ({
+      paymentId: payment.id, sessionVersion: i + 2, mode: 'CRYPTO', amount: 26 + (i + 1) / 10_000, network: 'BEP20', receiver: address,
+    })) });
+    await db.stockItem.create({ data: { variantId: a.variant.id, content: `EXTRA-${sequence}` } });
+    const before = await db.order.count({ where: { userId: a.user.id } });
+    await expect(orders.create(a.user, { items: [{ variantId: a.variant.id, quantity: 1 }] })).rejects.toThrow(K.paymentCryptoAmountUnavailable);
+    expect(await db.order.count({ where: { userId: a.user.id } })).toBe(before);
+    expect(await db.stockItem.count({ where: { variantId: a.variant.id, status: 'AVAILABLE' } })).toBe(1);
   });
   dbTest('provider retry đổi timestamp hoặc receiver giữ trạng thái cần đối soát', async () => {
     await db.$transaction(async (tx) => {

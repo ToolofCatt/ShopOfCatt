@@ -8,6 +8,7 @@ import type { AdminActor } from '../audit/admin-actor';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExchangeRateService } from '../rates/exchange-rate.service';
 import { SettingsService } from './settings.service';
+import { K } from '../i18n/messages';
 
 // Chỉ runner cấp URL cluster cô lập; không fallback sang database dev/thật.
 const base = process.env.DATABASE_URL;
@@ -83,6 +84,15 @@ async function snapshot() {
 }
 
 describe('settings/rates atomic production writes', () => {
+  it('changing AI destination cannot reuse the hidden key', async () => {
+    await expect(settings.updateSection(actor, {
+      aiProvider: 'openai', aiBaseUrl: 'https://custom.example.test/v1', aiModel: 'fixture',
+    })).rejects.toThrow(K.adminAiKeyInvalid);
+    const saved = await db.storeSetting.findUniqueOrThrow({ where: { id: 'main' } });
+    expect(saved.aiProvider).toBe('anthropic');
+    expect(saved.aiBaseUrl).toBe('');
+    expect(saved.aiApiKey).toBe('fixture-ai-old');
+  });
   it.each(['manual', 'auto'] as const)('%s recalculates VND/CNY anchors with numeric floor at six digits', async mode => {
     if (mode === 'manual') await settings.updateSection(actor, { vndPerUsdt: 26_000, cnyPerUsdt: 8 });
     else await rates.refresh();

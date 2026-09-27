@@ -82,6 +82,9 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
       headers,
       body: body !== undefined ? JSON.stringify(body) : undefined,
       cache: 'no-store',
+      // Server Components chỉ gọi API nội bộ; không theo 302 tới host ngoài do
+      // endpoint ảnh legacy trả về khi slug bị bẻ sang route khác.
+      ...(typeof window === 'undefined' ? { redirect: 'error' as const } : {}),
     });
   } catch {
     throw new ApiError(CONNECTION_ERROR_MESSAGE, 0);

@@ -449,6 +449,7 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
       where: {
         status: 'SUCCESS',
         telegramNotifiedAt: null,
+        telegramNotifyFailedAt: null,
         user: { telegramChatId: { not: null } },
       },
       select: {
@@ -478,7 +479,7 @@ export class BalanceService implements OnModuleInit, OnModuleDestroy {
   async markDepositNotified(depositId: string): Promise<void> {
     await this.prisma.deposit.updateMany({
       where: { id: depositId, telegramNotifiedAt: null },
-      data: { telegramNotifiedAt: new Date() },
+      data: { telegramNotifiedAt: new Date(), telegramNotifyFailedAt: null },
     });
   }
 

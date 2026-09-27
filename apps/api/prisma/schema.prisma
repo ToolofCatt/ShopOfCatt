@@ -87,6 +87,8 @@ model User {
   lockedAt DateTime?
   /// Lần đổi mật khẩu gần nhất — token cấp TRƯỚC mốc này bị từ chối
   passwordChangedAt DateTime?
+  /// Tăng nguyên tử khi đổi/reset mật khẩu hoặc đổi quyền; JWT cũ mất hiệu lực.
+  sessionVersion Int @default(0)
   createdAt         DateTime   @default(now())
   orders            Order[]
   auditLogs         AuditLog[]
@@ -305,6 +307,7 @@ model Deposit {
   paidAt    DateTime?
   /// Outbox cho bot báo "đã cộng tiền" — cùng cơ chế với Order.telegramNotifiedAt.
   telegramNotifiedAt DateTime?
+  telegramNotifyFailedAt DateTime?
   /// Khoá idempotency từ callback_query.id. Telegram có thể phát lại update
   /// sau khi API restart; cùng một cú bấm không được tạo hai mã nạp.
   telegramCallbackId String?       @unique
@@ -605,6 +608,7 @@ model Order {
   /// khách web — bot bỏ qua). Là outbox: KHÔNG gọi Telegram trong transaction
   /// giao hàng, một vòng quét riêng đọc cột này rồi gửi và đánh dấu.
   telegramNotifiedAt DateTime?
+  telegramNotifyFailedAt DateTime?
   /// Khoá idempotency từ callback_query.id: Telegram phát lại một cú bấm mua
   /// vẫn phải trả về chính đơn cũ, không giữ thêm kho.
   telegramCallbackId              String?     @unique

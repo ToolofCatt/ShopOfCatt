@@ -26,7 +26,7 @@ import { ProductsService } from '../products/products.service';
 import { sepayQrUrl } from '../payments/sepay-qr';
 import { SettingsService } from '../settings/settings.service';
 import { StorefrontService } from '../storefront/storefront.service';
-import { RateLimit } from '../security/rate-limit.guard';
+import { RateLimit, RateLimitGuard } from '../security/rate-limit.guard';
 import { UpdateTelegramSettingsDto } from '../settings/dto/update-telegram-settings.dto';
 import {
   encodeCallback,
@@ -212,7 +212,7 @@ function previewDelivered(order: OrderDetailDto): OrderDetailDto {
  * sẽ thấy, không phải một bản chép tay sẽ lệch dần theo thời gian.
  */
 @Controller('admin/telegram')
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, AdminGuard, RateLimitGuard)
 export class TelegramAdminController {
   constructor(
     private readonly telegram: TelegramService,

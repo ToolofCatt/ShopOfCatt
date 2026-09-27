@@ -30,7 +30,7 @@ async function historicSnapshot(db: PrismaClient) {
   // Lấy toàn bộ cột scalar, không chỉ counts: key, số tiền sáu chữ số, receiver,
   // callback và mốc thời gian đều là lịch sử không được rewrite khi nâng cấp.
   const rows = await Promise.all([
-    db.user.findMany({ orderBy: { id: 'asc' } }),
+    db.$queryRaw`SELECT * FROM "User" ORDER BY id ASC`,
     db.product.findMany({ orderBy: { id: 'asc' } }),
     db.productVariant.findMany({ orderBy: { id: 'asc' } }),
     // Đọc đúng schema lịch sử, không kéo các cột của migration tương lai từ client mới.
@@ -38,7 +38,7 @@ async function historicSnapshot(db: PrismaClient) {
     db.orderItem.findMany({ orderBy: { id: 'asc' } }),
     db.payment.findMany({ orderBy: { id: 'asc' } }),
     db.stockItem.findMany({ orderBy: { id: 'asc' } }),
-    db.deposit.findMany({ orderBy: { id: 'asc' } }),
+    db.$queryRaw`SELECT * FROM "Deposit" ORDER BY id ASC`,
     db.balanceEntry.findMany({ orderBy: { id: 'asc' } }),
     db.incomingTransfer.findMany({ orderBy: { id: 'asc' } }),
   ]);
@@ -50,11 +50,14 @@ async function historicalFixture(db: PrismaClient): Promise<void> {
   const createdAt = new Date('2026-09-01T08:00:00.123Z');
   const paidAt = new Date('2026-09-01T08:01:00.456Z');
   const expiresAt = new Date('2026-09-01T08:30:00.123Z');
-  await db.user.createMany({ data: [
-    { id: 'history-buyer', code: 81000001, email: 'history@example.invalid', passwordHash: 'synthetic-not-a-login', balance: '18.123455', createdAt },
-    { id: 'history-telegram', code: 81000002, passwordHash: 'synthetic-not-a-login', telegramChatId: 'synthetic-chat', telegramName: 'Fixture', telegramLang: 'zh', lockedAt: paidAt, createdAt },
-    { id: 'history-admin', code: 81000003, passwordHash: 'synthetic-not-a-login', role: 'SUPERADMIN', createdAt },
-  ] });
+  // Client hiện hành có cột của migration tương lai; tạo fixture theo schema
+  // lịch sử thay vì để Prisma chèn default sessionVersion chưa tồn tại.
+  await db.$executeRaw`INSERT INTO "User" (id,code,email,"passwordHash",balance,"createdAt")
+    VALUES ('history-buyer',81000001,'history@example.invalid','synthetic-not-a-login',18.123455,${createdAt})`;
+  await db.$executeRaw`INSERT INTO "User" (id,code,"passwordHash","telegramChatId","telegramName","telegramLang","lockedAt","createdAt")
+    VALUES ('history-telegram',81000002,'synthetic-not-a-login','synthetic-chat','Fixture','zh',${paidAt},${createdAt})`;
+  await db.$executeRaw`INSERT INTO "User" (id,code,"passwordHash",role,"createdAt")
+    VALUES ('history-admin',81000003,'synthetic-not-a-login','SUPERADMIN',${createdAt})`;
   await db.product.create({ data: { id: 'history-product', name: 'Synthetic history', slug: 'synthetic-history', createdAt } });
   await db.productVariant.create({ data: { id: 'history-variant', productId: 'history-product', name: 'Default', price: '2.000001', priceAmount: '2', createdAt } });
   for (const status of ['PENDING', 'PAID', 'DELIVERED', 'CANCELLED', 'EXPIRED'] as const) {
@@ -119,14 +122,14 @@ describe.skipIf(!baseUrl)('partner migration upgrade / isolated PostgreSQL', () 
 
   it('preserves every historic row and exact wallet/ledger amounts on upgrade', async () => {
     expect(after).toBe(before);
-    expect((await db.user.findUniqueOrThrow({ where: { id: 'history-buyer' } })).balance.toFixed(6)).toBe('18.123455');
+    expect((await db.user.findUniqueOrThrow({ where: { id: 'history-buyer' }, select: { balance: true } })).balance.toFixed(6)).toBe('18.123455');
     expect((await db.balanceEntry.aggregate({ where: { userId: 'history-buyer' }, _sum: { amount: true } }))._sum.amount?.toFixed(6)).toBe('18.123455');
     expect(await db.stockItem.count()).toBe(4);
   });
 
   it('creates no approvals, keys or receipts for existing accounts, including SUPERADMIN', async () => {
     expect(initialCounts).toEqual([0, 0, 0, 0]);
-    const user = await db.user.findUniqueOrThrow({ where: { id: 'history-admin' }, include: { apiAccess: true, apiKeys: true } });
+    const user = await db.user.findUniqueOrThrow({ where: { id: 'history-admin' }, select: { apiAccess: true, apiKeys: true } });
     expect(user.apiAccess).toBeNull();
     expect(user.apiKeys).toEqual([]);
     const access = await db.apiAccess.create({ data: { userId: 'history-admin' } });
@@ -139,12 +142,12 @@ describe.skipIf(!baseUrl)('partner migration upgrade / isolated PostgreSQL', () 
     // Từng owner không có quan hệ cũ chặn DELETE thay: phải chứng minh chính FK
     // mới từ chối, không nhận nhầm lỗi của Order/BalanceEntry có sẵn.
     for (const [index, id] of ['access-only', 'key-only', 'receipt-only', 'resource-owner'].entries()) {
-      await db.user.create({ data: { id, code: 81000100 + index, passwordHash: 'synthetic-not-a-login' } });
+      await db.$executeRaw`INSERT INTO "User" (id,code,"passwordHash") VALUES (${id},${81000100 + index},'synthetic-not-a-login')`;
     }
     await db.apiAccess.create({ data: { userId: 'access-only' } });
     await db.apiKey.create({ data: { ownerId: 'key-only', name: 'Synthetic metadata', prefix: 'synthetic', digest: '0'.repeat(64), scopes: ['orders:read'], expiresAt: new Date('2030-01-01T00:00:00Z') } });
     await db.$executeRaw`INSERT INTO "Order" (id,code,"userId","totalAmount") VALUES ('receipt-order','DH-RECEIPT-ONLY','resource-owner',1.000001)`;
-    await db.deposit.create({ data: { id: 'receipt-deposit', code: 'NAP-RECEIPT-ONLY', userId: 'resource-owner', amountUsdt: '1.000001', vndAmount: 26000, expiresAt: new Date('2030-01-01T00:00:00Z') } });
+    await db.deposit.create({ data: { id: 'receipt-deposit', code: 'NAP-RECEIPT-ONLY', userId: 'resource-owner', amountUsdt: '1.000001', vndAmount: 26000, expiresAt: new Date('2030-01-01T00:00:00Z') }, select: { id: true } });
     await db.apiOperationReceipt.createMany({ data: [
       { ownerId: 'receipt-only', operation: 'orders.create', idempotencyKey: 'synthetic-order-request', requestHash: '1'.repeat(64), orderId: 'receipt-order' },
       { ownerId: 'receipt-only', operation: 'deposits.create', idempotencyKey: 'synthetic-deposit-request', requestHash: '2'.repeat(64), depositId: 'receipt-deposit' },

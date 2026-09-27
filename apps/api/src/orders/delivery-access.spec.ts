@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { DeliveryAccessService } from './delivery-access.service';
 
 function fixture() {
- const user={id:'buyer',lockedAt:null,passwordChangedAt:null};
+ const user={id:'buyer',lockedAt:null,passwordChangedAt:null,sessionVersion:0};
  const detail={code:'DH-ABC123',status:'DELIVERED',items:[{productName:'Fixture',variantName:'One',deliveredLines:['original|secret']}],payment:{cryptoTxId:'not-public'}};
  const orders={getOwnDetail:vi.fn(async(id,code)=>{if(id!=='buyer'||code!=='DH-ABC123')throw new Error('wrong owner');return detail;})};
  const service=new DeliveryAccessService({get:(key:string)=>key==='JWT_SECRET'?'fixture-signing-secret':'https://shop.example.test'} as any,{user:{findUnique:async()=>user}} as any,orders as any);
@@ -30,5 +30,11 @@ describe('read-only delivery link',()=>{
   const f=fixture();const url=await f.service.createLink('buyer','DH-ABC123');
   (f.user as any).lockedAt=new Date();await expect(f.service.read(new URL(url).hash.slice(1))).rejects.toThrow();
   (f.user as any).lockedAt=null;f.detail.status='PENDING';await expect(f.service.createLink('buyer','DH-ABC123')).rejects.toThrow();
+ });
+ it('revokes a delivery link when the account session changes in the same millisecond',async()=>{
+  vi.useFakeTimers();vi.setSystemTime(new Date('2026-09-27T00:00:00.000Z'));
+  const f=fixture();const url=await f.service.createLink('buyer','DH-ABC123');
+  f.user.sessionVersion=1;
+  await expect(f.service.read(new URL(url).hash.slice(1))).rejects.toThrow();
  });
 });

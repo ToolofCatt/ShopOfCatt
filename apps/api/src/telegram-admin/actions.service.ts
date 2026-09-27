@@ -229,8 +229,8 @@ export class TelegramAdminActionsService {
     const gate = await this.prisma.$transaction(
       async (tx) => {
         // Quyền không bị thu hồi giữa kiểm tra và commit nhập/rút kho.
-        await tx.$queryRaw`SELECT id FROM "StoreSetting" WHERE id = 'main' FOR SHARE`;
         await tx.$queryRaw`SELECT id FROM "TelegramAdmin" WHERE id = ${actor.id} FOR SHARE`;
+        await tx.$queryRaw`SELECT id FROM "StoreSetting" WHERE id = 'main' FOR SHARE`;
         const [setting, allowed] = await Promise.all([
           tx.storeSetting.findUnique({ where: { id: 'main' } }),
           tx.telegramAdmin.findUnique({ where: { id: actor.id } }),
@@ -352,7 +352,21 @@ export class TelegramAdminActionsService {
     // Lệnh không nguyên tử toàn phần có RUNNING bền vững: mất kết nối sau khi
     // service commit không được phép retry mutation một cách mù quáng.
     try {
-      const result = await this.perform(actor, action);
+      const result = await this.prisma.$transaction(async (tx) => {
+        // Gate RUNNING và mutation ở hai transaction vì một số service gọi I/O.
+        // Khe giữa hai transaction từng cho revoke commit rồi mutation vẫn chạy.
+        // Giữ khóa share tới khi perform xong để revoke/downgrade không vượt qua.
+        await tx.$queryRaw`SELECT id FROM "TelegramAdmin" WHERE id = ${actor.id} FOR SHARE`;
+        const [current, setting] = await Promise.all([
+          tx.telegramAdmin.findUnique({ where: { id: actor.id } }),
+          tx.storeSetting.findUnique({ where: { id: 'main' }, select: { telegramAdminEnabled: true } }),
+        ]);
+        if (!setting?.telegramAdminEnabled || !current?.enabled || current.version !== actor.version ||
+          !telegramAdminAllows(current.permission, spec.permission)) {
+          throw new ForbiddenException(K.forbidden);
+        }
+        return this.perform(actor, action);
+      }, { maxWait: 15_000, timeout: 300_000 });
       await this.prisma.telegramAdminAction.update({
         where: { id: action.id },
         data: { status: 'DONE', result: { summary: result.summary ?? '' } },

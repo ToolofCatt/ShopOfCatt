@@ -6,7 +6,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AdminGuard } from '../auth/admin.guard';
 import { SuperAdminGuard } from '../auth/superadmin.guard';
 import { CurrentUser } from '../auth/current-user.decorator';
-import { RateLimit } from '../security/rate-limit.guard';
+import { RateLimit, RateLimitGuard } from '../security/rate-limit.guard';
 import { AuditService } from '../audit/audit.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailCatalogService } from './mail-catalog.service';
@@ -20,13 +20,13 @@ class PollMailInput {
 @Controller('mail')
 export class MailController {
   constructor(private readonly catalog: MailCatalogService, private readonly purchases: MailPurchaseService, private readonly inbox: MailInboxService) {}
-  @Get('catalog') @Header('Cache-Control', 'no-store') @RateLimit({ limit: 100, windowMs: 60_000 })
+  @Get('catalog') @UseGuards(RateLimitGuard) @Header('Cache-Control', 'no-store') @RateLimit({ limit: 100, windowMs: 60_000 })
   list() { return this.catalog.catalog(); }
   @Get('workspace') @UseGuards(JwtAuthGuard) @Header('Cache-Control', 'no-store')
   workspace(@CurrentUser() user: User, @Query('cursor') cursor?: string) { return this.inbox.list(user.id, cursor?.slice(0, 60)); }
-  @Post('rent') @UseGuards(JwtAuthGuard) @RateLimit({ limit: 10, windowMs: 60_000 })
+  @Post('rent') @UseGuards(JwtAuthGuard, RateLimitGuard) @RateLimit({ limit: 10, windowMs: 60_000 })
   rent(@CurrentUser() user: User, @Body() body: RentMailInput) { return this.purchases.rent(user.id, body); }
-  @Post('poll') @UseGuards(JwtAuthGuard) @RateLimit({ limit: 25, windowMs: 60_000 })
+  @Post('poll') @UseGuards(JwtAuthGuard, RateLimitGuard) @RateLimit({ limit: 25, windowMs: 60_000 })
   poll(@CurrentUser() user: User, @Body() body: PollMailInput) { return this.inbox.poll(user.id, body.ids); }
   @Get('export') @UseGuards(JwtAuthGuard) @Header('Cache-Control', 'no-store')
   async export(@CurrentUser() user: User, @Res() response: Response) { response.set({ 'Content-Type': 'text/plain;charset=utf-8', 'Content-Disposition': 'attachment; filename="mail.txt"' }).send(await this.inbox.export(user.id)); }
@@ -35,7 +35,7 @@ export class MailController {
 }
 
 @Controller('admin/mail')
-@UseGuards(JwtAuthGuard, AdminGuard)
+@UseGuards(JwtAuthGuard, AdminGuard, RateLimitGuard)
 export class AdminMailController {
   constructor(private readonly catalog: MailCatalogService, private readonly purchases: MailPurchaseService, private readonly prisma: PrismaService, private readonly audit: AuditService, private readonly inbox: MailInboxService) {}
   @Get('settings') settings() { return this.catalog.getSettings(); }

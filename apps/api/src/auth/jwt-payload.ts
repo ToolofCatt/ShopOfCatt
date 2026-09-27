@@ -6,6 +6,8 @@ export interface JwtPayload {
    *  theo cột CSDL từ khi có khách Telegram (không mật khẩu, không token). */
   email: string | null;
   role: Role;
+  /** Phiên quyền/mật khẩu trong DB; token cũ thiếu trường này phải đăng nhập lại. */
+  sessionVersion: number;
   /** Thời điểm cấp token (giây) — jsonwebtoken tự thêm khi ký. */
   iat?: number;
 }

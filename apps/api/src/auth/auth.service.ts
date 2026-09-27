@@ -154,7 +154,7 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.newPassword, BCRYPT_ROUNDS);
     const updated = await this.prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash, passwordChangedAt: new Date() },
+      data: { passwordHash, passwordChangedAt: new Date(), sessionVersion: { increment: 1 } },
     });
     const { accessToken } = await this.buildAuthResponse(updated);
     return { success: true, accessToken };
@@ -165,6 +165,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
+      sessionVersion: user.sessionVersion,
     };
     const accessToken = await this.jwt.signAsync(payload, {
       expiresIn: isAdminRole(user.role) ? TOKEN_TTL_ADMIN : TOKEN_TTL_USER,

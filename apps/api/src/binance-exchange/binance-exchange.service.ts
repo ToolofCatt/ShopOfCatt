@@ -44,6 +44,7 @@ interface RawPayTransaction {
   currency?: string;
   transactionTime?: number;
   receiverInfo?: { binanceId?: number | string };
+  note?: string;
 }
 
 @Injectable()
@@ -213,6 +214,7 @@ export class BinanceExchangeService {
           r.receiverInfo?.binanceId === undefined
             ? undefined
             : String(r.receiverInfo.binanceId),
+        note: typeof r.note === 'string' ? r.note : undefined,
       }));
   }
 

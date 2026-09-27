@@ -1107,6 +1107,7 @@ export const vi = {
     settingApiKeyLabel: 'Khoá Claude API',
     settingApiKeyReplaceLabel: 'Thay bằng khoá mới',
     settingApiKeyHint: 'Khoá của nhà cung cấp đã chọn. Để trống = giữ khoá đang dùng.',
+    settingApiKeyDestinationHint: 'Đổi nhà cung cấp hoặc địa chỉ API cần nhập khoá mới; khoá cũ không được gửi sang đích mới.',
     settingApiKeySaved: (hint: string) => `Đã lưu khoá ····${hint}`,
     settingApiKeyClear: 'Xoá khoá',
     settingApiKeyWillClear: 'Khoá sẽ bị xoá khi bạn bấm Lưu — dịch tự động sẽ tắt.',
