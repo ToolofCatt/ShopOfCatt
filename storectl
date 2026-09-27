@@ -23,7 +23,8 @@ doctor() {
 
   command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1 && add pass docker "Docker and Compose are available." || add fail docker "Docker Engine or Compose plugin is missing."
   if [ -f .env ]; then
-    mode=$(stat -c '%a' .env 2>/dev/null || stat -f '%Lp' .env 2>/dev/null || echo unknown)
+    # Bản phát hành có thể liên kết .env về file gốc; quyền của symlink luôn 777.
+    mode=$(stat -L -c '%a' .env 2>/dev/null || stat -L -f '%Lp' .env 2>/dev/null || echo unknown)
     [ "$mode" = 600 ] && add pass env-permissions ".env mode is 600." || add warn env-permissions ".env mode is $mode; run chmod 600 .env."
     # .env la du lieu, khong duoc source vi ten cua hang co the chua khoang trang.
     jwt_secret=$(env_value JWT_SECRET)
@@ -51,7 +52,9 @@ doctor() {
     # ngoài kho backup qua ../ hoặc một absolute path.
     case "$gzip_file" in
       ''|*[!A-Za-z0-9._-]*|.*) add fail backup "Backup heartbeat contains an invalid filename." ;;
-      *) gzip -t "backups/$gzip_file" 2>/dev/null && add pass backup "Latest backup passes gzip -t: $gzip_file (SQL rehearsal still required)." || add fail backup "Backup heartbeat points to a missing or damaged file." ;;
+      # Dump mode 600/thư mục 700: user chạy doctor không được đọc; container
+      # backup có đúng mount và quyền, kể cả khi release nằm ở worktree riêng.
+      *) docker compose exec -T backup gzip -t "/backups/$gzip_file" 2>/dev/null && add pass backup "Latest backup passes gzip -t: $gzip_file (SQL rehearsal still required)." || add fail backup "Backup heartbeat points to a missing or damaged file." ;;
     esac
   else add warn backup "No successful backup heartbeat yet in backup-status."; fi
 

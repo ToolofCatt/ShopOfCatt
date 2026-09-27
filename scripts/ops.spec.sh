@@ -6,7 +6,8 @@ FIXTURE=$(mktemp -d)
 trap 'rm -rf "$FIXTURE"' EXIT
 REAL_GZIP=$(command -v gzip)
 REAL_CHMOD=$(command -v chmod)
-export REAL_GZIP REAL_CHMOD
+REAL_STAT=$(command -v stat)
+export REAL_GZIP REAL_CHMOD REAL_STAT
 mkdir -p "$FIXTURE/bin"
 cat > "$FIXTURE/bin/docker" <<'EOF'
 #!/bin/sh
@@ -19,6 +20,7 @@ case "$*" in
   'compose stop '*) [ "${FAIL_STEP:-}" != stop ]; exit ;;
   'compose start '*) exit 0 ;;
   'compose run '*) [ "${FAIL_STEP:-}" != backup ]; exit ;;
+  'compose exec -T backup gzip -t /backups/known.sql.gz') exec "$REAL_GZIP" -t "$CASE/container-backups/known.sql.gz" ;;
   'compose exec -T postgres createdb '*) [ "${FAIL_STEP:-}" != createdb ]; exit ;;
   'compose exec -T postgres dropdb '*) [ "${FAIL_STEP:-}" != dropdb ]; exit ;;
   'compose exec -T postgres psql '*)
@@ -65,6 +67,16 @@ cat > "$FIXTURE/bin/chmod" <<'EOF'
 printf '%s\n' "$*" >> "$CASE/chmod.calls"
 exec "$REAL_CHMOD" "$@"
 EOF
+cat > "$FIXTURE/bin/stat" <<'EOF'
+#!/bin/sh
+if [ "${FAKE_STAT_SYMLINK:-}" = true ]; then
+  case "$*" in
+    '-L -c %a .env') printf '600\n'; exit 0 ;;
+    '-c %a .env') printf '777\n'; exit 0 ;;
+  esac
+fi
+exec "$REAL_STAT" "$@"
+EOF
 cat > "$FIXTURE/bin/sleep" <<'EOF'
 #!/bin/sh
 # Bản cũ chạy daemon; dừng sau một lượt để test không treo.
@@ -82,7 +94,7 @@ new_case() {
   printf '%s\n' '-- PostgreSQL database dump' 'CREATE TABLE "StockItem" (id text);' '-- PostgreSQL database dump complete' '--' > "$CASE/source.sql"
   "$REAL_GZIP" -c "$CASE/source.sql" > "$CASE/input.sql.gz"
   : > "$CASE/docker.calls"; : > "$CASE/gzip.calls"; : > "$CASE/chmod.calls"
-  unset FAIL_STEP GZIP_FAIL DUMP_FAIL MUTATE_SOURCE VOLUME_EXISTS CONTAINER_EXISTS BACKUP_KEEP
+  unset FAIL_STEP GZIP_FAIL DUMP_FAIL MUTATE_SOURCE VOLUME_EXISTS CONTAINER_EXISTS BACKUP_KEEP FAKE_STAT_SYMLINK
 }
 restore() {
   status=0
@@ -194,6 +206,20 @@ storectl_backup_error_propagates() {
   sh "$CASE/storectl" backup > "$CASE/output" 2>&1 || status=$?
   failed; grep -qx 'compose run --rm --no-deps backup --once' "$CASE/docker.calls"
 }
+storectl_doctor_reads_private_backup_through_container() {
+  new_case ctldoctor
+  FAKE_STAT_SYMLINK=true; export FAKE_STAT_SYMLINK
+  mv "$CASE/.env" "$CASE/real.env"
+  "$REAL_CHMOD" 600 "$CASE/real.env"
+  ln -s real.env "$CASE/.env"
+  mkdir -p "$CASE/container-backups"
+  "$REAL_GZIP" -c "$CASE/source.sql" > "$CASE/container-backups/known.sql.gz"
+  printf '{"file":"known.sql.gz"}\n' > "$CASE/backup-status/.last-success.json"
+  (cd "$CASE" && sh storectl doctor --json) > "$CASE/output" 2>&1 || true
+  grep -q '"id":"env-permissions","state":"pass"' "$CASE/output" || { cat "$CASE/output"; return 1; }
+  grep -q '"id":"backup","state":"pass"' "$CASE/output" || { cat "$CASE/output"; cat "$CASE/docker.calls"; return 1; }
+  grep -qx 'compose exec -T backup gzip -t /backups/known.sql.gz' "$CASE/docker.calls" || { cat "$CASE/docker.calls"; return 1; }
+}
 storectl_restore_forwards_rehearsal() {
   new_case ctlrestore; status=0
   sh "$CASE/storectl" restore --rehearsal input.sql.gz > "$CASE/output" 2>&1 || status=$?
@@ -205,6 +231,6 @@ backup_concurrent_attempt_is_closed() {
   [ ! -e "$CASE/backup-status/.last-success.json" ]; [ -d "$CASE/backups/.backup.lock" ]
   set -- "$CASE/backups/"*.sql.gz; [ ! -f "$1" ]
 }
-for test in corrupt_gzip missing_endmarker decompression_failure sql_rehearsal_failure rehearsal_only immutable_no_start restore_failures_no_restart restore_success env_is_data dump_nonzero_after_endmarker backup_gzip_failure backup_private_heartbeat_public install_existing_env_untouched install_existing_volume_untouched create_failure_does_not_drop_existing_db backup_failure_keeps_last_good backup_retention_only_after_success backup_rejects_embedded_heartbeat install_inventory_error_is_closed storectl_backup_error_propagates storectl_restore_forwards_rehearsal backup_concurrent_attempt_is_closed; do run "$test"; done
+for test in corrupt_gzip missing_endmarker decompression_failure sql_rehearsal_failure rehearsal_only immutable_no_start restore_failures_no_restart restore_success env_is_data dump_nonzero_after_endmarker backup_gzip_failure backup_private_heartbeat_public install_existing_env_untouched install_existing_volume_untouched create_failure_does_not_drop_existing_db backup_failure_keeps_last_good backup_retention_only_after_success backup_rejects_embedded_heartbeat install_inventory_error_is_closed storectl_backup_error_propagates storectl_doctor_reads_private_backup_through_container storectl_restore_forwards_rehearsal backup_concurrent_attempt_is_closed; do run "$test"; done
 printf '\nOps fixtures: %s passed, %s failed\n' "$passed" "$failed_count"
 [ "$failed_count" -eq 0 ]
